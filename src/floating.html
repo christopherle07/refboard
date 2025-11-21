@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Floating Board</title>
+    <link rel="stylesheet" href="css/floating.css">
+</head>
+<body>
+    <div class="titlebar" data-tauri-drag-region>
+        <div class="titlebar-title" id="window-title">Board</div>
+        <div class="titlebar-controls">
+            <button class="titlebar-btn" id="pin-btn" title="Always on Top">⊙</button>
+            <button class="titlebar-btn" id="minimize-btn" title="Minimize">−</button>
+            <button class="titlebar-btn titlebar-btn-close" id="close-btn" title="Close">×</button>
+        </div>
+    </div>
+    
+    <div class="floating-container">
+        <canvas id="floating-canvas"></canvas>
+    </div>
+
+    <script type="module" src="js/floating.js"></script>
+</body>
+</html>

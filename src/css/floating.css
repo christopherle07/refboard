@@ -1,0 +1,104 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    overflow: hidden;
+    background: #ffffff;
+}
+
+.titlebar {
+    height: 32px;
+    background: transparent;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 12px;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-app-region: drag;
+    transition: background 0.2s;
+}
+
+.titlebar:hover {
+    background: rgba(0, 0, 0, 0.05);
+}
+
+.titlebar.dark-mode:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.titlebar-title {
+    font-size: 13px;
+    color: rgba(0, 0, 0, 0.6);
+    font-weight: 500;
+    -webkit-app-region: drag;
+}
+
+.titlebar.dark-mode .titlebar-title {
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.titlebar-controls {
+    display: flex;
+    gap: 8px;
+    -webkit-app-region: no-drag;
+}
+
+.titlebar-btn {
+    width: 28px;
+    height: 28px;
+    border: none;
+    background: transparent;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s;
+    color: rgba(0, 0, 0, 0.6);
+    -webkit-app-region: no-drag;
+}
+
+.titlebar.dark-mode .titlebar-btn {
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.titlebar-btn:hover {
+    background: rgba(0, 0, 0, 0.1);
+}
+
+.titlebar.dark-mode .titlebar-btn:hover {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+.titlebar-btn-close:hover {
+    background: #e81123 !important;
+    color: white !important;
+}
+
+.titlebar-btn.pinned {
+    background: rgba(0, 102, 255, 0.15);
+    color: #0066ff;
+}
+
+.floating-container {
+    width: 100vw;
+    height: calc(100vh - 32px);
+    position: relative;
+}
+
+#floating-canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    cursor: grab;
+}
+
+#floating-canvas:active {
+    cursor: grabbing;
+}

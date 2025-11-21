@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reference Board</title>
+    <link rel="stylesheet" href="css/main.css">
+    <link rel="stylesheet" href="css/modal.css">
+</head>
+<body>
+    <div class="homepage">
+        <header class="homepage-header">
+            <h1>Reference Boards</h1>
+            <div class="header-controls">
+                <select id="sort-filter" class="sort-dropdown">
+                    <option value="latest">Latest</option>
+                    <option value="oldest">Oldest</option>
+                    <option value="name">By Name</option>
+                </select>
+            </div>
+        </header>
+
+        <main class="homepage-content">
+            <div class="boards-grid" id="boards-grid">
+                <div class="board-card new-board-card" id="new-board-btn">
+                    <div class="new-board-icon">+</div>
+                    <div class="new-board-text">New Board</div>
+                </div>
+                <!-- Board cards render here after the new board card -->
+            </div>
+
+            <div class="pagination" id="pagination">
+                <button class="pagination-btn" id="prev-page" disabled>← Previous</button>
+                <span class="pagination-info" id="page-info">Page 1 of 1</span>
+                <button class="pagination-btn" id="next-page" disabled>Next →</button>
+            </div>
+        </main>
+    </div>
+
+    <script type="module" src="js/main.js"></script>
+</body>
+</html>

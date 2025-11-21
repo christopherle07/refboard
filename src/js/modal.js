@@ -1,0 +1,61 @@
+// Modal utility for creating and managing modals
+
+export function createModal(title, bodyHTML, onConfirm) {
+    const modal = document.createElement('div');
+    modal.className = 'modal-overlay';
+    modal.innerHTML = `
+        <div class="modal">
+            <div class="modal-header">
+                <h2>${title}</h2>
+            </div>
+            <div class="modal-body">
+                ${bodyHTML}
+            </div>
+            <div class="modal-footer">
+                <button class="modal-btn modal-btn-secondary" data-action="cancel">Cancel</button>
+                <button class="modal-btn modal-btn-primary" data-action="confirm">Confirm</button>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+    
+    // Handle confirm
+    modal.querySelector('[data-action="confirm"]').addEventListener('click', () => {
+        if (onConfirm) onConfirm();
+        modal.remove();
+    });
+    
+    // Handle cancel
+    modal.querySelector('[data-action="cancel"]').addEventListener('click', () => {
+        modal.remove();
+    });
+    
+    // Close on overlay click
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) modal.remove();
+    });
+    
+    return modal;
+}
+
+export function showCreateBoardModal(onConfirm) {
+    const bodyHTML = `
+        <div class="form-group">
+            <label>Board Name</label>
+            <input type="text" id="board-name-input" placeholder="Untitled Board" autofocus>
+        </div>
+        <div class="form-group">
+            <label>Background Color</label>
+            <input type="color" id="board-color-input" value="#ffffff">
+        </div>
+    `;
+    
+    const modal = createModal('Create New Board', bodyHTML, () => {
+        const name = document.getElementById('board-name-input').value.trim() || 'Untitled Board';
+        const bgColor = document.getElementById('board-color-input').value;
+        if (onConfirm) onConfirm(name, bgColor);
+    });
+    
+    return modal;
+}
