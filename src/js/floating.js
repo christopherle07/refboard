@@ -71,16 +71,24 @@ async function initFloatingWindow() {
 }
 
 async function setupTitlebarControls() {
+    console.log('Setting up titlebar controls');
+    
+    // Check if Tauri API is available
+    if (!window.__TAURI__) {
+        console.warn('Tauri API not available');
+        return;
+    }
+    
     try {
-        const { getCurrent } = window.__TAURI__.webviewWindow;
-        const currentWindow = getCurrent();
+        const { getCurrentWindow } = window.__TAURI__.window;
+        const currentWindow = getCurrentWindow();
         
-        console.log('Setting up titlebar controls');
+        console.log('Got current window reference');
         
         // Set initial state to unpinned
         await currentWindow.setAlwaysOnTop(false);
         isPinned = false;
-        console.log('Initial state set');
+        console.log('Initial state set to unpinned');
         
         // Pin button
         document.getElementById('pin-btn').addEventListener('click', async () => {
@@ -113,6 +121,8 @@ async function setupTitlebarControls() {
                 console.error('Close error:', err);
             }
         });
+        
+        console.log('Titlebar controls setup complete');
     } catch (err) {
         console.error('Setup titlebar error:', err);
     }
