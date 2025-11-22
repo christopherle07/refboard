@@ -9,8 +9,7 @@ let pendingSave = false;
 
 // Drag state
 let dragSourceIndex = null;
-let dragOverIndex = null;
-let dragOverPosition = null; // 'above' or 'below'
+let currentOrder = [];
 
 document.addEventListener('DOMContentLoaded', async () => {
     const params = new URLSearchParams(window.location.search);
@@ -164,7 +163,7 @@ function saveNow() {
     boardManager.updateBoard(currentBoardId, { layers, bgColor, thumbnail });
 }
 
-function renderLayers() {
+function renderLayers(orderOverride = null) {
     const layersList = document.getElementById('layers-list');
     const images = canvas.getImages();
     
@@ -173,26 +172,28 @@ function renderLayers() {
         return;
     }
     
+    // Use override order during drag, otherwise reverse for display (top layer first)
+    const displayOrder = orderOverride || [...images].reverse();
+    
     layersList.innerHTML = '';
     
-    // Reverse for display (top layer first in list)
-    const reversedImages = [...images].reverse();
-    
-    reversedImages.forEach((img, displayIndex) => {
-        // Real index in canvas.images array
-        const realIndex = images.length - 1 - displayIndex;
+    displayOrder.forEach((img) => {
+        const realIndex = images.findIndex(i => i.id === img.id);
         
         const layerItem = document.createElement('div');
         layerItem.className = 'layer-item';
-        layerItem.setAttribute('data-layer-id', img.id);
-        layerItem.setAttribute('data-real-index', realIndex);
-        layerItem.setAttribute('draggable', 'true');
+        layerItem.dataset.layerId = img.id;
+        layerItem.draggable = true;
+        
+        if (dragSourceIndex !== null && realIndex === dragSourceIndex) {
+            layerItem.classList.add('dragging');
+        }
         
         if (img.visible === false) {
             layerItem.classList.add('layer-hidden');
         }
         
-        // Drag handle (6 dots in 2x3 grid)
+        // Drag handle
         const dragHandle = document.createElement('div');
         dragHandle.className = 'layer-drag-handle';
         dragHandle.innerHTML = `
@@ -204,6 +205,7 @@ function renderLayers() {
         // Visibility toggle
         const visibilityBtn = document.createElement('button');
         visibilityBtn.className = 'layer-visibility-btn';
+        visibilityBtn.type = 'button';
         if (img.visible === false) {
             visibilityBtn.classList.add('hidden');
             visibilityBtn.innerHTML = '◯';
@@ -214,11 +216,12 @@ function renderLayers() {
         }
         visibilityBtn.addEventListener('click', (e) => {
             e.stopPropagation();
+            e.preventDefault();
             canvas.toggleVisibility(img.id);
             renderLayers();
         });
         
-        // Layer name input
+        // Layer content with name
         const layerContent = document.createElement('div');
         layerContent.className = 'layer-content';
         
@@ -226,23 +229,27 @@ function renderLayers() {
         layerName.type = 'text';
         layerName.className = 'layer-name-input';
         layerName.value = img.name;
+        layerName.draggable = false; // Prevent input from being draggable
         layerName.addEventListener('change', (e) => {
             canvas.renameLayer(img.id, e.target.value);
             scheduleSave();
         });
         layerName.addEventListener('click', (e) => e.stopPropagation());
         layerName.addEventListener('mousedown', (e) => e.stopPropagation());
+        layerName.addEventListener('dragstart', (e) => e.preventDefault()); // Block drag from input
         
         // Delete button
         const layerControls = document.createElement('div');
         layerControls.className = 'layer-controls';
         
         const deleteBtn = document.createElement('button');
+        deleteBtn.type = 'button';
         deleteBtn.textContent = '×';
         deleteBtn.className = 'layer-btn-delete';
         deleteBtn.title = 'Delete layer';
         deleteBtn.addEventListener('click', (e) => {
             e.stopPropagation();
+            e.preventDefault();
             showDeleteConfirm(img.name, () => {
                 canvas.deleteImage(img.id);
                 renderLayers();
@@ -257,39 +264,41 @@ function renderLayers() {
         layerItem.appendChild(layerContent);
         layerItem.appendChild(layerControls);
         
-        // Click to select
-        layerItem.addEventListener('click', () => {
+        // Click to select (but not when clicking input)
+        layerItem.addEventListener('click', (e) => {
+            if (e.target.tagName === 'INPUT') return;
             if (img.visible !== false) {
                 canvas.selectImage(img);
             }
         });
         
-        // ===== DRAG AND DROP EVENTS =====
+        // ===== DRAG AND DROP WITH LIVE REORDERING =====
         
         layerItem.addEventListener('dragstart', (e) => {
+            // Don't drag if starting from input
+            if (e.target.tagName === 'INPUT') {
+                e.preventDefault();
+                return;
+            }
             dragSourceIndex = realIndex;
+            currentOrder = [...images].reverse();
             layerItem.classList.add('dragging');
             e.dataTransfer.effectAllowed = 'move';
-            e.dataTransfer.setData('text/plain', String(realIndex));
-            
-            // Need a slight delay for the drag image to be set
-            setTimeout(() => {
-                layerItem.style.opacity = '0.4';
-            }, 0);
+            e.dataTransfer.setData('text/plain', ''); // Required for Firefox
         });
         
-        layerItem.addEventListener('dragend', (e) => {
-            layerItem.classList.remove('dragging');
-            layerItem.style.opacity = '';
-            
-            // Clear all drag-over states
-            document.querySelectorAll('.layer-item').forEach(item => {
-                item.classList.remove('drag-over-above', 'drag-over-below');
-            });
+        layerItem.addEventListener('dragend', () => {
+            // Commit the reorder to canvas
+            if (currentOrder.length > 0) {
+                const newCanvasOrder = [...currentOrder].reverse();
+                canvas.images = newCanvasOrder;
+                canvas.needsRender = true;
+                canvas.notifyChange();
+            }
             
             dragSourceIndex = null;
-            dragOverIndex = null;
-            dragOverPosition = null;
+            currentOrder = [];
+            renderLayers();
         });
         
         layerItem.addEventListener('dragover', (e) => {
@@ -298,85 +307,22 @@ function renderLayers() {
             
             if (dragSourceIndex === null) return;
             
-            const targetRealIndex = parseInt(layerItem.getAttribute('data-real-index'));
-            if (targetRealIndex === dragSourceIndex) return;
+            const targetId = img.id;
+            const draggedId = images[dragSourceIndex].id;
             
-            // Determine if we're in the top or bottom half of the item
-            const rect = layerItem.getBoundingClientRect();
-            const midY = rect.top + rect.height / 2;
-            const isAbove = e.clientY < midY;
+            if (targetId === draggedId) return;
             
-            // Clear previous states
-            document.querySelectorAll('.layer-item').forEach(item => {
-                item.classList.remove('drag-over-above', 'drag-over-below');
-            });
+            const fromIdx = currentOrder.findIndex(i => i.id === draggedId);
+            const toIdx = currentOrder.findIndex(i => i.id === targetId);
             
-            // Set new state
-            if (isAbove) {
-                layerItem.classList.add('drag-over-above');
-                dragOverPosition = 'above';
-            } else {
-                layerItem.classList.add('drag-over-below');
-                dragOverPosition = 'below';
-            }
-            dragOverIndex = targetRealIndex;
-        });
-        
-        layerItem.addEventListener('dragleave', (e) => {
-            // Only remove if we're actually leaving (not entering a child element)
-            const rect = layerItem.getBoundingClientRect();
-            if (e.clientX < rect.left || e.clientX > rect.right ||
-                e.clientY < rect.top || e.clientY > rect.bottom) {
-                layerItem.classList.remove('drag-over-above', 'drag-over-below');
-            }
-        });
-        
-        layerItem.addEventListener('drop', (e) => {
-            e.preventDefault();
+            if (fromIdx === toIdx || fromIdx === -1 || toIdx === -1) return;
             
-            layerItem.classList.remove('drag-over-above', 'drag-over-below');
+            const newOrder = [...currentOrder];
+            const [moved] = newOrder.splice(fromIdx, 1);
+            newOrder.splice(toIdx, 0, moved);
             
-            if (dragSourceIndex === null || dragOverIndex === null) return;
-            
-            const fromIndex = dragSourceIndex;
-            let toIndex = dragOverIndex;
-            
-            // Adjust toIndex based on position and direction
-            // The list is displayed in reverse, so we need to think carefully:
-            // - "above" in display = higher in the layers stack = higher real index
-            // - "below" in display = lower in the layers stack = lower real index
-            
-            if (dragOverPosition === 'above') {
-                // Moving above this item means we want to be at a higher index
-                if (fromIndex < toIndex) {
-                    // Moving up in the display (to higher index)
-                    // toIndex stays the same
-                } else {
-                    // Moving down in the display
-                    toIndex = toIndex + 1;
-                }
-            } else {
-                // Moving below this item
-                if (fromIndex > toIndex) {
-                    // Moving down in display (to lower index)
-                    // toIndex stays the same
-                } else {
-                    // Moving up in display
-                    toIndex = toIndex - 1;
-                }
-            }
-            
-            // Clamp to valid range
-            toIndex = Math.max(0, Math.min(canvas.getImages().length - 1, toIndex));
-            
-            if (fromIndex !== toIndex) {
-                canvas.reorderLayers(fromIndex, toIndex);
-                renderLayers();
-            }
-            
-            dragSourceIndex = null;
-            dragOverIndex = null;
-            dragOverPosition = null;
+            currentOrder = newOrder;
+            renderLayers(currentOrder);
         });
         
         layersList.appendChild(layerItem);
@@ -411,6 +357,7 @@ function renderAssets() {
         assetItem.className = 'asset-item';
         const img = document.createElement('img');
         img.src = asset.src;
+        img.draggable = false;
         assetItem.appendChild(img);
         
         assetItem.addEventListener('click', () => {
