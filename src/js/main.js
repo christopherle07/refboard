@@ -1,5 +1,5 @@
 import { boardManager } from './board-manager.js';
-import { showCreateBoardModal } from './modal.js';
+import { showCreateBoardModal, showDeleteConfirm } from './modal.js';
 
 let currentPage = 1;
 const BOARDS_PER_PAGE = 14;
@@ -74,7 +74,16 @@ function renderBoards() {
             card.style.backgroundPosition = 'center';
         }
         
-        card.innerHTML = `<div class="board-card-name">${board.name}</div>`;
+        card.innerHTML = `
+            <button class="board-delete-btn" title="Delete Board">×</button>
+            <div class="board-card-name">${board.name}</div>
+        `;
+        
+        card.querySelector('.board-delete-btn').addEventListener('click', (e) => {
+            e.stopPropagation();
+            showDeleteConfirm(board.name, () => deleteBoard(board.id));
+        });
+        
         card.addEventListener('click', () => openBoard(board.id));
         grid.appendChild(card);
     });
@@ -89,6 +98,11 @@ async function createBoard(name, bgColor) {
     const board = await boardManager.createBoard(name, bgColor);
     renderBoards();
     openBoard(board.id);
+}
+
+async function deleteBoard(boardId) {
+    await boardManager.deleteBoard(boardId);
+    renderBoards();
 }
 
 function openBoard(boardId) {

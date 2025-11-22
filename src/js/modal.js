@@ -34,6 +34,56 @@ export function createModal(title, bodyHTML, onConfirm) {
     return modal;
 }
 
+const SKIP_CONFIRM_KEY = 'skip_delete_confirm';
+
+export function showDeleteConfirm(itemName, onConfirm) {
+    if (localStorage.getItem(SKIP_CONFIRM_KEY) === 'true') {
+        onConfirm();
+        return;
+    }
+    
+    const modal = document.createElement('div');
+    modal.className = 'modal-overlay';
+    modal.innerHTML = `
+        <div class="modal">
+            <div class="modal-header">
+                <h2>Delete "${itemName}"?</h2>
+            </div>
+            <div class="modal-body">
+                <p class="delete-warning">This action cannot be undone.</p>
+                <label class="dont-show-checkbox">
+                    <input type="checkbox" id="dont-show-again">
+                    <span>Don't show again</span>
+                </label>
+            </div>
+            <div class="modal-footer">
+                <button class="modal-btn modal-btn-secondary" data-action="cancel">Cancel</button>
+                <button class="modal-btn modal-btn-danger" data-action="confirm">Delete</button>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+    
+    modal.querySelector('[data-action="confirm"]').addEventListener('click', () => {
+        if (modal.querySelector('#dont-show-again').checked) {
+            localStorage.setItem(SKIP_CONFIRM_KEY, 'true');
+        }
+        onConfirm();
+        modal.remove();
+    });
+    
+    modal.querySelector('[data-action="cancel"]').addEventListener('click', () => {
+        modal.remove();
+    });
+    
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) modal.remove();
+    });
+    
+    return modal;
+}
+
 export function showCreateBoardModal(onConfirm) {
     const bodyHTML = `
         <div class="form-group">

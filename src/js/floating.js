@@ -7,6 +7,8 @@ let isPinned = false;
 let syncInterval = null;
 let lastSyncTime = 0;
 let isLoading = false;
+let isSyncing = false;
+let saveTimeout = null;
 
 document.addEventListener('DOMContentLoaded', async () => {
     const params = new URLSearchParams(window.location.search);
@@ -82,21 +84,26 @@ function loadLayers(layers) {
 
 function startSync() {
     syncInterval = setInterval(async () => {
-        if (canvas.isDragging || canvas.isResizing || isLoading) return;
+        if (canvas.isDragging || canvas.isResizing || isLoading || isSyncing) return;
         
-        const board = await boardManager.getBoard(currentBoardId);
-        if (!board) return;
-        
-        const boardTime = board.updatedAt || board.updated_at || 0;
-        if (boardTime > lastSyncTime + 200) {
-            lastSyncTime = boardTime;
-            const bgColor = board.bgColor || board.bg_color;
-            canvas.setBackgroundColor(bgColor);
-            document.body.style.backgroundColor = bgColor;
-            updateTitlebarTheme(bgColor);
-            await loadLayers(board.layers);
+        isSyncing = true;
+        try {
+            const board = await boardManager.getBoard(currentBoardId);
+            if (!board) return;
+            
+            const boardTime = board.updatedAt || board.updated_at || 0;
+            if (boardTime > lastSyncTime + 500) {
+                lastSyncTime = boardTime;
+                const bgColor = board.bgColor || board.bg_color;
+                canvas.setBackgroundColor(bgColor);
+                document.body.style.backgroundColor = bgColor;
+                updateTitlebarTheme(bgColor);
+                await loadLayers(board.layers);
+            }
+        } finally {
+            isSyncing = false;
         }
-    }, 500);
+    }, 1000);
 }
 
 async function setupTitlebarControls() {
@@ -129,20 +136,24 @@ async function setupTitlebarControls() {
 }
 
 function saveToBoard() {
-    if (isLoading) return;
-    const images = canvas.getImages();
-    const layers = images.map(img => ({
-        id: img.id,
-        name: img.name,
-        src: img.img.src,
-        x: img.x,
-        y: img.y,
-        width: img.width,
-        height: img.height
-    }));
-    const thumbnail = canvas.generateThumbnail(200, 150);
-    lastSyncTime = Date.now();
-    boardManager.updateBoard(currentBoardId, { layers, thumbnail });
+    if (isLoading || isSyncing) return;
+    
+    if (saveTimeout) clearTimeout(saveTimeout);
+    saveTimeout = setTimeout(() => {
+        const images = canvas.getImages();
+        const layers = images.map(img => ({
+            id: img.id,
+            name: img.name,
+            src: img.img.src,
+            x: img.x,
+            y: img.y,
+            width: img.width,
+            height: img.height
+        }));
+        const thumbnail = canvas.generateThumbnail(200, 150);
+        lastSyncTime = Date.now();
+        boardManager.updateBoard(currentBoardId, { layers, thumbnail });
+    }, 1000);
 }
 
 function updateTitlebarTheme(bgColor) {

@@ -134,15 +134,17 @@ export class Canvas {
     }
 
     onMouseUp() {
-        if (this.isDragging || this.isResizing) {
-            this.notifyChange();
-        }
+        const wasInteracting = this.isDragging || this.isResizing;
         this.isDragging = false;
         this.isResizing = false;
         this.isPanning = false;
         this.resizeHandle = null;
         this.resizeStartData = null;
         this.canvas.style.cursor = 'default';
+        
+        if (wasInteracting) {
+            this.notifyChange();
+        }
     }
 
     onWheel(e) {
@@ -361,7 +363,12 @@ export class Canvas {
         
         for (let i = 0; i < this.images.length; i++) {
             const img = this.images[i];
-            this.ctx.drawImage(img.img, img.x, img.y, img.width, img.height);
+            try {
+                this.ctx.drawImage(img.img, img.x, img.y, img.width, img.height);
+            } catch (e) {
+                // Skip broken images
+                console.warn('Failed to draw image:', e);
+            }
         }
         
         if (this.selectedImage) {
@@ -428,41 +435,69 @@ export class Canvas {
     }
 
     generateThumbnail(width = 200, height = 150) {
-        const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = width;
-        tempCanvas.height = height;
-        const ctx = tempCanvas.getContext('2d');
-        
-        ctx.fillStyle = this.bgColor;
-        ctx.fillRect(0, 0, width, height);
-        
-        if (this.images.length === 0) {
+        try {
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = width;
+            tempCanvas.height = height;
+            const ctx = tempCanvas.getContext('2d');
+            
+            ctx.fillStyle = this.bgColor;
+            ctx.fillRect(0, 0, width, height);
+            
+            if (this.images.length === 0) {
+                return tempCanvas.toDataURL('image/jpeg', 0.6);
+            }
+            
+            // Calculate bounds
+            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+            const validImages = [];
+            
+            for (const img of this.images) {
+                // Skip images with invalid data
+                if (!img.img || !img.img.complete || img.img.naturalWidth === 0) {
+                    continue;
+                }
+                validImages.push(img);
+                minX = Math.min(minX, img.x);
+                minY = Math.min(minY, img.y);
+                maxX = Math.max(maxX, img.x + img.width);
+                maxY = Math.max(maxY, img.y + img.height);
+            }
+            
+            if (validImages.length === 0) {
+                return tempCanvas.toDataURL('image/jpeg', 0.6);
+            }
+            
+            const contentW = maxX - minX;
+            const contentH = maxY - minY;
+            
+            // Prevent division by zero
+            if (contentW <= 0 || contentH <= 0) {
+                return tempCanvas.toDataURL('image/jpeg', 0.6);
+            }
+            
+            const scale = Math.min(width / contentW, height / contentH) * 0.9;
+            const offsetX = (width - contentW * scale) / 2 - minX * scale;
+            const offsetY = (height - contentH * scale) / 2 - minY * scale;
+            
+            ctx.save();
+            ctx.translate(offsetX, offsetY);
+            ctx.scale(scale, scale);
+            
+            for (const img of validImages) {
+                try {
+                    ctx.drawImage(img.img, img.x, img.y, img.width, img.height);
+                } catch (e) {
+                    // Skip broken images
+                    console.warn('Thumbnail: failed to draw image', e);
+                }
+            }
+            
+            ctx.restore();
             return tempCanvas.toDataURL('image/jpeg', 0.6);
+        } catch (e) {
+            console.error('Thumbnail generation failed:', e);
+            return null;
         }
-        
-        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-        for (const img of this.images) {
-            minX = Math.min(minX, img.x);
-            minY = Math.min(minY, img.y);
-            maxX = Math.max(maxX, img.x + img.width);
-            maxY = Math.max(maxY, img.y + img.height);
-        }
-        
-        const contentW = maxX - minX;
-        const contentH = maxY - minY;
-        const scale = Math.min(width / contentW, height / contentH) * 0.9;
-        const offsetX = (width - contentW * scale) / 2 - minX * scale;
-        const offsetY = (height - contentH * scale) / 2 - minY * scale;
-        
-        ctx.save();
-        ctx.translate(offsetX, offsetY);
-        ctx.scale(scale, scale);
-        
-        for (const img of this.images) {
-            ctx.drawImage(img.img, img.x, img.y, img.width, img.height);
-        }
-        
-        ctx.restore();
-        return tempCanvas.toDataURL('image/jpeg', 0.6);
     }
 }
