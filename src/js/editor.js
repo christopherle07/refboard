@@ -1,9 +1,11 @@
-// Editor - main logic for the board editor page
 import { Canvas } from './canvas.js';
 import { boardManager } from './board-manager.js';
 
 let canvas;
 let currentBoardId;
+let syncInterval = null;
+let lastSyncTime = 0;
+let isLoading = false;
 
 document.addEventListener('DOMContentLoaded', async () => {
     const params = new URLSearchParams(window.location.search);
@@ -16,13 +18,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     await initEditor();
     setupEventListeners();
+    startSync();
 });
 
 async function initEditor() {
     await boardManager.loadBoards();
     const board = await boardManager.getBoard(currentBoardId);
     if (!board) {
-        console.error('Board not found:', currentBoardId);
         window.location.href = 'index.html';
         return;
     }
@@ -31,21 +33,13 @@ async function initEditor() {
     
     const canvasElement = document.getElementById('main-canvas');
     canvas = new Canvas(canvasElement);
-    canvas.setBackgroundColor(board.bgColor);
+    canvas.setBackgroundColor(board.bgColor || board.bg_color);
     
     const colorInput = document.getElementById('bg-color');
-    colorInput.value = board.bgColor;
+    colorInput.value = board.bgColor || board.bg_color;
     
-    // Load layers
-    if (board.layers && board.layers.length > 0) {
-        board.layers.forEach(layer => {
-            const img = new Image();
-            img.onload = () => {
-                canvas.addImage(img, layer.x, layer.y, layer.name, layer.width, layer.height);
-            };
-            img.src = layer.src;
-        });
-    }
+    await loadLayers(board.layers);
+    lastSyncTime = board.updatedAt || board.updated_at || Date.now();
     
     setTimeout(() => {
         renderLayers();
@@ -53,8 +47,64 @@ async function initEditor() {
     }, 100);
 }
 
+function loadLayers(layers) {
+    return new Promise(resolve => {
+        isLoading = true;
+        canvas.clear();
+        
+        if (!layers || !layers.length) {
+            isLoading = false;
+            resolve();
+            return;
+        }
+        
+        let loaded = 0;
+        const total = layers.length;
+        
+        layers.forEach(layer => {
+            const img = new Image();
+            img.onload = () => {
+                const added = canvas.addImageSilent(img, layer.x, layer.y, layer.name, layer.width, layer.height);
+                added.id = layer.id;
+                loaded++;
+                if (loaded >= total) {
+                    canvas.selectImage(null);
+                    canvas.needsRender = true;
+                    isLoading = false;
+                    resolve();
+                }
+            };
+            img.onerror = () => {
+                loaded++;
+                if (loaded >= total) {
+                    isLoading = false;
+                    resolve();
+                }
+            };
+            img.src = layer.src;
+        });
+    });
+}
+
+function startSync() {
+    syncInterval = setInterval(async () => {
+        if (canvas.isDragging || canvas.isResizing || isLoading) return;
+        
+        const board = await boardManager.getBoard(currentBoardId);
+        if (!board) return;
+        
+        const boardTime = board.updatedAt || board.updated_at || 0;
+        if (boardTime > lastSyncTime + 200) {
+            lastSyncTime = boardTime;
+            canvas.setBackgroundColor(board.bgColor || board.bg_color);
+            document.getElementById('bg-color').value = board.bgColor || board.bg_color;
+            await loadLayers(board.layers);
+            setTimeout(renderLayers, 150);
+        }
+    }, 500);
+}
+
 function setupEventListeners() {
-    // Tab switching
     document.querySelectorAll('.tab-btn').forEach(btn => {
         btn.addEventListener('click', () => {
             const tab = btn.dataset.tab;
@@ -65,26 +115,21 @@ function setupEventListeners() {
         });
     });
     
-    // Background color
     document.getElementById('bg-color').addEventListener('input', (e) => {
         const color = e.target.value;
         canvas.setBackgroundColor(color);
-        boardManager.updateBoard(currentBoardId, { bgColor: color });
+        saveCurrentBoard();
     });
     
-    // Import assets
     document.getElementById('import-assets-btn').addEventListener('click', importAssets);
-    
-    // Open floating window
     document.getElementById('open-floating-btn').addEventListener('click', openFloatingWindow);
     
-    // Back to home
     document.getElementById('back-home-btn').addEventListener('click', () => {
+        if (syncInterval) clearInterval(syncInterval);
         saveCurrentBoard();
         window.location.href = 'index.html';
     });
     
-    // Collapse layers
     document.getElementById('collapse-layers-btn').addEventListener('click', (e) => {
         const content = document.getElementById('layers-content');
         const btn = e.target;
@@ -92,7 +137,6 @@ function setupEventListeners() {
         btn.textContent = content.classList.contains('collapsed') ? '+' : '−';
     });
     
-    // Canvas events
     canvas.canvas.addEventListener('canvasChanged', () => {
         renderLayers();
         saveCurrentBoard();
@@ -101,35 +145,6 @@ function setupEventListeners() {
     canvas.canvas.addEventListener('imageSelected', (e) => {
         highlightLayer(e.detail ? e.detail.id : null);
     });
-    
-    // Poll for changes from floating window every 500ms
-    setInterval(async () => {
-        await boardManager.loadBoards();
-        const board = await boardManager.getBoard(currentBoardId);
-        if (!board) return;
-        
-        const currentImages = canvas.getImages();
-        
-        // Check if layers changed externally (from floating window)
-        if (!canvas.isDragging && !canvas.isResizing) {
-            if (!board.layers || board.layers.length !== currentImages.length) {
-                reloadCanvas(board);
-            } else {
-                // Check positions/sizes changed
-                let changed = false;
-                board.layers.forEach((layer, i) => {
-                    const img = currentImages.find(img => img.id === layer.id);
-                    if (img && (img.x !== layer.x || img.y !== layer.y || 
-                               img.width !== layer.width || img.height !== layer.height)) {
-                        changed = true;
-                    }
-                });
-                if (changed) {
-                    reloadCanvas(board);
-                }
-            }
-        }
-    }, 500);
 }
 
 function saveCurrentBoard() {
@@ -143,7 +158,10 @@ function saveCurrentBoard() {
         width: img.width,
         height: img.height
     }));
-    boardManager.updateBoard(currentBoardId, { layers });
+    const thumbnail = canvas.generateThumbnail(200, 150);
+    const bgColor = canvas.bgColor;
+    lastSyncTime = Date.now();
+    boardManager.updateBoard(currentBoardId, { layers, thumbnail, bgColor });
 }
 
 function renderLayers() {
@@ -242,7 +260,7 @@ function renderAssets() {
     const assetsGrid = document.getElementById('assets-grid');
     const board = boardManager.currentBoard;
     
-    if (!board.assets || board.assets.length === 0) {
+    if (!board || !board.assets || board.assets.length === 0) {
         assetsGrid.innerHTML = '<div class="empty-message">No assets yet</div>';
         return;
     }
@@ -268,20 +286,6 @@ function renderAssets() {
     });
 }
 
-function reloadCanvas(board) {
-    canvas.clear();
-    if (board.layers && board.layers.length > 0) {
-        board.layers.forEach(layer => {
-            const img = new Image();
-            img.onload = () => {
-                canvas.addImage(img, layer.x, layer.y, layer.name, layer.width, layer.height);
-            };
-            img.src = layer.src;
-        });
-    }
-    setTimeout(() => renderLayers(), 100);
-}
-
 function importAssets() {
     const input = document.createElement('input');
     input.type = 'file';
@@ -292,7 +296,7 @@ function importAssets() {
         const files = Array.from(e.target.files);
         files.forEach(file => {
             const reader = new FileReader();
-            reader.onload = (event) => {
+            reader.onload = async (event) => {
                 const board = boardManager.currentBoard;
                 if (!board.assets) board.assets = [];
                 
@@ -302,7 +306,7 @@ function importAssets() {
                     name: file.name
                 });
                 
-                boardManager.updateBoard(currentBoardId, { assets: board.assets });
+                await boardManager.updateBoard(currentBoardId, { assets: board.assets });
                 renderAssets();
             };
             reader.readAsDataURL(file);
@@ -315,23 +319,17 @@ function importAssets() {
 async function openFloatingWindow() {
     saveCurrentBoard();
     
+    if (!window.__TAURI__) {
+        window.open('floating.html?id=' + currentBoardId, '_blank', 'width=800,height=600');
+        return;
+    }
+    
     try {
-        if (!window.__TAURI__) {
-            alert('Tauri API not available. Running in dev mode?');
-            window.open('floating.html?id=' + currentBoardId, '_blank', 'width=800,height=600');
-            return;
-        }
-        
         const { WebviewWindow } = window.__TAURI__.webviewWindow;
-        
         const windowLabel = 'floating_' + currentBoardId + '_' + Date.now();
-        
-        // Get base URL without query string
         const currentUrl = window.location.href.split('?')[0];
         const baseUrl = currentUrl.substring(0, currentUrl.lastIndexOf('/'));
         const floatingUrl = `${baseUrl}/floating.html?id=${currentBoardId}`;
-        
-        console.log('Opening floating window at:', floatingUrl);
         
         const floatingWindow = new WebviewWindow(windowLabel, {
             url: floatingUrl,
@@ -344,16 +342,10 @@ async function openFloatingWindow() {
             center: true
         });
         
-        floatingWindow.once('tauri://created', () => {
-            console.log('Floating window created');
-        });
-        
         floatingWindow.once('tauri://error', (e) => {
             console.error('Error creating floating window:', e);
         });
-        
     } catch (err) {
         console.error('Error opening floating window:', err);
-        alert('Failed to open floating window: ' + err.message);
     }
 }

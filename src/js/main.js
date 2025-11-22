@@ -1,4 +1,3 @@
-// Main - Homepage logic
 import { boardManager } from './board-manager.js';
 import { showCreateBoardModal } from './modal.js';
 
@@ -43,13 +42,12 @@ function setupEventListeners() {
 }
 
 function renderBoards() {
-    let boards = boardManager.getAllBoards();
+    let boards = [...boardManager.getAllBoards()];
     
-    // Sort
     if (currentSort === 'latest') {
-        boards.sort((a, b) => b.createdAt - a.createdAt);
+        boards.sort((a, b) => (b.createdAt || b.created_at) - (a.createdAt || a.created_at));
     } else if (currentSort === 'oldest') {
-        boards.sort((a, b) => a.createdAt - b.createdAt);
+        boards.sort((a, b) => (a.createdAt || a.created_at) - (b.createdAt || b.created_at));
     } else if (currentSort === 'name') {
         boards.sort((a, b) => a.name.localeCompare(b.name));
     }
@@ -60,22 +58,27 @@ function renderBoards() {
     grid.innerHTML = '';
     grid.appendChild(newBoardCard);
     
-    // Pagination
     const startIdx = (currentPage - 1) * BOARDS_PER_PAGE;
     const endIdx = startIdx + BOARDS_PER_PAGE;
     const paginatedBoards = boards.slice(startIdx, endIdx);
     
-    // Render boards
     paginatedBoards.forEach(board => {
         const card = document.createElement('div');
         card.className = 'board-card';
-        card.style.backgroundColor = board.bgColor;
+        const bgColor = board.bgColor || board.bg_color;
+        card.style.backgroundColor = bgColor;
+        
+        if (board.thumbnail) {
+            card.style.backgroundImage = `url(${board.thumbnail})`;
+            card.style.backgroundSize = 'cover';
+            card.style.backgroundPosition = 'center';
+        }
+        
         card.innerHTML = `<div class="board-card-name">${board.name}</div>`;
         card.addEventListener('click', () => openBoard(board.id));
         grid.appendChild(card);
     });
     
-    // Update pagination
     const totalPages = Math.ceil(boards.length / BOARDS_PER_PAGE) || 1;
     document.getElementById('page-info').textContent = `Page ${currentPage} of ${totalPages}`;
     document.getElementById('prev-page').disabled = currentPage === 1;

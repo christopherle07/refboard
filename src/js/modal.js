@@ -1,5 +1,3 @@
-// Modal utility for creating and managing modals
-
 export function createModal(title, bodyHTML, onConfirm) {
     const modal = document.createElement('div');
     modal.className = 'modal-overlay';
@@ -20,18 +18,15 @@ export function createModal(title, bodyHTML, onConfirm) {
     
     document.body.appendChild(modal);
     
-    // Handle confirm
     modal.querySelector('[data-action="confirm"]').addEventListener('click', () => {
         if (onConfirm) onConfirm();
         modal.remove();
     });
     
-    // Handle cancel
     modal.querySelector('[data-action="cancel"]').addEventListener('click', () => {
         modal.remove();
     });
     
-    // Close on overlay click
     modal.addEventListener('click', (e) => {
         if (e.target === modal) modal.remove();
     });

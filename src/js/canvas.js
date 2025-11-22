@@ -1,9 +1,7 @@
-// Canvas - optimized with proper resize handles
-
 export class Canvas {
     constructor(canvasElement) {
         this.canvas = canvasElement;
-        this.ctx = canvasElement.getContext('2d');
+        this.ctx = canvasElement.getContext('2d', { alpha: false });
         this.images = [];
         this.selectedImage = null;
         this.isDragging = false;
@@ -17,6 +15,8 @@ export class Canvas {
         this.lastPanPoint = { x: 0, y: 0 };
         this.needsRender = true;
         this.animationFrame = null;
+        this.changeTimeout = null;
+        this.bgColor = '#ffffff';
         
         this.setupCanvas();
         this.setupEventListeners();
@@ -62,10 +62,16 @@ export class Canvas {
         });
     }
 
+    screenToWorld(screenX, screenY) {
+        return {
+            x: (screenX - this.pan.x) / this.zoom,
+            y: (screenY - this.pan.y) / this.zoom
+        };
+    }
+
     onMouseDown(e) {
         const rect = this.canvas.getBoundingClientRect();
-        const x = (e.clientX - rect.left - this.pan.x) / this.zoom;
-        const y = (e.clientY - rect.top - this.pan.y) / this.zoom;
+        const { x, y } = this.screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
         
         if (this.selectedImage) {
             const handle = this.getResizeHandle(x, y, this.selectedImage);
@@ -105,8 +111,7 @@ export class Canvas {
 
     onMouseMove(e) {
         const rect = this.canvas.getBoundingClientRect();
-        const x = (e.clientX - rect.left - this.pan.x) / this.zoom;
-        const y = (e.clientY - rect.top - this.pan.y) / this.zoom;
+        const { x, y } = this.screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
         
         if (this.isResizing && this.selectedImage) {
             this.resizeImage(x, y);
@@ -161,14 +166,14 @@ export class Canvas {
         const files = Array.from(e.dataTransfer.files);
         const imageFiles = files.filter(f => f.type.startsWith('image/'));
         
+        const rect = this.canvas.getBoundingClientRect();
+        const { x, y } = this.screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
+        
         imageFiles.forEach(file => {
             const reader = new FileReader();
             reader.onload = (event) => {
                 const img = new Image();
                 img.onload = () => {
-                    const rect = this.canvas.getBoundingClientRect();
-                    const x = (e.clientX - rect.left - this.pan.x) / this.zoom;
-                    const y = (e.clientY - rect.top - this.pan.y) / this.zoom;
                     this.addImage(img, x, y, file.name);
                 };
                 img.src = event.target.result;
@@ -192,6 +197,22 @@ export class Canvas {
         this.selectImage(imageData);
         this.needsRender = true;
         this.notifyChange();
+        return imageData;
+    }
+
+    addImageSilent(img, x, y, name = 'Layer', width = null, height = null) {
+        const imageData = {
+            id: Date.now() + Math.random(),
+            name: name || `Layer ${this.images.length + 1}`,
+            img,
+            x,
+            y,
+            width: width || img.width,
+            height: height || img.height,
+            rotation: 0
+        };
+        this.images.push(imageData);
+        this.needsRender = true;
         return imageData;
     }
 
@@ -237,16 +258,15 @@ export class Canvas {
         const midX = img.x + img.width / 2;
         const midY = img.y + img.height / 2;
         
-        // 8 handles: 4 corners (scale) + 4 sides (dimension)
         const handles = [
-            { name: 'nw', x: img.x, y: img.y, type: 'corner' },
-            { name: 'n', x: midX, y: img.y, type: 'side' },
-            { name: 'ne', x: img.x + img.width, y: img.y, type: 'corner' },
-            { name: 'e', x: img.x + img.width, y: midY, type: 'side' },
-            { name: 'se', x: img.x + img.width, y: img.y + img.height, type: 'corner' },
-            { name: 's', x: midX, y: img.y + img.height, type: 'side' },
-            { name: 'sw', x: img.x, y: img.y + img.height, type: 'corner' },
-            { name: 'w', x: img.x, y: midY, type: 'side' }
+            { name: 'nw', x: img.x, y: img.y },
+            { name: 'n', x: midX, y: img.y },
+            { name: 'ne', x: img.x + img.width, y: img.y },
+            { name: 'e', x: img.x + img.width, y: midY },
+            { name: 'se', x: img.x + img.width, y: img.y + img.height },
+            { name: 's', x: midX, y: img.y + img.height },
+            { name: 'sw', x: img.x, y: img.y + img.height },
+            { name: 'w', x: img.x, y: midY }
         ];
         
         for (const handle of handles) {
@@ -275,7 +295,6 @@ export class Canvas {
         const isCorner = ['nw', 'ne', 'sw', 'se'].includes(this.resizeHandle);
         
         if (isCorner) {
-            // Corner handles: scale proportionally
             if (this.resizeHandle === 'se') {
                 const newWidth = Math.max(minSize, x - start.x);
                 const newHeight = newWidth / start.aspectRatio;
@@ -302,7 +321,6 @@ export class Canvas {
                 img.height = newHeight;
             }
         } else {
-            // Side handles: change dimensions freely
             if (this.resizeHandle === 'e') {
                 img.width = Math.max(minSize, x - img.x);
             } else if (this.resizeHandle === 'w') {
@@ -331,18 +349,21 @@ export class Canvas {
     }
 
     render() {
-        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-        this.ctx.save();
+        const w = this.canvas.width;
+        const h = this.canvas.height;
         
+        this.ctx.fillStyle = this.bgColor;
+        this.ctx.fillRect(0, 0, w, h);
+        
+        this.ctx.save();
         this.ctx.translate(this.pan.x, this.pan.y);
         this.ctx.scale(this.zoom, this.zoom);
         
-        // Draw images
-        this.images.forEach(img => {
+        for (let i = 0; i < this.images.length; i++) {
+            const img = this.images[i];
             this.ctx.drawImage(img.img, img.x, img.y, img.width, img.height);
-        });
+        }
         
-        // Draw selection and handles
         if (this.selectedImage) {
             const img = this.selectedImage;
             this.ctx.strokeStyle = '#0066ff';
@@ -357,33 +378,37 @@ export class Canvas {
             this.ctx.strokeStyle = '#0066ff';
             this.ctx.lineWidth = 1.5 / this.zoom;
             
-            // 8 handles
             const handles = [
-                [img.x, img.y], // nw
-                [midX, img.y], // n
-                [img.x + img.width, img.y], // ne
-                [img.x + img.width, midY], // e
-                [img.x + img.width, img.y + img.height], // se
-                [midX, img.y + img.height], // s
-                [img.x, img.y + img.height], // sw
-                [img.x, midY] // w
+                [img.x, img.y],
+                [midX, img.y],
+                [img.x + img.width, img.y],
+                [img.x + img.width, midY],
+                [img.x + img.width, img.y + img.height],
+                [midX, img.y + img.height],
+                [img.x, img.y + img.height],
+                [img.x, midY]
             ];
             
-            handles.forEach(([x, y]) => {
+            for (let i = 0; i < handles.length; i++) {
+                const [x, y] = handles[i];
                 this.ctx.fillRect(x - handleSize/2, y - handleSize/2, handleSize, handleSize);
                 this.ctx.strokeRect(x - handleSize/2, y - handleSize/2, handleSize, handleSize);
-            });
+            }
         }
         
         this.ctx.restore();
     }
 
     notifyChange() {
-        this.canvas.dispatchEvent(new CustomEvent('canvasChanged'));
+        if (this.changeTimeout) clearTimeout(this.changeTimeout);
+        this.changeTimeout = setTimeout(() => {
+            this.canvas.dispatchEvent(new CustomEvent('canvasChanged'));
+        }, 100);
     }
 
     setBackgroundColor(color) {
-        this.canvas.style.backgroundColor = color;
+        this.bgColor = color;
+        this.needsRender = true;
     }
 
     getImages() {
@@ -400,5 +425,44 @@ export class Canvas {
         if (this.animationFrame) {
             cancelAnimationFrame(this.animationFrame);
         }
+    }
+
+    generateThumbnail(width = 200, height = 150) {
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = width;
+        tempCanvas.height = height;
+        const ctx = tempCanvas.getContext('2d');
+        
+        ctx.fillStyle = this.bgColor;
+        ctx.fillRect(0, 0, width, height);
+        
+        if (this.images.length === 0) {
+            return tempCanvas.toDataURL('image/jpeg', 0.6);
+        }
+        
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        for (const img of this.images) {
+            minX = Math.min(minX, img.x);
+            minY = Math.min(minY, img.y);
+            maxX = Math.max(maxX, img.x + img.width);
+            maxY = Math.max(maxY, img.y + img.height);
+        }
+        
+        const contentW = maxX - minX;
+        const contentH = maxY - minY;
+        const scale = Math.min(width / contentW, height / contentH) * 0.9;
+        const offsetX = (width - contentW * scale) / 2 - minX * scale;
+        const offsetY = (height - contentH * scale) / 2 - minY * scale;
+        
+        ctx.save();
+        ctx.translate(offsetX, offsetY);
+        ctx.scale(scale, scale);
+        
+        for (const img of this.images) {
+            ctx.drawImage(img.img, img.x, img.y, img.width, img.height);
+        }
+        
+        ctx.restore();
+        return tempCanvas.toDataURL('image/jpeg', 0.6);
     }
 }

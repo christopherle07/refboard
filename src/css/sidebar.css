@@ -131,7 +131,6 @@
     max-height: 0;
 }
 
-/* Layers */
 .layers-list {
     display: flex;
     flex-direction: column;
@@ -225,7 +224,6 @@
     border-color: #d32f2f;
 }
 
-/* Properties */
 .property-row {
     display: flex;
     justify-content: space-between;
@@ -246,7 +244,6 @@
     cursor: pointer;
 }
 
-/* Assets */
 .import-btn {
     width: 100%;
     padding: 10px;
