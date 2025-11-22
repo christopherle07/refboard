@@ -4,11 +4,8 @@ import { boardManager } from './board-manager.js';
 let canvas;
 let currentBoardId;
 let isPinned = false;
-let syncInterval = null;
-let lastSyncTime = 0;
-let isLoading = false;
-let isSyncing = false;
 let saveTimeout = null;
+let pendingSave = false;
 
 document.addEventListener('DOMContentLoaded', async () => {
     const params = new URLSearchParams(window.location.search);
@@ -18,7 +15,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     await initFloatingWindow();
     setupTitlebarControls();
-    startSync();
 });
 
 async function initFloatingWindow() {
@@ -38,18 +34,15 @@ async function initFloatingWindow() {
     updateTitlebarTheme(bgColor);
     
     await loadLayers(board.layers);
-    lastSyncTime = board.updatedAt || board.updated_at || Date.now();
     
-    canvas.canvas.addEventListener('canvasChanged', saveToBoard);
+    canvas.canvas.addEventListener('canvasChanged', scheduleSave);
 }
 
 function loadLayers(layers) {
     return new Promise(resolve => {
-        isLoading = true;
         canvas.clear();
         
         if (!layers || !layers.length) {
-            isLoading = false;
             resolve();
             return;
         }
@@ -60,50 +53,25 @@ function loadLayers(layers) {
         layers.forEach(layer => {
             const img = new Image();
             img.onload = () => {
-                const added = canvas.addImageSilent(img, layer.x, layer.y, layer.name, layer.width, layer.height);
+                const visible = layer.visible !== false;
+                const added = canvas.addImageSilent(img, layer.x, layer.y, layer.name, layer.width, layer.height, visible);
                 added.id = layer.id;
                 loaded++;
                 if (loaded >= total) {
                     canvas.selectImage(null);
                     canvas.needsRender = true;
-                    isLoading = false;
                     resolve();
                 }
             };
             img.onerror = () => {
                 loaded++;
                 if (loaded >= total) {
-                    isLoading = false;
                     resolve();
                 }
             };
             img.src = layer.src;
         });
     });
-}
-
-function startSync() {
-    syncInterval = setInterval(async () => {
-        if (canvas.isDragging || canvas.isResizing || isLoading || isSyncing) return;
-        
-        isSyncing = true;
-        try {
-            const board = await boardManager.getBoard(currentBoardId);
-            if (!board) return;
-            
-            const boardTime = board.updatedAt || board.updated_at || 0;
-            if (boardTime > lastSyncTime + 500) {
-                lastSyncTime = boardTime;
-                const bgColor = board.bgColor || board.bg_color;
-                canvas.setBackgroundColor(bgColor);
-                document.body.style.backgroundColor = bgColor;
-                updateTitlebarTheme(bgColor);
-                await loadLayers(board.layers);
-            }
-        } finally {
-            isSyncing = false;
-        }
-    }, 1000);
 }
 
 async function setupTitlebarControls() {
@@ -127,7 +95,7 @@ async function setupTitlebarControls() {
         });
         
         document.getElementById('close-btn').addEventListener('click', async () => {
-            if (syncInterval) clearInterval(syncInterval);
+            saveNow();
             await currentWindow.close();
         });
     } catch (err) {
@@ -135,25 +103,35 @@ async function setupTitlebarControls() {
     }
 }
 
-function saveToBoard() {
-    if (isLoading || isSyncing) return;
-    
+function scheduleSave() {
+    pendingSave = true;
     if (saveTimeout) clearTimeout(saveTimeout);
     saveTimeout = setTimeout(() => {
-        const images = canvas.getImages();
-        const layers = images.map(img => ({
-            id: img.id,
-            name: img.name,
-            src: img.img.src,
-            x: img.x,
-            y: img.y,
-            width: img.width,
-            height: img.height
-        }));
-        const thumbnail = canvas.generateThumbnail(200, 150);
-        lastSyncTime = Date.now();
-        boardManager.updateBoard(currentBoardId, { layers, thumbnail });
-    }, 1000);
+        saveNow();
+    }, 2000);
+}
+
+function saveNow() {
+    if (!pendingSave) return;
+    pendingSave = false;
+    if (saveTimeout) {
+        clearTimeout(saveTimeout);
+        saveTimeout = null;
+    }
+    
+    const images = canvas.getImages();
+    const layers = images.map(img => ({
+        id: img.id,
+        name: img.name,
+        src: img.img.src,
+        x: img.x,
+        y: img.y,
+        width: img.width,
+        height: img.height,
+        visible: img.visible !== false
+    }));
+    const thumbnail = canvas.generateThumbnail(200, 150);
+    boardManager.updateBoard(currentBoardId, { layers, thumbnail });
 }
 
 function updateTitlebarTheme(bgColor) {

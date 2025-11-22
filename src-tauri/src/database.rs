@@ -13,6 +13,12 @@ pub struct Layer {
     pub y: f64,
     pub width: f64,
     pub height: f64,
+    #[serde(default = "default_visible")]
+    pub visible: bool,
+}
+
+fn default_visible() -> bool {
+    true
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

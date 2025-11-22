@@ -15,7 +15,6 @@ export class Canvas {
         this.lastPanPoint = { x: 0, y: 0 };
         this.needsRender = true;
         this.animationFrame = null;
-        this.changeTimeout = null;
         this.bgColor = '#ffffff';
         
         this.setupCanvas();
@@ -73,7 +72,7 @@ export class Canvas {
         const rect = this.canvas.getBoundingClientRect();
         const { x, y } = this.screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
         
-        if (this.selectedImage) {
+        if (this.selectedImage && this.selectedImage.visible !== false) {
             const handle = this.getResizeHandle(x, y, this.selectedImage);
             if (handle) {
                 this.isResizing = true;
@@ -127,14 +126,14 @@ export class Canvas {
             this.pan.y += dy;
             this.lastPanPoint = { x: e.clientX, y: e.clientY };
             this.needsRender = true;
-        } else if (this.selectedImage) {
+        } else if (this.selectedImage && this.selectedImage.visible !== false) {
             const handle = this.getResizeHandle(x, y, this.selectedImage);
             this.canvas.style.cursor = handle ? this.getResizeCursor(handle) : 'default';
         }
     }
 
     onMouseUp() {
-        const wasInteracting = this.isDragging || this.isResizing;
+        const wasModifying = this.isDragging || this.isResizing;
         this.isDragging = false;
         this.isResizing = false;
         this.isPanning = false;
@@ -142,7 +141,7 @@ export class Canvas {
         this.resizeStartData = null;
         this.canvas.style.cursor = 'default';
         
-        if (wasInteracting) {
+        if (wasModifying) {
             this.notifyChange();
         }
     }
@@ -193,7 +192,8 @@ export class Canvas {
             y,
             width: width || img.width,
             height: height || img.height,
-            rotation: 0
+            rotation: 0,
+            visible: true
         };
         this.images.push(imageData);
         this.selectImage(imageData);
@@ -202,7 +202,7 @@ export class Canvas {
         return imageData;
     }
 
-    addImageSilent(img, x, y, name = 'Layer', width = null, height = null) {
+    addImageSilent(img, x, y, name = 'Layer', width = null, height = null, visible = true) {
         const imageData = {
             id: Date.now() + Math.random(),
             name: name || `Layer ${this.images.length + 1}`,
@@ -211,7 +211,8 @@ export class Canvas {
             y,
             width: width || img.width,
             height: height || img.height,
-            rotation: 0
+            rotation: 0,
+            visible: visible
         };
         this.images.push(imageData);
         this.needsRender = true;
@@ -229,6 +230,26 @@ export class Canvas {
         if (this.selectedImage && this.selectedImage.id === id) {
             this.selectedImage = null;
         }
+        this.needsRender = true;
+        this.notifyChange();
+    }
+
+    toggleVisibility(id) {
+        const img = this.images.find(img => img.id === id);
+        if (img) {
+            img.visible = !img.visible;
+            if (this.selectedImage && this.selectedImage.id === id && !img.visible) {
+                this.selectedImage = null;
+            }
+            this.needsRender = true;
+            this.notifyChange();
+        }
+    }
+
+    reorderLayers(fromIndex, toIndex) {
+        if (fromIndex === toIndex) return;
+        const [item] = this.images.splice(fromIndex, 1);
+        this.images.splice(toIndex, 0, item);
         this.needsRender = true;
         this.notifyChange();
     }
@@ -251,11 +272,12 @@ export class Canvas {
         const img = this.images.find(img => img.id === id);
         if (img) {
             img.name = newName;
-            this.notifyChange();
         }
     }
 
     getResizeHandle(x, y, img) {
+        if (!img || img.visible === false) return null;
+        
         const handleSize = 10 / this.zoom;
         const midX = img.x + img.width / 2;
         const midY = img.y + img.height / 2;
@@ -342,6 +364,7 @@ export class Canvas {
     getImageAtPoint(x, y) {
         for (let i = this.images.length - 1; i >= 0; i--) {
             const img = this.images[i];
+            if (img.visible === false) continue;
             if (x >= img.x && x <= img.x + img.width &&
                 y >= img.y && y <= img.y + img.height) {
                 return img;
@@ -363,15 +386,15 @@ export class Canvas {
         
         for (let i = 0; i < this.images.length; i++) {
             const img = this.images[i];
+            if (img.visible === false) continue;
             try {
                 this.ctx.drawImage(img.img, img.x, img.y, img.width, img.height);
             } catch (e) {
                 // Skip broken images
-                console.warn('Failed to draw image:', e);
             }
         }
         
-        if (this.selectedImage) {
+        if (this.selectedImage && this.selectedImage.visible !== false) {
             const img = this.selectedImage;
             this.ctx.strokeStyle = '#0066ff';
             this.ctx.lineWidth = 2 / this.zoom;
@@ -397,9 +420,9 @@ export class Canvas {
             ];
             
             for (let i = 0; i < handles.length; i++) {
-                const [x, y] = handles[i];
-                this.ctx.fillRect(x - handleSize/2, y - handleSize/2, handleSize, handleSize);
-                this.ctx.strokeRect(x - handleSize/2, y - handleSize/2, handleSize, handleSize);
+                const [hx, hy] = handles[i];
+                this.ctx.fillRect(hx - handleSize/2, hy - handleSize/2, handleSize, handleSize);
+                this.ctx.strokeRect(hx - handleSize/2, hy - handleSize/2, handleSize, handleSize);
             }
         }
         
@@ -407,10 +430,7 @@ export class Canvas {
     }
 
     notifyChange() {
-        if (this.changeTimeout) clearTimeout(this.changeTimeout);
-        this.changeTimeout = setTimeout(() => {
-            this.canvas.dispatchEvent(new CustomEvent('canvasChanged'));
-        }, 100);
+        this.canvas.dispatchEvent(new CustomEvent('canvasChanged'));
     }
 
     setBackgroundColor(color) {
@@ -448,12 +468,11 @@ export class Canvas {
                 return tempCanvas.toDataURL('image/jpeg', 0.6);
             }
             
-            // Calculate bounds
             let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
             const validImages = [];
             
             for (const img of this.images) {
-                // Skip images with invalid data
+                if (img.visible === false) continue;
                 if (!img.img || !img.img.complete || img.img.naturalWidth === 0) {
                     continue;
                 }
@@ -471,7 +490,6 @@ export class Canvas {
             const contentW = maxX - minX;
             const contentH = maxY - minY;
             
-            // Prevent division by zero
             if (contentW <= 0 || contentH <= 0) {
                 return tempCanvas.toDataURL('image/jpeg', 0.6);
             }
@@ -489,14 +507,12 @@ export class Canvas {
                     ctx.drawImage(img.img, img.x, img.y, img.width, img.height);
                 } catch (e) {
                     // Skip broken images
-                    console.warn('Thumbnail: failed to draw image', e);
                 }
             }
             
             ctx.restore();
             return tempCanvas.toDataURL('image/jpeg', 0.6);
         } catch (e) {
-            console.error('Thumbnail generation failed:', e);
             return null;
         }
     }
