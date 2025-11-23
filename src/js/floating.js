@@ -7,14 +7,32 @@ let isPinned = false;
 let saveTimeout = null;
 let pendingSave = false;
 
+// Sync channel for layer visibility
+let syncChannel = null;
+
 document.addEventListener('DOMContentLoaded', async () => {
     const params = new URLSearchParams(window.location.search);
     currentBoardId = parseInt(params.get('id'));
     
     if (!currentBoardId) return;
     
+    // Setup sync channel
+    syncChannel = new BroadcastChannel('board_sync_' + currentBoardId);
+    
+    // Listen for layer visibility changes from editor
+    syncChannel.onmessage = (event) => {
+        if (event.data.type === 'layer_visibility_changed') {
+            const img = canvas.images.find(i => i.id === event.data.layerId);
+            if (img) {
+                img.visible = event.data.visible;
+                canvas.needsRender = true;
+            }
+        }
+    };
+    
     await initFloatingWindow();
     setupTitlebarControls();
+    setupContextMenu();
 });
 
 async function initFloatingWindow() {
@@ -101,6 +119,179 @@ async function setupTitlebarControls() {
     } catch (err) {
         console.error('Titlebar setup error:', err);
     }
+}
+
+function setupContextMenu() {
+    const contextMenu = document.createElement('div');
+    contextMenu.className = 'context-menu';
+    contextMenu.innerHTML = `
+        <div class="context-menu-item" data-action="recenter">Recenter View</div>
+        <div class="context-menu-item" data-action="reset">Reset Zoom</div>
+    `;
+    document.body.appendChild(contextMenu);
+    
+    // Hidden layers submenu
+    const hiddenLayersMenu = document.createElement('div');
+    hiddenLayersMenu.className = 'context-submenu';
+    document.body.appendChild(hiddenLayersMenu);
+    
+    // Style injection
+    if (!document.querySelector('#context-menu-styles')) {
+        const style = document.createElement('style');
+        style.id = 'context-menu-styles';
+        style.textContent = `
+            .context-menu {
+                position: fixed;
+                background: #ffffff;
+                border: 1px solid #e0e0e0;
+                border-radius: 8px;
+                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+                padding: 4px;
+                z-index: 10000;
+                display: none;
+                min-width: 160px;
+            }
+            
+            .context-menu.show {
+                display: block;
+            }
+            
+            .context-menu-item {
+                padding: 8px 12px;
+                font-size: 13px;
+                color: #1a1a1a;
+                cursor: pointer;
+                border-radius: 4px;
+                transition: background 0.1s;
+            }
+            
+            .context-menu-item:hover {
+                background: #f5f5f5;
+            }
+            
+            .context-menu-item.disabled {
+                color: #999;
+                cursor: default;
+            }
+            
+            .context-menu-item.disabled:hover {
+                background: transparent;
+            }
+            
+            .context-submenu {
+                position: fixed;
+                background: #ffffff;
+                border: 1px solid #e0e0e0;
+                border-radius: 8px;
+                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+                padding: 4px;
+                z-index: 10001;
+                display: none;
+                min-width: 180px;
+                max-height: 300px;
+                overflow-y: auto;
+            }
+            
+            .context-submenu.show {
+                display: block;
+            }
+        `;
+        document.head.appendChild(style);
+    }
+    
+    let clickedImageId = null;
+    
+    // Right click to show menu
+    canvas.canvas.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        
+        hiddenLayersMenu.classList.remove('show');
+        
+        // Check if clicked on an image
+        const rect = canvas.canvas.getBoundingClientRect();
+        const { x, y } = canvas.screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
+        const clickedImage = canvas.getImageAtPoint(x, y);
+        
+        contextMenu.innerHTML = '';
+        
+        if (clickedImage) {
+            // Clicked on image - show hide option
+            clickedImageId = clickedImage.id;
+            contextMenu.innerHTML = `
+                <div class="context-menu-item" data-action="hide-image">Hide Image</div>
+            `;
+        } else {
+            // Clicked on blank space
+            clickedImageId = null;
+            const hiddenImages = canvas.images.filter(img => img.visible === false);
+            
+            contextMenu.innerHTML = `
+                <div class="context-menu-item" data-action="recenter">Recenter View</div>
+                <div class="context-menu-item" data-action="reset">Reset Zoom</div>
+                <div class="context-menu-item ${hiddenImages.length === 0 ? 'disabled' : ''}" data-action="hidden-layers">Hidden Layers ${hiddenImages.length > 0 ? '▶' : ''}</div>
+            `;
+        }
+        
+        contextMenu.style.left = e.clientX + 'px';
+        contextMenu.style.top = e.clientY + 'px';
+        contextMenu.classList.add('show');
+    });
+    
+    // Click menu items
+    contextMenu.addEventListener('click', (e) => {
+        const action = e.target.dataset.action;
+        
+        if (action === 'recenter') {
+            canvas.fitToContent();
+            contextMenu.classList.remove('show');
+        } else if (action === 'reset') {
+            canvas.resetView();
+            contextMenu.classList.remove('show');
+        } else if (action === 'hide-image' && clickedImageId) {
+            canvas.toggleVisibility(clickedImageId);
+            contextMenu.classList.remove('show');
+        } else if (action === 'hidden-layers') {
+            if (e.target.classList.contains('disabled')) return;
+            
+            // Show submenu with hidden layers
+            const hiddenImages = canvas.images.filter(img => img.visible === false);
+            hiddenLayersMenu.innerHTML = '';
+            
+            hiddenImages.forEach(img => {
+                const item = document.createElement('div');
+                item.className = 'context-menu-item';
+                item.textContent = img.name;
+                item.dataset.imageId = img.id;
+                item.dataset.action = 'unhide';
+                hiddenLayersMenu.appendChild(item);
+            });
+            
+            const rect = e.target.getBoundingClientRect();
+            hiddenLayersMenu.style.left = (rect.right + 5) + 'px';
+            hiddenLayersMenu.style.top = rect.top + 'px';
+            hiddenLayersMenu.classList.add('show');
+        }
+    });
+    
+    // Click submenu items (unhide)
+    hiddenLayersMenu.addEventListener('click', (e) => {
+        const action = e.target.dataset.action;
+        const imageId = parseFloat(e.target.dataset.imageId);
+        
+        if (action === 'unhide' && imageId) {
+            canvas.toggleVisibility(imageId);
+            contextMenu.classList.remove('show');
+            hiddenLayersMenu.classList.remove('show');
+        }
+    });
+    
+    // Close menus on outside click
+    document.addEventListener('click', (e) => {
+        if (!contextMenu.contains(e.target) && !hiddenLayersMenu.contains(e.target) && e.target !== canvas.canvas) {
+            contextMenu.classList.remove('show');
+            hiddenLayersMenu.classList.remove('show');
+        }
+    });
 }
 
 function scheduleSave() {

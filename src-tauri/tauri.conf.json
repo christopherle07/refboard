@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "tauri_aref",
-  "version": "0.1.0",
+  "productName": "AniRef Alpha",
+  "version": "1.0.0",
   "identifier": "site.anihaven.aref",
   "build": {
     "frontendDist": "../src"
@@ -10,7 +10,7 @@
     "withGlobalTauri": true,
     "windows": [
       {
-        "title": "tauri_aref",
+        "title": "AniRef Alpha",
         "width": 800,
         "height": 600,
         "dragDropEnabled": false

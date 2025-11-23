@@ -11,6 +11,9 @@ let pendingSave = false;
 let dragSourceIndex = null;
 let currentOrder = [];
 
+// Sync channel for layer visibility
+let syncChannel = null;
+
 document.addEventListener('DOMContentLoaded', async () => {
     const params = new URLSearchParams(window.location.search);
     currentBoardId = parseInt(params.get('id'));
@@ -19,6 +22,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         window.location.href = 'index.html';
         return;
     }
+    
+    // Setup sync channel
+    syncChannel = new BroadcastChannel('board_sync_' + currentBoardId);
     
     await initEditor();
     setupEventListeners();
@@ -102,6 +108,9 @@ function setupEventListeners() {
     
     document.getElementById('import-assets-btn').addEventListener('click', importAssets);
     document.getElementById('open-floating-btn').addEventListener('click', openFloatingWindow);
+    document.getElementById('recenter-btn').addEventListener('click', () => {
+        canvas.fitToContent();
+    });
     
     document.getElementById('back-home-btn').addEventListener('click', () => {
         saveNow();
@@ -218,6 +227,16 @@ function renderLayers(orderOverride = null) {
             e.stopPropagation();
             e.preventDefault();
             canvas.toggleVisibility(img.id);
+            
+            // Broadcast visibility change to floating windows
+            if (syncChannel) {
+                syncChannel.postMessage({
+                    type: 'layer_visibility_changed',
+                    layerId: img.id,
+                    visible: !img.visible
+                });
+            }
+            
             renderLayers();
         });
         

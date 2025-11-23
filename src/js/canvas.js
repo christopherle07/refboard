@@ -1,7 +1,11 @@
 export class Canvas {
     constructor(canvasElement) {
         this.canvas = canvasElement;
-        this.ctx = canvasElement.getContext('2d', { alpha: false });
+        this.ctx = canvasElement.getContext('2d', { 
+            alpha: false,
+            desynchronized: true, // Hint to browser for better performance
+            willReadFrequently: false
+        });
         this.images = [];
         this.selectedImage = null;
         this.isDragging = false;
@@ -17,9 +21,96 @@ export class Canvas {
         this.animationFrame = null;
         this.bgColor = '#ffffff';
         
+        // Performance optimizations
+        this.visibleImages = []; // Cache of visible images
+        this.viewportBounds = { left: 0, right: 0, top: 0, bottom: 0 };
+        this.lastCullZoom = 1;
+        this.lastCullPan = { x: 0, y: 0 };
+        this.cullThreshold = 10; // Recull if pan/zoom changed significantly
+        
+        // Grid settings for infinite canvas feel
+        this.showGrid = false; // Hidden by default, toggle with canvas.showGrid = true
+        this.gridSize = 50; // Grid cell size in world units
+        this.gridColor = 'rgba(0, 0, 0, 0.05)';
+        
+        // Zoom warning
+        this.hasShownZoomWarning = false;
+        this.zoomWarningThreshold = 0.05; // Show warning below this zoom level
+        
+        // Snapping
+        this.enableSnapping = true;
+        this.snapThreshold = 3; // Snap within 3 pixels (reduced from 8)
+        this.snapLines = []; // Active snap guide lines
+        
         this.setupCanvas();
         this.setupEventListeners();
         this.startRenderLoop();
+    }
+
+    showToast(message, duration = 5000) {
+        // Remove existing toast if any
+        const existingToast = document.querySelector('.canvas-toast');
+        if (existingToast) existingToast.remove();
+        
+        const toast = document.createElement('div');
+        toast.className = 'canvas-toast';
+        toast.textContent = message;
+        
+        // Inject styles if not already present
+        if (!document.querySelector('#canvas-toast-styles')) {
+            const style = document.createElement('style');
+            style.id = 'canvas-toast-styles';
+            style.textContent = `
+                .canvas-toast {
+                    position: fixed;
+                    top: 20px;
+                    left: 50%;
+                    transform: translateX(-50%);
+                    background: #ffffff;
+                    color: #1a1a1a;
+                    padding: 12px 20px;
+                    border-radius: 8px;
+                    font-size: 13px;
+                    font-weight: 500;
+                    z-index: 10000;
+                    pointer-events: none;
+                    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+                    border: 1px solid #e0e0e0;
+                    animation: toastSlideDown 0.3s ease;
+                }
+                
+                @keyframes toastSlideDown {
+                    from {
+                        opacity: 0;
+                        transform: translateX(-50%) translateY(-20px);
+                    }
+                    to {
+                        opacity: 1;
+                        transform: translateX(-50%) translateY(0);
+                    }
+                }
+                
+                .canvas-toast.fade-out {
+                    animation: toastFadeOut 0.3s ease forwards;
+                }
+                
+                @keyframes toastFadeOut {
+                    to {
+                        opacity: 0;
+                        transform: translateX(-50%) translateY(-20px);
+                    }
+                }
+            `;
+            document.head.appendChild(style);
+        }
+        
+        document.body.appendChild(toast);
+        
+        // Fade out and remove
+        setTimeout(() => {
+            toast.classList.add('fade-out');
+            setTimeout(() => toast.remove(), 300);
+        }, duration);
     }
 
     setupCanvas() {
@@ -31,6 +122,7 @@ export class Canvas {
         const container = this.canvas.parentElement;
         this.canvas.width = container.clientWidth;
         this.canvas.height = container.clientHeight;
+        this.updateViewportBounds();
         this.needsRender = true;
     }
 
@@ -54,9 +146,20 @@ export class Canvas {
         this.canvas.addEventListener('dragover', (e) => e.preventDefault());
         this.canvas.addEventListener('drop', this.onDrop.bind(this));
         
+        // Spacebar panning
         document.addEventListener('keydown', (e) => {
+            if (e.key === ' ' && !this.isPanning && !e.repeat) {
+                e.preventDefault();
+                this.canvas.style.cursor = 'grab';
+            }
             if (e.key === 'Delete' && this.selectedImage) {
                 this.deleteImage(this.selectedImage.id);
+            }
+        });
+        
+        document.addEventListener('keyup', (e) => {
+            if (e.key === ' ') {
+                this.canvas.style.cursor = 'default';
             }
         });
     }
@@ -68,9 +171,79 @@ export class Canvas {
         };
     }
 
+    worldToScreen(worldX, worldY) {
+        return {
+            x: worldX * this.zoom + this.pan.x,
+            y: worldY * this.zoom + this.pan.y
+        };
+    }
+
+    // Calculate viewport bounds in world space for culling
+    updateViewportBounds() {
+        const margin = 100; // Extra margin to prevent pop-in
+        this.viewportBounds = {
+            left: (-this.pan.x - margin) / this.zoom,
+            right: ((this.canvas.width - this.pan.x) + margin) / this.zoom,
+            top: (-this.pan.y - margin) / this.zoom,
+            bottom: ((this.canvas.height - this.pan.y) + margin) / this.zoom
+        };
+    }
+
+    // Check if culling needs to be updated
+    shouldRecull() {
+        const panDelta = Math.abs(this.pan.x - this.lastCullPan.x) + Math.abs(this.pan.y - this.lastCullPan.y);
+        const zoomDelta = Math.abs(this.zoom - this.lastCullZoom);
+        return panDelta > this.cullThreshold || zoomDelta > 0.01;
+    }
+
+    // Perform viewport culling - only return visible images
+    cullImages() {
+        if (!this.shouldRecull()) {
+            return this.visibleImages;
+        }
+
+        this.updateViewportBounds();
+        const bounds = this.viewportBounds;
+        
+        this.visibleImages = this.images.filter(img => {
+            if (img.visible === false) return false;
+            
+            // AABB intersection test
+            return !(
+                img.x + img.width < bounds.left ||
+                img.x > bounds.right ||
+                img.y + img.height < bounds.top ||
+                img.y > bounds.bottom
+            );
+        });
+
+        this.lastCullPan = { x: this.pan.x, y: this.pan.y };
+        this.lastCullZoom = this.zoom;
+        
+        return this.visibleImages;
+    }
+
     onMouseDown(e) {
         const rect = this.canvas.getBoundingClientRect();
         const { x, y } = this.screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
+        
+        // Middle mouse button or spacebar + left click = pan
+        if (e.button === 1 || (e.button === 0 && e.key === ' ')) {
+            e.preventDefault();
+            this.isPanning = true;
+            this.lastPanPoint = { x: e.clientX, y: e.clientY };
+            this.canvas.style.cursor = 'grabbing';
+            return;
+        }
+        
+        // Right click = pan
+        if (e.button === 2) {
+            e.preventDefault();
+            this.isPanning = true;
+            this.lastPanPoint = { x: e.clientX, y: e.clientY };
+            this.canvas.style.cursor = 'grabbing';
+            return;
+        }
         
         if (this.selectedImage && this.selectedImage.visible !== false) {
             const handle = this.getResizeHandle(x, y, this.selectedImage);
@@ -116,8 +289,21 @@ export class Canvas {
             this.resizeImage(x, y);
             this.needsRender = true;
         } else if (this.isDragging && this.selectedImage) {
-            this.selectedImage.x = x - this.dragOffset.x;
-            this.selectedImage.y = y - this.dragOffset.y;
+            let newX = x - this.dragOffset.x;
+            let newY = y - this.dragOffset.y;
+            
+            // Apply snapping if enabled
+            if (this.enableSnapping) {
+                const snapped = this.snapToImages(newX, newY, this.selectedImage);
+                newX = snapped.x;
+                newY = snapped.y;
+                this.snapLines = snapped.guides;
+            } else {
+                this.snapLines = [];
+            }
+            
+            this.selectedImage.x = newX;
+            this.selectedImage.y = newY;
             this.needsRender = true;
         } else if (this.isPanning) {
             const dx = e.clientX - this.lastPanPoint.x;
@@ -132,13 +318,14 @@ export class Canvas {
         }
     }
 
-    onMouseUp() {
+    onMouseUp(e) {
         const wasModifying = this.isDragging || this.isResizing;
         this.isDragging = false;
         this.isResizing = false;
         this.isPanning = false;
         this.resizeHandle = null;
         this.resizeStartData = null;
+        this.snapLines = [];
         this.canvas.style.cursor = 'default';
         
         if (wasModifying) {
@@ -149,12 +336,20 @@ export class Canvas {
     onWheel(e) {
         e.preventDefault();
         const delta = e.deltaY > 0 ? 0.9 : 1.1;
-        const newZoom = Math.max(0.1, Math.min(5, this.zoom * delta));
+        // No zoom limits - true infinite canvas
+        const newZoom = this.zoom * delta;
+        
+        // Show performance warning once when zooming out far
+        if (!this.hasShownZoomWarning && newZoom < this.zoomWarningThreshold) {
+            this.showToast('⚠️ Disclaimer: Extreme zoom levels may cause performance issues');
+            this.hasShownZoomWarning = true;
+        }
         
         const rect = this.canvas.getBoundingClientRect();
         const mouseX = e.clientX - rect.left;
         const mouseY = e.clientY - rect.top;
         
+        // Zoom towards mouse position
         this.pan.x = mouseX - (mouseX - this.pan.x) * (newZoom / this.zoom);
         this.pan.y = mouseY - (mouseY - this.pan.y) * (newZoom / this.zoom);
         this.zoom = newZoom;
@@ -241,6 +436,8 @@ export class Canvas {
             if (this.selectedImage && this.selectedImage.id === id && !img.visible) {
                 this.selectedImage = null;
             }
+            // Force cache invalidation by changing lastCullZoom
+            this.lastCullZoom = -999;
             this.needsRender = true;
             this.notifyChange();
         }
@@ -273,6 +470,88 @@ export class Canvas {
         if (img) {
             img.name = newName;
         }
+    }
+
+    snapToImages(x, y, draggedImage) {
+        const threshold = this.snapThreshold / this.zoom;
+        const guides = [];
+        let snappedX = x;
+        let snappedY = y;
+        let snapDistX = Infinity;
+        let snapDistY = Infinity;
+        
+        // Calculate dragged image bounds
+        const draggedLeft = x;
+        const draggedRight = x + draggedImage.width;
+        const draggedTop = y;
+        const draggedBottom = y + draggedImage.height;
+        const draggedCenterX = x + draggedImage.width / 2;
+        const draggedCenterY = y + draggedImage.height / 2;
+        
+        // Check against all other visible images
+        for (const img of this.images) {
+            if (img.id === draggedImage.id || img.visible === false) continue;
+            
+            const targetLeft = img.x;
+            const targetRight = img.x + img.width;
+            const targetTop = img.y;
+            const targetBottom = img.y + img.height;
+            const targetCenterX = img.x + img.width / 2;
+            const targetCenterY = img.y + img.height / 2;
+            
+            // Check X-axis snapping
+            const xChecks = [
+                { dragPos: draggedLeft, targetPos: targetLeft, offset: 0 },
+                { dragPos: draggedLeft, targetPos: targetRight, offset: 0 },
+                { dragPos: draggedRight, targetPos: targetLeft, offset: -draggedImage.width },
+                { dragPos: draggedRight, targetPos: targetRight, offset: -draggedImage.width },
+                { dragPos: draggedCenterX, targetPos: targetCenterX, offset: -draggedImage.width / 2 }
+            ];
+            
+            for (const check of xChecks) {
+                const dist = Math.abs(check.dragPos - check.targetPos);
+                if (dist < threshold && dist < snapDistX) {
+                    snappedX = check.targetPos + check.offset;
+                    snapDistX = dist;
+                    guides.push({
+                        type: 'vertical',
+                        pos: check.targetPos
+                    });
+                }
+            }
+            
+            // Check Y-axis snapping
+            const yChecks = [
+                { dragPos: draggedTop, targetPos: targetTop, offset: 0 },
+                { dragPos: draggedTop, targetPos: targetBottom, offset: 0 },
+                { dragPos: draggedBottom, targetPos: targetTop, offset: -draggedImage.height },
+                { dragPos: draggedBottom, targetPos: targetBottom, offset: -draggedImage.height },
+                { dragPos: draggedCenterY, targetPos: targetCenterY, offset: -draggedImage.height / 2 }
+            ];
+            
+            for (const check of yChecks) {
+                const dist = Math.abs(check.dragPos - check.targetPos);
+                if (dist < threshold && dist < snapDistY) {
+                    snappedY = check.targetPos + check.offset;
+                    snapDistY = dist;
+                    guides.push({
+                        type: 'horizontal',
+                        pos: check.targetPos
+                    });
+                }
+            }
+        }
+        
+        // Filter guides to only show active snaps
+        const activeGuides = [];
+        if (snapDistX < threshold) {
+            activeGuides.push(...guides.filter(g => g.type === 'vertical'));
+        }
+        if (snapDistY < threshold) {
+            activeGuides.push(...guides.filter(g => g.type === 'horizontal'));
+        }
+        
+        return { x: snappedX, y: snappedY, guides: activeGuides };
     }
 
     getResizeHandle(x, y, img) {
@@ -362,9 +641,11 @@ export class Canvas {
     }
 
     getImageAtPoint(x, y) {
-        for (let i = this.images.length - 1; i >= 0; i--) {
-            const img = this.images[i];
-            if (img.visible === false) continue;
+        // Only check visible images (already culled)
+        const visibleImages = this.cullImages();
+        
+        for (let i = visibleImages.length - 1; i >= 0; i--) {
+            const img = visibleImages[i];
             if (x >= img.x && x <= img.x + img.width &&
                 y >= img.y && y <= img.y + img.height) {
                 return img;
@@ -373,10 +654,62 @@ export class Canvas {
         return null;
     }
 
+    // Draw infinite grid
+    drawGrid() {
+        if (!this.showGrid) return;
+        
+        const bounds = this.viewportBounds;
+        
+        // Calculate grid start/end aligned to grid size
+        const startX = Math.floor(bounds.left / this.gridSize) * this.gridSize;
+        const endX = Math.ceil(bounds.right / this.gridSize) * this.gridSize;
+        const startY = Math.floor(bounds.top / this.gridSize) * this.gridSize;
+        const endY = Math.ceil(bounds.bottom / this.gridSize) * this.gridSize;
+        
+        this.ctx.strokeStyle = this.gridColor;
+        this.ctx.lineWidth = 1 / this.zoom;
+        
+        this.ctx.beginPath();
+        
+        // Draw vertical lines
+        for (let x = startX; x <= endX; x += this.gridSize) {
+            this.ctx.moveTo(x, startY);
+            this.ctx.lineTo(x, endY);
+        }
+        
+        // Draw horizontal lines
+        for (let y = startY; y <= endY; y += this.gridSize) {
+            this.ctx.moveTo(startX, y);
+            this.ctx.lineTo(endX, y);
+        }
+        
+        this.ctx.stroke();
+        
+        // Draw thicker origin lines
+        this.ctx.strokeStyle = 'rgba(0, 0, 0, 0.15)';
+        this.ctx.lineWidth = 2 / this.zoom;
+        this.ctx.beginPath();
+        
+        // Vertical origin
+        if (startX <= 0 && endX >= 0) {
+            this.ctx.moveTo(0, startY);
+            this.ctx.lineTo(0, endY);
+        }
+        
+        // Horizontal origin
+        if (startY <= 0 && endY >= 0) {
+            this.ctx.moveTo(startX, 0);
+            this.ctx.lineTo(endX, 0);
+        }
+        
+        this.ctx.stroke();
+    }
+
     render() {
         const w = this.canvas.width;
         const h = this.canvas.height;
         
+        // Clear with background color
         this.ctx.fillStyle = this.bgColor;
         this.ctx.fillRect(0, 0, w, h);
         
@@ -384,9 +717,14 @@ export class Canvas {
         this.ctx.translate(this.pan.x, this.pan.y);
         this.ctx.scale(this.zoom, this.zoom);
         
-        for (let i = 0; i < this.images.length; i++) {
-            const img = this.images[i];
-            if (img.visible === false) continue;
+        // Draw infinite grid
+        this.drawGrid();
+        
+        // Only render visible images (culled)
+        const visibleImages = this.cullImages();
+        
+        for (let i = 0; i < visibleImages.length; i++) {
+            const img = visibleImages[i];
             try {
                 this.ctx.drawImage(img.img, img.x, img.y, img.width, img.height);
             } catch (e) {
@@ -394,13 +732,35 @@ export class Canvas {
             }
         }
         
+        // Draw snap guide lines
+        if (this.snapLines.length > 0) {
+            this.ctx.strokeStyle = '#ff00ff';
+            this.ctx.lineWidth = 1 / this.zoom;
+            this.ctx.setLineDash([5 / this.zoom, 5 / this.zoom]);
+            
+            for (const guide of this.snapLines) {
+                this.ctx.beginPath();
+                if (guide.type === 'vertical') {
+                    this.ctx.moveTo(guide.pos, this.viewportBounds.top);
+                    this.ctx.lineTo(guide.pos, this.viewportBounds.bottom);
+                } else {
+                    this.ctx.moveTo(this.viewportBounds.left, guide.pos);
+                    this.ctx.lineTo(this.viewportBounds.right, guide.pos);
+                }
+                this.ctx.stroke();
+            }
+            
+            this.ctx.setLineDash([]);
+        }
+        
+        // Draw selection and handles
         if (this.selectedImage && this.selectedImage.visible !== false) {
             const img = this.selectedImage;
             this.ctx.strokeStyle = '#0066ff';
             this.ctx.lineWidth = 2 / this.zoom;
             this.ctx.strokeRect(img.x, img.y, img.width, img.height);
             
-            const handleSize = 8 / this.zoom;
+            const handleRadius = 4 / this.zoom;
             const midX = img.x + img.width / 2;
             const midY = img.y + img.height / 2;
             
@@ -421,8 +781,10 @@ export class Canvas {
             
             for (let i = 0; i < handles.length; i++) {
                 const [hx, hy] = handles[i];
-                this.ctx.fillRect(hx - handleSize/2, hy - handleSize/2, handleSize, handleSize);
-                this.ctx.strokeRect(hx - handleSize/2, hy - handleSize/2, handleSize, handleSize);
+                this.ctx.beginPath();
+                this.ctx.arc(hx, hy, handleRadius, 0, Math.PI * 2);
+                this.ctx.fill();
+                this.ctx.stroke();
             }
         }
         
@@ -445,6 +807,7 @@ export class Canvas {
     clear() {
         this.images = [];
         this.selectedImage = null;
+        this.visibleImages = [];
         this.needsRender = true;
     }
 
@@ -452,6 +815,48 @@ export class Canvas {
         if (this.animationFrame) {
             cancelAnimationFrame(this.animationFrame);
         }
+    }
+
+    // Zoom and pan to fit all images in view (like PureRef's "Fit All")
+    fitToContent(padding = 50) {
+        if (this.images.length === 0) return;
+        
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        
+        for (const img of this.images) {
+            if (img.visible === false) continue;
+            minX = Math.min(minX, img.x);
+            minY = Math.min(minY, img.y);
+            maxX = Math.max(maxX, img.x + img.width);
+            maxY = Math.max(maxY, img.y + img.height);
+        }
+        
+        if (minX === Infinity) return; // No visible images
+        
+        const contentWidth = maxX - minX;
+        const contentHeight = maxY - minY;
+        
+        if (contentWidth <= 0 || contentHeight <= 0) return;
+        
+        // Calculate zoom to fit content with padding
+        const zoomX = (this.canvas.width - padding * 2) / contentWidth;
+        const zoomY = (this.canvas.height - padding * 2) / contentHeight;
+        this.zoom = Math.min(zoomX, zoomY);
+        
+        // Center the content
+        const centerX = (minX + maxX) / 2;
+        const centerY = (minY + maxY) / 2;
+        this.pan.x = this.canvas.width / 2 - centerX * this.zoom;
+        this.pan.y = this.canvas.height / 2 - centerY * this.zoom;
+        
+        this.needsRender = true;
+    }
+
+    // Reset view to origin at 1:1 zoom
+    resetView() {
+        this.zoom = 1;
+        this.pan = { x: 0, y: 0 };
+        this.needsRender = true;
     }
 
     generateThumbnail(width = 200, height = 150) {
