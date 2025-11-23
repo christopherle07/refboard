@@ -5,28 +5,85 @@ let currentPage = 1;
 const BOARDS_PER_PAGE = 14;
 let currentSort = 'latest';
 
+// Initialize theme
+function initTheme() {
+    const THEME_KEY = 'app_theme';
+    const savedTheme = localStorage.getItem(THEME_KEY) || 'light';
+    
+    const themes = {
+        light: {
+            '--bg-primary': '#ffffff',
+            '--bg-secondary': '#f8f8f8',
+            '--bg-tertiary': '#fafafa',
+            '--bg-hover': 'rgba(0, 0, 0, 0.05)',
+            '--bg-active': 'rgba(0, 0, 0, 0.08)',
+            '--border-color': '#e0e0e0',
+            '--border-color-hover': '#999',
+            '--text-primary': '#1a1a1a',
+            '--text-secondary': '#666',
+            '--text-tertiary': '#888',
+            '--text-disabled': '#999',
+            '--shadow': 'rgba(0, 0, 0, 0.08)',
+            '--modal-overlay': 'rgba(0, 0, 0, 0.5)'
+        },
+        dark: {
+            '--bg-primary': '#3d3d3d',
+            '--bg-secondary': '#2d2d2d',
+            '--bg-tertiary': '#333333',
+            '--bg-hover': 'rgba(255, 255, 255, 0.05)',
+            '--bg-active': 'rgba(255, 255, 255, 0.08)',
+            '--border-color': '#555555',
+            '--border-color-hover': '#777777',
+            '--text-primary': '#e8e8e8',
+            '--text-secondary': '#b8b8b8',
+            '--text-tertiary': '#999999',
+            '--text-disabled': '#666666',
+            '--shadow': 'rgba(0, 0, 0, 0.3)',
+            '--modal-overlay': 'rgba(0, 0, 0, 0.7)'
+        },
+        midnight: {
+            '--bg-primary': '#1a1a1a',
+            '--bg-secondary': '#0f0f0f',
+            '--bg-tertiary': '#151515',
+            '--bg-hover': 'rgba(255, 255, 255, 0.03)',
+            '--bg-active': 'rgba(255, 255, 255, 0.06)',
+            '--border-color': '#2a2a2a',
+            '--border-color-hover': '#444444',
+            '--text-primary': '#e0e0e0',
+            '--text-secondary': '#a0a0a0',
+            '--text-tertiary': '#707070',
+            '--text-disabled': '#505050',
+            '--shadow': 'rgba(0, 0, 0, 0.5)',
+            '--modal-overlay': 'rgba(0, 0, 0, 0.8)'
+        }
+    };
+    
+    const theme = themes[savedTheme] || themes.light;
+    Object.entries(theme).forEach(([property, value]) => {
+        document.documentElement.style.setProperty(property, value);
+    });
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
+    initTheme();
     await boardManager.loadBoards();
     renderBoards();
     setupEventListeners();
 });
 
 function setupEventListeners() {
-    // New board button in sidebar
     document.getElementById('new-board-btn').addEventListener('click', () => {
         showCreateBoardModal((name, bgColor) => {
             createBoard(name, bgColor);
         });
     });
     
-    // Sort dropdown
     document.getElementById('sort-filter').addEventListener('change', (e) => {
         currentSort = e.target.value;
         currentPage = 1;
         renderBoards();
     });
     
-    // Pagination
     document.getElementById('prev-page').addEventListener('click', () => {
         if (currentPage > 1) {
             currentPage--;
@@ -43,20 +100,27 @@ function setupEventListeners() {
         }
     });
     
-    // Placeholder handlers for future features
     document.getElementById('open-btn').addEventListener('click', () => {
-        // TODO: Implement board import functionality
         console.log('Open board feature - coming soon');
     });
     
     document.getElementById('home-btn').addEventListener('click', () => {
-        // Already on home, do nothing or refresh
+        // Already on home
     });
     
-    document.getElementById('settings-btn').addEventListener('click', () => {
-        // TODO: Implement settings page
-        console.log('Settings feature - coming soon');
-    });
+    // Settings button with debugging
+    const settingsBtn = document.getElementById('settings-btn');
+    console.log('Settings button found:', settingsBtn);
+    if (settingsBtn) {
+        settingsBtn.addEventListener('click', (e) => {
+            console.log('Settings button clicked!');
+            e.preventDefault();
+            window.location.href = 'settings.html';
+        });
+        console.log('Settings button event listener attached');
+    } else {
+        console.error('Settings button not found in DOM!');
+    }
 }
 
 function renderBoards() {

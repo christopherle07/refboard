@@ -6,15 +6,72 @@ let canvas;
 let currentBoardId;
 let saveTimeout = null;
 let pendingSave = false;
-
-// Drag state
 let dragSourceIndex = null;
 let currentOrder = [];
-
-// Sync channel for layer visibility
 let syncChannel = null;
 
+// Inline theme function
+function initTheme() {
+    const THEME_KEY = 'app_theme';
+    const savedTheme = localStorage.getItem(THEME_KEY) || 'light';
+    
+    const themes = {
+        light: {
+            '--bg-primary': '#ffffff',
+            '--bg-secondary': '#f8f8f8',
+            '--bg-tertiary': '#fafafa',
+            '--bg-hover': 'rgba(0, 0, 0, 0.05)',
+            '--bg-active': 'rgba(0, 0, 0, 0.08)',
+            '--border-color': '#e0e0e0',
+            '--border-color-hover': '#999',
+            '--text-primary': '#1a1a1a',
+            '--text-secondary': '#666',
+            '--text-tertiary': '#888',
+            '--text-disabled': '#999',
+            '--shadow': 'rgba(0, 0, 0, 0.08)',
+            '--modal-overlay': 'rgba(0, 0, 0, 0.5)'
+        },
+        dark: {
+            '--bg-primary': '#3d3d3d',
+            '--bg-secondary': '#2d2d2d',
+            '--bg-tertiary': '#333333',
+            '--bg-hover': 'rgba(255, 255, 255, 0.05)',
+            '--bg-active': 'rgba(255, 255, 255, 0.08)',
+            '--border-color': '#555555',
+            '--border-color-hover': '#777777',
+            '--text-primary': '#e8e8e8',
+            '--text-secondary': '#b8b8b8',
+            '--text-tertiary': '#999999',
+            '--text-disabled': '#666666',
+            '--shadow': 'rgba(0, 0, 0, 0.3)',
+            '--modal-overlay': 'rgba(0, 0, 0, 0.7)'
+        },
+        midnight: {
+            '--bg-primary': '#1a1a1a',
+            '--bg-secondary': '#0f0f0f',
+            '--bg-tertiary': '#151515',
+            '--bg-hover': 'rgba(255, 255, 255, 0.03)',
+            '--bg-active': 'rgba(255, 255, 255, 0.06)',
+            '--border-color': '#2a2a2a',
+            '--border-color-hover': '#444444',
+            '--text-primary': '#e0e0e0',
+            '--text-secondary': '#a0a0a0',
+            '--text-tertiary': '#707070',
+            '--text-disabled': '#505050',
+            '--shadow': 'rgba(0, 0, 0, 0.5)',
+            '--modal-overlay': 'rgba(0, 0, 0, 0.8)'
+        }
+    };
+    
+    const theme = themes[savedTheme] || themes.light;
+    Object.entries(theme).forEach(([property, value]) => {
+        document.documentElement.style.setProperty(property, value);
+    });
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
+    initTheme();
+    
     const params = new URLSearchParams(window.location.search);
     currentBoardId = parseInt(params.get('id'));
     
@@ -23,7 +80,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         return;
     }
     
-    // Setup sync channel
     syncChannel = new BroadcastChannel('board_sync_' + currentBoardId);
     
     await initEditor();
@@ -181,7 +237,6 @@ function renderLayers(orderOverride = null) {
         return;
     }
     
-    // Use override order during drag, otherwise reverse for display (top layer first)
     const displayOrder = orderOverride || [...images].reverse();
     
     layersList.innerHTML = '';
@@ -202,7 +257,6 @@ function renderLayers(orderOverride = null) {
             layerItem.classList.add('layer-hidden');
         }
         
-        // Drag handle
         const dragHandle = document.createElement('div');
         dragHandle.className = 'layer-drag-handle';
         dragHandle.innerHTML = `
@@ -211,7 +265,6 @@ function renderLayers(orderOverride = null) {
             <div class="drag-row"><span></span><span></span></div>
         `;
         
-        // Visibility toggle
         const visibilityBtn = document.createElement('button');
         visibilityBtn.className = 'layer-visibility-btn';
         visibilityBtn.type = 'button';
@@ -228,7 +281,6 @@ function renderLayers(orderOverride = null) {
             e.preventDefault();
             canvas.toggleVisibility(img.id);
             
-            // Broadcast visibility change to floating windows
             if (syncChannel) {
                 syncChannel.postMessage({
                     type: 'layer_visibility_changed',
@@ -240,7 +292,6 @@ function renderLayers(orderOverride = null) {
             renderLayers();
         });
         
-        // Layer content with name
         const layerContent = document.createElement('div');
         layerContent.className = 'layer-content';
         
@@ -248,16 +299,15 @@ function renderLayers(orderOverride = null) {
         layerName.type = 'text';
         layerName.className = 'layer-name-input';
         layerName.value = img.name;
-        layerName.draggable = false; // Prevent input from being draggable
+        layerName.draggable = false;
         layerName.addEventListener('change', (e) => {
             canvas.renameLayer(img.id, e.target.value);
             scheduleSave();
         });
         layerName.addEventListener('click', (e) => e.stopPropagation());
         layerName.addEventListener('mousedown', (e) => e.stopPropagation());
-        layerName.addEventListener('dragstart', (e) => e.preventDefault()); // Block drag from input
+        layerName.addEventListener('dragstart', (e) => e.preventDefault());
         
-        // Delete button
         const layerControls = document.createElement('div');
         layerControls.className = 'layer-controls';
         
@@ -283,7 +333,6 @@ function renderLayers(orderOverride = null) {
         layerItem.appendChild(layerContent);
         layerItem.appendChild(layerControls);
         
-        // Click to select (but not when clicking input)
         layerItem.addEventListener('click', (e) => {
             if (e.target.tagName === 'INPUT') return;
             if (img.visible !== false) {
@@ -291,10 +340,7 @@ function renderLayers(orderOverride = null) {
             }
         });
         
-        // ===== DRAG AND DROP WITH LIVE REORDERING =====
-        
         layerItem.addEventListener('dragstart', (e) => {
-            // Don't drag if starting from input
             if (e.target.tagName === 'INPUT') {
                 e.preventDefault();
                 return;
@@ -303,11 +349,10 @@ function renderLayers(orderOverride = null) {
             currentOrder = [...images].reverse();
             layerItem.classList.add('dragging');
             e.dataTransfer.effectAllowed = 'move';
-            e.dataTransfer.setData('text/plain', ''); // Required for Firefox
+            e.dataTransfer.setData('text/plain', '');
         });
         
         layerItem.addEventListener('dragend', () => {
-            // Commit the reorder to canvas
             if (currentOrder.length > 0) {
                 const newCanvasOrder = [...currentOrder].reverse();
                 canvas.images = newCanvasOrder;
