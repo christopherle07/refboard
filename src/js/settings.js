@@ -1,4 +1,5 @@
 const THEME_KEY = 'app_theme';
+const SETTINGS_KEY = 'canvas_settings';
 
 const themes = {
     light: {
@@ -48,85 +49,6 @@ const themes = {
     }
 };
 
-function applyTheme(themeName) {
-    const theme = themes[themeName] || themes.light;
-    
-    Object.entries(theme).forEach(([property, value]) => {
-        document.documentElement.style.setProperty(property, value);
-    });
-    
-    document.body.dataset.theme = themeName;
-    localStorage.setItem(THEME_KEY, themeName);
-    console.log('Applied theme:', themeName);
-}
-
-function getCurrentTheme() {
-    return localStorage.getItem(THEME_KEY) || 'light';
-}
-
-function setupThemeOptions() {
-    const currentTheme = getCurrentTheme();
-    console.log('Current theme:', currentTheme);
-    
-    document.querySelectorAll('.theme-option').forEach(option => {
-        const theme = option.dataset.theme;
-        console.log('Found theme option:', theme);
-        
-        if (theme === currentTheme) {
-            option.classList.add('active');
-        }
-        
-        option.addEventListener('click', () => {
-            console.log('Theme clicked:', theme);
-            
-            document.querySelectorAll('.theme-option').forEach(opt => {
-                opt.classList.remove('active');
-            });
-            option.classList.add('active');
-            
-            applyTheme(theme);
-        });
-    });
-    
-    console.log('Theme options setup complete');
-}
-
-function setupNavigation() {
-    const homeBtn = document.getElementById('home-btn');
-    const newBoardBtn = document.getElementById('new-board-btn');
-    const openBtn = document.getElementById('open-btn');
-    
-    console.log('Home button found:', homeBtn);
-    console.log('New board button found:', newBoardBtn);
-    console.log('Open button found:', openBtn);
-    
-    if (homeBtn) {
-        homeBtn.addEventListener('click', () => {
-            console.log('Home button clicked');
-            window.location.href = 'index.html';
-        });
-    }
-    
-    if (newBoardBtn) {
-        newBoardBtn.addEventListener('click', () => {
-            console.log('New board button clicked');
-            window.location.href = 'index.html';
-        });
-    }
-    
-    if (openBtn) {
-        openBtn.addEventListener('click', () => {
-            console.log('Open button clicked');
-            console.log('Open board feature - coming soon');
-        });
-    }
-    
-    console.log('Navigation setup complete');
-}
-
-// Settings management
-const SETTINGS_KEY = 'canvas_settings';
-
 const defaultSettings = {
     showGrid: false,
     gridSize: 50,
@@ -137,6 +59,19 @@ const defaultSettings = {
     autosaveInterval: 2000,
     thumbnailQuality: 0.6
 };
+
+function applyTheme(themeName) {
+    const theme = themes[themeName] || themes.light;
+    Object.entries(theme).forEach(([property, value]) => {
+        document.documentElement.style.setProperty(property, value);
+    });
+    document.body.dataset.theme = themeName;
+    localStorage.setItem(THEME_KEY, themeName);
+}
+
+function getCurrentTheme() {
+    return localStorage.getItem(THEME_KEY) || 'light';
+}
 
 function loadSettings() {
     const saved = localStorage.getItem(SETTINGS_KEY);
@@ -152,13 +87,52 @@ function loadSettings() {
 
 function saveSettings(settings) {
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
-    console.log('Settings saved:', settings);
+}
+
+function setupThemeOptions() {
+    const currentTheme = getCurrentTheme();
+    document.querySelectorAll('.theme-option').forEach(option => {
+        const theme = option.dataset.theme;
+        if (theme === currentTheme) {
+            option.classList.add('active');
+        }
+        option.addEventListener('click', () => {
+            document.querySelectorAll('.theme-option').forEach(opt => {
+                opt.classList.remove('active');
+            });
+            option.classList.add('active');
+            applyTheme(theme);
+        });
+    });
+}
+
+function setupNavigation() {
+    const homeBtn = document.getElementById('home-btn');
+    const newBoardBtn = document.getElementById('new-board-btn');
+    const openBtn = document.getElementById('open-btn');
+    
+    if (homeBtn) {
+        homeBtn.addEventListener('click', () => {
+            window.location.href = 'index.html';
+        });
+    }
+    
+    if (newBoardBtn) {
+        newBoardBtn.addEventListener('click', () => {
+            window.location.href = 'index.html';
+        });
+    }
+    
+    if (openBtn) {
+        openBtn.addEventListener('click', () => {
+            console.log('Open board feature - coming soon');
+        });
+    }
 }
 
 function setupSettingsControls() {
     const settings = loadSettings();
     
-    // Grid settings
     const showGridCheckbox = document.getElementById('show-grid');
     const gridSizeSelect = document.getElementById('grid-size');
     
@@ -178,7 +152,6 @@ function setupSettingsControls() {
         });
     }
     
-    // Snapping settings
     const enableSnappingCheckbox = document.getElementById('enable-snapping');
     const snapThresholdSelect = document.getElementById('snap-threshold');
     
@@ -198,7 +171,6 @@ function setupSettingsControls() {
         });
     }
     
-    // Default background color
     const defaultBgColorInput = document.getElementById('default-bg-color');
     if (defaultBgColorInput) {
         defaultBgColorInput.value = settings.defaultBgColor;
@@ -208,15 +180,12 @@ function setupSettingsControls() {
         });
     }
     
-    // Delete confirmation
     const showDeleteConfirmCheckbox = document.getElementById('show-delete-confirm');
     if (showDeleteConfirmCheckbox) {
         showDeleteConfirmCheckbox.checked = settings.showDeleteConfirm;
         showDeleteConfirmCheckbox.addEventListener('change', (e) => {
             settings.showDeleteConfirm = e.target.checked;
             saveSettings(settings);
-            
-            // Also update the skip confirm key
             if (!e.target.checked) {
                 localStorage.setItem('skip_delete_confirm', 'true');
             } else {
@@ -225,7 +194,6 @@ function setupSettingsControls() {
         });
     }
     
-    // Reset dialogs button
     const resetDialogsBtn = document.getElementById('reset-dialogs-btn');
     if (resetDialogsBtn) {
         resetDialogsBtn.addEventListener('click', () => {
@@ -239,7 +207,6 @@ function setupSettingsControls() {
         });
     }
     
-    // Auto-save interval
     const autosaveIntervalSelect = document.getElementById('autosave-interval');
     if (autosaveIntervalSelect) {
         autosaveIntervalSelect.value = settings.autosaveInterval;
@@ -249,7 +216,6 @@ function setupSettingsControls() {
         });
     }
     
-    // Thumbnail quality
     const thumbnailQualitySelect = document.getElementById('thumbnail-quality');
     if (thumbnailQualitySelect) {
         thumbnailQualitySelect.value = settings.thumbnailQuality;
@@ -258,17 +224,11 @@ function setupSettingsControls() {
             saveSettings(settings);
         });
     }
-    
-    console.log('Settings controls initialized:', settings);
 }
 
-// Initialize settings controls when page loads
 document.addEventListener('DOMContentLoaded', () => {
-    console.log('Settings page loaded');
-    
     const savedTheme = getCurrentTheme();
     applyTheme(savedTheme);
-    
     setupThemeOptions();
     setupNavigation();
     setupSettingsControls();

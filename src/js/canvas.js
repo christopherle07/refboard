@@ -3,7 +3,7 @@ export class Canvas {
         this.canvas = canvasElement;
         this.ctx = canvasElement.getContext('2d', { 
             alpha: false,
-            desynchronized: true, // Hint to browser for better performance
+            desynchronized: true,
             willReadFrequently: false
         });
         this.images = [];
@@ -21,34 +21,53 @@ export class Canvas {
         this.animationFrame = null;
         this.bgColor = '#ffffff';
         
-        // Performance optimizations
-        this.visibleImages = []; // Cache of visible images
+        this.visibleImages = [];
         this.viewportBounds = { left: 0, right: 0, top: 0, bottom: 0 };
         this.lastCullZoom = 1;
         this.lastCullPan = { x: 0, y: 0 };
-        this.cullThreshold = 10; // Recull if pan/zoom changed significantly
+        this.cullThreshold = 10;
         
-        // Grid settings for infinite canvas feel
-        this.showGrid = false; // Hidden by default, toggle with canvas.showGrid = true
-        this.gridSize = 50; // Grid cell size in world units
-        this.gridColor = 'rgba(0, 0, 0, 0.05)';
+        this.loadSettings();
         
-        // Zoom warning
         this.hasShownZoomWarning = false;
-        this.zoomWarningThreshold = 0.05; // Show warning below this zoom level
+        this.zoomWarningThreshold = 0.05;
         
-        // Snapping
-        this.enableSnapping = true;
-        this.snapThreshold = 3; // Snap within 3 pixels (reduced from 8)
-        this.snapLines = []; // Active snap guide lines
+        this.snapLines = [];
         
         this.setupCanvas();
         this.setupEventListeners();
         this.startRenderLoop();
     }
 
+    loadSettings() {
+        const SETTINGS_KEY = 'canvas_settings';
+        const defaults = {
+            showGrid: false,
+            gridSize: 50,
+            enableSnapping: true,
+            snapThreshold: 3,
+            thumbnailQuality: 0.6
+        };
+        
+        let settings = defaults;
+        const saved = localStorage.getItem(SETTINGS_KEY);
+        if (saved) {
+            try {
+                settings = { ...defaults, ...JSON.parse(saved) };
+            } catch (e) {
+                settings = defaults;
+            }
+        }
+        
+        this.showGrid = settings.showGrid;
+        this.gridSize = settings.gridSize;
+        this.gridColor = 'rgba(0, 0, 0, 0.05)';
+        this.enableSnapping = settings.enableSnapping;
+        this.snapThreshold = settings.snapThreshold;
+        this.thumbnailQuality = settings.thumbnailQuality;
+    }
+
     showToast(message, duration = 5000) {
-        // Remove existing toast if any
         const existingToast = document.querySelector('.canvas-toast');
         if (existingToast) existingToast.remove();
         
@@ -56,7 +75,6 @@ export class Canvas {
         toast.className = 'canvas-toast';
         toast.textContent = message;
         
-        // Inject styles if not already present
         if (!document.querySelector('#canvas-toast-styles')) {
             const style = document.createElement('style');
             style.id = 'canvas-toast-styles';
@@ -106,7 +124,6 @@ export class Canvas {
         
         document.body.appendChild(toast);
         
-        // Fade out and remove
         setTimeout(() => {
             toast.classList.add('fade-out');
             setTimeout(() => toast.remove(), 300);
@@ -146,7 +163,6 @@ export class Canvas {
         this.canvas.addEventListener('dragover', (e) => e.preventDefault());
         this.canvas.addEventListener('drop', this.onDrop.bind(this));
         
-        // Spacebar panning
         document.addEventListener('keydown', (e) => {
             if (e.key === ' ' && !this.isPanning && !e.repeat) {
                 e.preventDefault();
@@ -178,9 +194,8 @@ export class Canvas {
         };
     }
 
-    // Calculate viewport bounds in world space for culling
     updateViewportBounds() {
-        const margin = 100; // Extra margin to prevent pop-in
+        const margin = 100;
         this.viewportBounds = {
             left: (-this.pan.x - margin) / this.zoom,
             right: ((this.canvas.width - this.pan.x) + margin) / this.zoom,
@@ -189,14 +204,12 @@ export class Canvas {
         };
     }
 
-    // Check if culling needs to be updated
     shouldRecull() {
         const panDelta = Math.abs(this.pan.x - this.lastCullPan.x) + Math.abs(this.pan.y - this.lastCullPan.y);
         const zoomDelta = Math.abs(this.zoom - this.lastCullZoom);
         return panDelta > this.cullThreshold || zoomDelta > 0.01;
     }
 
-    // Perform viewport culling - only return visible images
     cullImages() {
         if (!this.shouldRecull()) {
             return this.visibleImages;
@@ -207,8 +220,6 @@ export class Canvas {
         
         this.visibleImages = this.images.filter(img => {
             if (img.visible === false) return false;
-            
-            // AABB intersection test
             return !(
                 img.x + img.width < bounds.left ||
                 img.x > bounds.right ||
@@ -227,7 +238,6 @@ export class Canvas {
         const rect = this.canvas.getBoundingClientRect();
         const { x, y } = this.screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
         
-        // Middle mouse button or spacebar + left click = pan
         if (e.button === 1 || (e.button === 0 && e.key === ' ')) {
             e.preventDefault();
             this.isPanning = true;
@@ -236,7 +246,6 @@ export class Canvas {
             return;
         }
         
-        // Right click = pan
         if (e.button === 2) {
             e.preventDefault();
             this.isPanning = true;
@@ -292,7 +301,6 @@ export class Canvas {
             let newX = x - this.dragOffset.x;
             let newY = y - this.dragOffset.y;
             
-            // Apply snapping if enabled
             if (this.enableSnapping) {
                 const snapped = this.snapToImages(newX, newY, this.selectedImage);
                 newX = snapped.x;
@@ -336,10 +344,8 @@ export class Canvas {
     onWheel(e) {
         e.preventDefault();
         const delta = e.deltaY > 0 ? 0.9 : 1.1;
-        // No zoom limits - true infinite canvas
         const newZoom = this.zoom * delta;
         
-        // Show performance warning once when zooming out far
         if (!this.hasShownZoomWarning && newZoom < this.zoomWarningThreshold) {
             this.showToast('⚠️ Disclaimer: Extreme zoom levels may cause performance issues');
             this.hasShownZoomWarning = true;
@@ -349,7 +355,6 @@ export class Canvas {
         const mouseX = e.clientX - rect.left;
         const mouseY = e.clientY - rect.top;
         
-        // Zoom towards mouse position
         this.pan.x = mouseX - (mouseX - this.pan.x) * (newZoom / this.zoom);
         this.pan.y = mouseY - (mouseY - this.pan.y) * (newZoom / this.zoom);
         this.zoom = newZoom;
@@ -436,7 +441,6 @@ export class Canvas {
             if (this.selectedImage && this.selectedImage.id === id && !img.visible) {
                 this.selectedImage = null;
             }
-            // Force cache invalidation by changing lastCullZoom
             this.lastCullZoom = -999;
             this.needsRender = true;
             this.notifyChange();
@@ -480,7 +484,6 @@ export class Canvas {
         let snapDistX = Infinity;
         let snapDistY = Infinity;
         
-        // Calculate dragged image bounds
         const draggedLeft = x;
         const draggedRight = x + draggedImage.width;
         const draggedTop = y;
@@ -488,7 +491,6 @@ export class Canvas {
         const draggedCenterX = x + draggedImage.width / 2;
         const draggedCenterY = y + draggedImage.height / 2;
         
-        // Check against all other visible images
         for (const img of this.images) {
             if (img.id === draggedImage.id || img.visible === false) continue;
             
@@ -499,7 +501,6 @@ export class Canvas {
             const targetCenterX = img.x + img.width / 2;
             const targetCenterY = img.y + img.height / 2;
             
-            // Check X-axis snapping
             const xChecks = [
                 { dragPos: draggedLeft, targetPos: targetLeft, offset: 0 },
                 { dragPos: draggedLeft, targetPos: targetRight, offset: 0 },
@@ -520,7 +521,6 @@ export class Canvas {
                 }
             }
             
-            // Check Y-axis snapping
             const yChecks = [
                 { dragPos: draggedTop, targetPos: targetTop, offset: 0 },
                 { dragPos: draggedTop, targetPos: targetBottom, offset: 0 },
@@ -542,7 +542,6 @@ export class Canvas {
             }
         }
         
-        // Filter guides to only show active snaps
         const activeGuides = [];
         if (snapDistX < threshold) {
             activeGuides.push(...guides.filter(g => g.type === 'vertical'));
@@ -641,7 +640,6 @@ export class Canvas {
     }
 
     getImageAtPoint(x, y) {
-        // Only check visible images (already culled)
         const visibleImages = this.cullImages();
         
         for (let i = visibleImages.length - 1; i >= 0; i--) {
@@ -654,13 +652,11 @@ export class Canvas {
         return null;
     }
 
-    // Draw infinite grid
     drawGrid() {
         if (!this.showGrid) return;
         
         const bounds = this.viewportBounds;
         
-        // Calculate grid start/end aligned to grid size
         const startX = Math.floor(bounds.left / this.gridSize) * this.gridSize;
         const endX = Math.ceil(bounds.right / this.gridSize) * this.gridSize;
         const startY = Math.floor(bounds.top / this.gridSize) * this.gridSize;
@@ -671,13 +667,11 @@ export class Canvas {
         
         this.ctx.beginPath();
         
-        // Draw vertical lines
         for (let x = startX; x <= endX; x += this.gridSize) {
             this.ctx.moveTo(x, startY);
             this.ctx.lineTo(x, endY);
         }
         
-        // Draw horizontal lines
         for (let y = startY; y <= endY; y += this.gridSize) {
             this.ctx.moveTo(startX, y);
             this.ctx.lineTo(endX, y);
@@ -685,18 +679,15 @@ export class Canvas {
         
         this.ctx.stroke();
         
-        // Draw thicker origin lines
         this.ctx.strokeStyle = 'rgba(0, 0, 0, 0.15)';
         this.ctx.lineWidth = 2 / this.zoom;
         this.ctx.beginPath();
         
-        // Vertical origin
         if (startX <= 0 && endX >= 0) {
             this.ctx.moveTo(0, startY);
             this.ctx.lineTo(0, endY);
         }
         
-        // Horizontal origin
         if (startY <= 0 && endY >= 0) {
             this.ctx.moveTo(startX, 0);
             this.ctx.lineTo(endX, 0);
@@ -709,7 +700,6 @@ export class Canvas {
         const w = this.canvas.width;
         const h = this.canvas.height;
         
-        // Clear with background color
         this.ctx.fillStyle = this.bgColor;
         this.ctx.fillRect(0, 0, w, h);
         
@@ -717,10 +707,8 @@ export class Canvas {
         this.ctx.translate(this.pan.x, this.pan.y);
         this.ctx.scale(this.zoom, this.zoom);
         
-        // Draw infinite grid
         this.drawGrid();
         
-        // Only render visible images (culled)
         const visibleImages = this.cullImages();
         
         for (let i = 0; i < visibleImages.length; i++) {
@@ -728,11 +716,9 @@ export class Canvas {
             try {
                 this.ctx.drawImage(img.img, img.x, img.y, img.width, img.height);
             } catch (e) {
-                // Skip broken images
             }
         }
         
-        // Draw snap guide lines
         if (this.snapLines.length > 0) {
             this.ctx.strokeStyle = '#ff00ff';
             this.ctx.lineWidth = 1 / this.zoom;
@@ -753,7 +739,6 @@ export class Canvas {
             this.ctx.setLineDash([]);
         }
         
-        // Draw selection and handles
         if (this.selectedImage && this.selectedImage.visible !== false) {
             const img = this.selectedImage;
             this.ctx.strokeStyle = '#0066ff';
@@ -817,7 +802,6 @@ export class Canvas {
         }
     }
 
-    // Zoom and pan to fit all images in view (like PureRef's "Fit All")
     fitToContent(padding = 50) {
         if (this.images.length === 0) return;
         
@@ -831,19 +815,17 @@ export class Canvas {
             maxY = Math.max(maxY, img.y + img.height);
         }
         
-        if (minX === Infinity) return; // No visible images
+        if (minX === Infinity) return;
         
         const contentWidth = maxX - minX;
         const contentHeight = maxY - minY;
         
         if (contentWidth <= 0 || contentHeight <= 0) return;
         
-        // Calculate zoom to fit content with padding
         const zoomX = (this.canvas.width - padding * 2) / contentWidth;
         const zoomY = (this.canvas.height - padding * 2) / contentHeight;
         this.zoom = Math.min(zoomX, zoomY);
         
-        // Center the content
         const centerX = (minX + maxX) / 2;
         const centerY = (minY + maxY) / 2;
         this.pan.x = this.canvas.width / 2 - centerX * this.zoom;
@@ -852,7 +834,6 @@ export class Canvas {
         this.needsRender = true;
     }
 
-    // Reset view to origin at 1:1 zoom
     resetView() {
         this.zoom = 1;
         this.pan = { x: 0, y: 0 };
@@ -870,7 +851,7 @@ export class Canvas {
             ctx.fillRect(0, 0, width, height);
             
             if (this.images.length === 0) {
-                return tempCanvas.toDataURL('image/jpeg', 0.6);
+                return tempCanvas.toDataURL('image/jpeg', this.thumbnailQuality);
             }
             
             let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -889,14 +870,14 @@ export class Canvas {
             }
             
             if (validImages.length === 0) {
-                return tempCanvas.toDataURL('image/jpeg', 0.6);
+                return tempCanvas.toDataURL('image/jpeg', this.thumbnailQuality);
             }
             
             const contentW = maxX - minX;
             const contentH = maxY - minY;
             
             if (contentW <= 0 || contentH <= 0) {
-                return tempCanvas.toDataURL('image/jpeg', 0.6);
+                return tempCanvas.toDataURL('image/jpeg', this.thumbnailQuality);
             }
             
             const scale = Math.min(width / contentW, height / contentH) * 0.9;
@@ -911,12 +892,11 @@ export class Canvas {
                 try {
                     ctx.drawImage(img.img, img.x, img.y, img.width, img.height);
                 } catch (e) {
-                    // Skip broken images
                 }
             }
             
             ctx.restore();
-            return tempCanvas.toDataURL('image/jpeg', 0.6);
+            return tempCanvas.toDataURL('image/jpeg', this.thumbnailQuality);
         } catch (e) {
             return null;
         }

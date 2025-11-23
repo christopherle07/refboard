@@ -80,7 +80,7 @@ body {
 }
 
 .sidebar-btn.primary {
-    background: #5B9BD5;
+    background: #727272;
     color: white;
     border-radius: 4px;
     margin: 0 12px;
@@ -160,6 +160,7 @@ body {
     transition: all 0.2s;
     position: relative;
     overflow: hidden;
+    isolation: isolate;
 }
 
 .board-card:hover {
@@ -178,6 +179,7 @@ body {
     font-size: 14px;
     font-weight: 500;
     opacity: 0.95;
+    z-index: 1;
 }
 
 .board-delete-btn {
@@ -195,6 +197,7 @@ body {
     line-height: 1;
     opacity: 0;
     transition: opacity 0.15s, background 0.15s;
+    z-index: 2;
 }
 
 .board-card:hover .board-delete-btn {

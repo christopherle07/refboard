@@ -9,14 +9,64 @@
     align-items: center;
     justify-content: center;
     z-index: 1000;
+    animation: modalOverlayFadeIn 0.2s ease;
+}
+
+.modal-overlay.closing {
+    animation: modalOverlayFadeOut 0.25s ease forwards;
+}
+
+@keyframes modalOverlayFadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes modalOverlayFadeOut {
+    from {
+        opacity: 1;
+    }
+    to {
+        opacity: 0;
+    }
 }
 
 .modal {
     background: var(--bg-primary);
-    border-radius: 16px;
     padding: 32px;
     min-width: 400px;
     box-shadow: 0 8px 32px var(--shadow);
+    border: 1px solid var(--border-color);
+    animation: modalPopIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.modal-overlay.closing .modal {
+    animation: modalPopOut 0.25s cubic-bezier(0.6, 0, 0.8, 0.2) forwards;
+}
+
+@keyframes modalPopIn {
+    from {
+        opacity: 0;
+        transform: scale(0.8) translateY(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
+}
+
+@keyframes modalPopOut {
+    from {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
+    to {
+        opacity: 0;
+        transform: scale(0.85) translateY(15px);
+    }
 }
 
 .modal-header {
@@ -49,7 +99,6 @@
     width: 100%;
     padding: 10px 12px;
     border: 1px solid var(--border-color);
-    border-radius: 8px;
     background: var(--bg-primary);
     color: var(--text-primary);
     font-size: 14px;
@@ -58,14 +107,13 @@
 }
 
 .form-group input[type="text"]:focus {
-    border-color: var(--text-primary);
+    border-color: #0066ff;
 }
 
 .form-group input[type="color"] {
     width: 100%;
     height: 48px;
     border: 1px solid var(--border-color);
-    border-radius: 8px;
     cursor: pointer;
 }
 
@@ -76,40 +124,47 @@
 }
 
 .modal-btn {
-    padding: 10px 20px;
+    padding: 10px 24px;
     border: none;
-    border-radius: 8px;
+    border-radius: 6px;
     font-size: 14px;
     font-weight: 500;
     cursor: pointer;
     transition: all 0.2s;
+    min-width: 100px;
 }
 
 .modal-btn-secondary {
     background: var(--bg-secondary);
     color: var(--text-secondary);
+    border: 1px solid var(--border-color);
 }
 
 .modal-btn-secondary:hover {
     background: var(--bg-hover);
+    border-color: var(--border-color-hover);
 }
 
 .modal-btn-primary {
-    background: var(--text-primary);
-    color: var(--bg-primary);
+    background: #0066ff;
+    color: white;
+    border: 1px solid #0066ff;
 }
 
 .modal-btn-primary:hover {
-    opacity: 0.9;
+    background: #0052cc;
+    border-color: #0052cc;
 }
 
 .modal-btn-danger {
     background: #d32f2f;
     color: white;
+    border: 1px solid #d32f2f;
 }
 
 .modal-btn-danger:hover {
     background: #b71c1c;
+    border-color: #b71c1c;
 }
 
 .delete-warning {

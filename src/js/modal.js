@@ -18,17 +18,26 @@ export function createModal(title, bodyHTML, onConfirm) {
     
     document.body.appendChild(modal);
     
+    const closeModal = () => {
+        modal.classList.add('closing');
+        setTimeout(() => {
+            modal.remove();
+        }, 250);
+    };
+    
     modal.querySelector('[data-action="confirm"]').addEventListener('click', () => {
         if (onConfirm) onConfirm();
-        modal.remove();
+        closeModal();
     });
     
     modal.querySelector('[data-action="cancel"]').addEventListener('click', () => {
-        modal.remove();
+        closeModal();
     });
     
     modal.addEventListener('click', (e) => {
-        if (e.target === modal) modal.remove();
+        if (e.target === modal) {
+            closeModal();
+        }
     });
     
     return modal;
@@ -65,20 +74,29 @@ export function showDeleteConfirm(itemName, onConfirm) {
     
     document.body.appendChild(modal);
     
+    const closeModal = () => {
+        modal.classList.add('closing');
+        setTimeout(() => {
+            modal.remove();
+        }, 250);
+    };
+    
     modal.querySelector('[data-action="confirm"]').addEventListener('click', () => {
         if (modal.querySelector('#dont-show-again').checked) {
             localStorage.setItem(SKIP_CONFIRM_KEY, 'true');
         }
         onConfirm();
-        modal.remove();
+        closeModal();
     });
     
     modal.querySelector('[data-action="cancel"]').addEventListener('click', () => {
-        modal.remove();
+        closeModal();
     });
     
     modal.addEventListener('click', (e) => {
-        if (e.target === modal) modal.remove();
+        if (e.target === modal) {
+            closeModal();
+        }
     });
     
     return modal;
