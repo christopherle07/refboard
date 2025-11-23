@@ -15,7 +15,75 @@ body {
 .homepage {
     height: 100vh;
     display: flex;
+}
+
+.app-sidebar {
+    width: 200px;
+    background: #f8f8f8;
+    border-right: 1px solid #e0e0e0;
+    display: flex;
     flex-direction: column;
+    padding: 20px 0;
+}
+
+.sidebar-section {
+    margin-bottom: 8px;
+}
+
+.sidebar-section h3 {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: #888;
+    padding: 0 20px 8px;
+    letter-spacing: 0.5px;
+}
+
+.sidebar-btn {
+    width: 100%;
+    padding: 10px 20px;
+    background: none;
+    border: none;
+    text-align: left;
+    font-size: 14px;
+    color: #666;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+    border-left: 3px solid transparent;
+}
+
+.sidebar-btn:hover {
+    background: rgba(0, 0, 0, 0.05);
+    color: #1a1a1a;
+}
+
+.sidebar-btn.active {
+    background: rgba(0, 0, 0, 0.08);
+    color: #1a1a1a;
+    border-left-color: #0066ff;
+}
+
+.sidebar-btn.primary {
+    background: #5B9BD5;
+    color: white;
+    border-radius: 4px;
+    margin: 0 12px;
+    padding: 6px 12px;
+    font-weight: 500;
+    border-left: none;
+    font-size: 13px;
+    width: calc(100% - 24px);
+}
+
+.sidebar-btn.primary:hover {
+    background: #4A8BC2;
+}
+
+.homepage-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
 }
 
 .homepage-header {

@@ -12,18 +12,21 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 function setupEventListeners() {
+    // New board button in sidebar
     document.getElementById('new-board-btn').addEventListener('click', () => {
         showCreateBoardModal((name, bgColor) => {
             createBoard(name, bgColor);
         });
     });
     
+    // Sort dropdown
     document.getElementById('sort-filter').addEventListener('change', (e) => {
         currentSort = e.target.value;
         currentPage = 1;
         renderBoards();
     });
     
+    // Pagination
     document.getElementById('prev-page').addEventListener('click', () => {
         if (currentPage > 1) {
             currentPage--;
@@ -39,6 +42,21 @@ function setupEventListeners() {
             renderBoards();
         }
     });
+    
+    // Placeholder handlers for future features
+    document.getElementById('open-btn').addEventListener('click', () => {
+        // TODO: Implement board import functionality
+        console.log('Open board feature - coming soon');
+    });
+    
+    document.getElementById('home-btn').addEventListener('click', () => {
+        // Already on home, do nothing or refresh
+    });
+    
+    document.getElementById('settings-btn').addEventListener('click', () => {
+        // TODO: Implement settings page
+        console.log('Settings feature - coming soon');
+    });
 }
 
 function renderBoards() {
@@ -53,10 +71,7 @@ function renderBoards() {
     }
     
     const grid = document.getElementById('boards-grid');
-    const newBoardCard = document.getElementById('new-board-btn');
-    
     grid.innerHTML = '';
-    grid.appendChild(newBoardCard);
     
     const startIdx = (currentPage - 1) * BOARDS_PER_PAGE;
     const endIdx = startIdx + BOARDS_PER_PAGE;

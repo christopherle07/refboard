@@ -9,31 +9,45 @@
 </head>
 <body>
     <div class="homepage">
-        <header class="homepage-header">
-            <h1>Reference Boards</h1>
-            <div class="header-controls">
-                <select id="sort-filter" class="sort-dropdown">
-                    <option value="latest">Latest</option>
-                    <option value="oldest">Oldest</option>
-                    <option value="name">By Name</option>
-                </select>
+        <aside class="app-sidebar">
+            <div class="sidebar-section">
+                <button class="sidebar-btn primary" id="new-board-btn">New Board</button>
             </div>
-        </header>
+            
+            <div class="sidebar-section">
+                <button class="sidebar-btn" id="open-btn">Open</button>
+            </div>
+            
+            <div class="sidebar-section">
+                <h3>Navigate</h3>
+                <button class="sidebar-btn active" id="home-btn">Home</button>
+                <button class="sidebar-btn" id="settings-btn">Settings</button>
+            </div>
+        </aside>
 
-        <main class="homepage-content">
-            <div class="boards-grid" id="boards-grid">
-                <div class="board-card new-board-card" id="new-board-btn">
-                    <div class="new-board-icon">+</div>
-                    <div class="new-board-text">New Board</div>
+        <div class="homepage-main">
+            <header class="homepage-header">
+                <h1>Welcome to AniRef</h1>
+                <div class="header-controls">
+                    <select id="sort-filter" class="sort-dropdown">
+                        <option value="latest">Latest</option>
+                        <option value="oldest">Oldest</option>
+                        <option value="name">By Name</option>
+                    </select>
                 </div>
-            </div>
+            </header>
 
-            <div class="pagination" id="pagination">
-                <button class="pagination-btn" id="prev-page" disabled>⇦</button>
-                <span class="pagination-info" id="page-info">Page 1 of 1</span>
-                <button class="pagination-btn" id="next-page" disabled>⇨</button>
-            </div>
-        </main>
+            <main class="homepage-content">
+                <div class="boards-grid" id="boards-grid">
+                </div>
+
+                <div class="pagination" id="pagination">
+                    <button class="pagination-btn" id="prev-page" disabled>⇦</button>
+                    <span class="pagination-info" id="page-info">Page 1 of 1</span>
+                    <button class="pagination-btn" id="next-page" disabled>⇨</button>
+                </div>
+            </main>
+        </div>
     </div>
 
     <script type="module" src="js/main.js"></script>
