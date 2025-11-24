@@ -10,7 +10,6 @@ let dragSourceIndex = null;
 let currentOrder = [];
 let syncChannel = null;
 
-// Inline theme function
 function initTheme() {
     const THEME_KEY = 'app_theme';
     const savedTheme = localStorage.getItem(THEME_KEY) || 'light';
@@ -93,6 +92,10 @@ async function initEditor() {
         window.location.href = 'index.html';
         return;
     }
+    
+    window.boardManagerInstance = boardManager;
+    window.currentBoardId = currentBoardId;
+    window.renderAssetsCallback = renderAssets;
     
     document.getElementById('board-name').textContent = board.name;
     

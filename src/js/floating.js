@@ -7,7 +7,6 @@ let isPinned = false;
 let saveTimeout = null;
 let pendingSave = false;
 
-// Sync channel for layer visibility
 let syncChannel = null;
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -16,10 +15,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     if (!currentBoardId) return;
     
-    // Setup sync channel
     syncChannel = new BroadcastChannel('board_sync_' + currentBoardId);
     
-    // Listen for layer visibility changes from editor
     syncChannel.onmessage = (event) => {
         if (event.data.type === 'layer_visibility_changed') {
             const img = canvas.images.find(i => i.id === event.data.layerId);
@@ -33,6 +30,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     await initFloatingWindow();
     setupTitlebarControls();
     setupContextMenu();
+    setupDragAndDrop();
 });
 
 async function initFloatingWindow() {
@@ -54,6 +52,62 @@ async function initFloatingWindow() {
     await loadLayers(board.layers);
     
     canvas.canvas.addEventListener('canvasChanged', scheduleSave);
+}
+
+function setupDragAndDrop() {
+    canvas.canvas.addEventListener('dragenter', (e) => {
+        e.preventDefault();
+        if (e.dataTransfer.types.includes('Files')) {
+            canvas.showDragOverlay();
+        }
+    });
+    
+    canvas.canvas.addEventListener('dragleave', (e) => {
+        if (e.target === canvas.canvas) {
+            canvas.hideDragOverlay();
+        }
+    });
+    
+    canvas.canvas.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+    });
+    
+    canvas.canvas.addEventListener('drop', async (e) => {
+        e.preventDefault();
+        canvas.hideDragOverlay();
+        
+        const files = Array.from(e.dataTransfer.files);
+        const imageFiles = files.filter(f => f.type.startsWith('image/'));
+        
+        const rect = canvas.canvas.getBoundingClientRect();
+        const { x, y } = canvas.screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
+        
+        for (const file of imageFiles) {
+            const reader = new FileReader();
+            reader.onload = async (event) => {
+                const img = new Image();
+                img.onload = async () => {
+                    canvas.addImage(img, x, y, file.name);
+                    
+                    const board = await boardManager.getBoard(currentBoardId);
+                    if (!board.assets) board.assets = [];
+                    
+                    const assetExists = board.assets.some(a => a.name === file.name);
+                    if (!assetExists) {
+                        board.assets.push({
+                            id: Date.now() + Math.random(),
+                            src: event.target.result,
+                            name: file.name
+                        });
+                        await boardManager.updateBoard(currentBoardId, { assets: board.assets });
+                    }
+                };
+                img.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+    });
 }
 
 function loadLayers(layers) {
@@ -130,12 +184,10 @@ function setupContextMenu() {
     `;
     document.body.appendChild(contextMenu);
     
-    // Hidden layers submenu
     const hiddenLayersMenu = document.createElement('div');
     hiddenLayersMenu.className = 'context-submenu';
     document.body.appendChild(hiddenLayersMenu);
     
-    // Style injection
     if (!document.querySelector('#context-menu-styles')) {
         const style = document.createElement('style');
         style.id = 'context-menu-styles';
@@ -201,13 +253,11 @@ function setupContextMenu() {
     
     let clickedImageId = null;
     
-    // Right click to show menu
     canvas.canvas.addEventListener('contextmenu', (e) => {
         e.preventDefault();
         
         hiddenLayersMenu.classList.remove('show');
         
-        // Check if clicked on an image
         const rect = canvas.canvas.getBoundingClientRect();
         const { x, y } = canvas.screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
         const clickedImage = canvas.getImageAtPoint(x, y);
@@ -215,13 +265,11 @@ function setupContextMenu() {
         contextMenu.innerHTML = '';
         
         if (clickedImage) {
-            // Clicked on image - show hide option
             clickedImageId = clickedImage.id;
             contextMenu.innerHTML = `
                 <div class="context-menu-item" data-action="hide-image">Hide Image</div>
             `;
         } else {
-            // Clicked on blank space
             clickedImageId = null;
             const hiddenImages = canvas.images.filter(img => img.visible === false);
             
@@ -237,7 +285,6 @@ function setupContextMenu() {
         contextMenu.classList.add('show');
     });
     
-    // Click menu items
     contextMenu.addEventListener('click', (e) => {
         const action = e.target.dataset.action;
         
@@ -253,7 +300,6 @@ function setupContextMenu() {
         } else if (action === 'hidden-layers') {
             if (e.target.classList.contains('disabled')) return;
             
-            // Show submenu with hidden layers
             const hiddenImages = canvas.images.filter(img => img.visible === false);
             hiddenLayersMenu.innerHTML = '';
             
@@ -273,7 +319,6 @@ function setupContextMenu() {
         }
     });
     
-    // Click submenu items (unhide)
     hiddenLayersMenu.addEventListener('click', (e) => {
         const action = e.target.dataset.action;
         const imageId = parseFloat(e.target.dataset.imageId);
@@ -285,7 +330,6 @@ function setupContextMenu() {
         }
     });
     
-    // Close menus on outside click
     document.addEventListener('click', (e) => {
         if (!contextMenu.contains(e.target) && !hiddenLayersMenu.contains(e.target) && e.target !== canvas.canvas) {
             contextMenu.classList.remove('show');

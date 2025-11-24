@@ -160,7 +160,25 @@ export class Canvas {
         this.canvas.addEventListener('mouseup', this.onMouseUp.bind(this));
         this.canvas.addEventListener('mouseleave', this.onMouseUp.bind(this));
         this.canvas.addEventListener('wheel', this.onWheel.bind(this), { passive: false });
-        this.canvas.addEventListener('dragover', (e) => e.preventDefault());
+        
+        this.canvas.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'copy';
+        });
+        
+        this.canvas.addEventListener('dragenter', (e) => {
+            e.preventDefault();
+            if (e.dataTransfer.types.includes('Files')) {
+                this.showDragOverlay();
+            }
+        });
+        
+        this.canvas.addEventListener('dragleave', (e) => {
+            if (e.target === this.canvas) {
+                this.hideDragOverlay();
+            }
+        });
+        
         this.canvas.addEventListener('drop', this.onDrop.bind(this));
         
         document.addEventListener('keydown', (e) => {
@@ -364,6 +382,8 @@ export class Canvas {
 
     onDrop(e) {
         e.preventDefault();
+        this.hideDragOverlay();
+        
         const files = Array.from(e.dataTransfer.files);
         const imageFiles = files.filter(f => f.type.startsWith('image/'));
         
@@ -376,11 +396,94 @@ export class Canvas {
                 const img = new Image();
                 img.onload = () => {
                     this.addImage(img, x, y, file.name);
+                    this.addToAssets(img, event.target.result, file.name);
                 };
                 img.src = event.target.result;
             };
             reader.readAsDataURL(file);
         });
+    }
+
+    addToAssets(img, src, name) {
+        const board = window.boardManagerInstance?.currentBoard;
+        if (!board) return;
+        
+        if (!board.assets) board.assets = [];
+        
+        const assetExists = board.assets.some(a => a.name === name);
+        if (assetExists) return;
+        
+        board.assets.push({
+            id: Date.now() + Math.random(),
+            src: src,
+            name: name
+        });
+        
+        if (window.boardManagerInstance && window.currentBoardId) {
+            window.boardManagerInstance.updateBoard(window.currentBoardId, { assets: board.assets });
+        }
+        
+        if (window.renderAssetsCallback) {
+            window.renderAssetsCallback();
+        }
+    }
+
+    showDragOverlay() {
+        let overlay = document.getElementById('drop-overlay');
+        if (!overlay) {
+            overlay = document.createElement('div');
+            overlay.id = 'drop-overlay';
+            overlay.innerHTML = '<div class="drop-message">Release to Drop Image onto Board</div>';
+            
+            if (!document.querySelector('#drop-overlay-styles')) {
+                const style = document.createElement('style');
+                style.id = 'drop-overlay-styles';
+                style.textContent = `
+                    #drop-overlay {
+                        position: fixed;
+                        top: 0;
+                        left: 0;
+                        right: 0;
+                        bottom: 0;
+                        background: rgba(0, 0, 0, 0.6);
+                        backdrop-filter: blur(2px);
+                        z-index: 9999;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        pointer-events: none;
+                        animation: dropOverlayFadeIn 0.2s ease;
+                    }
+                    
+                    @keyframes dropOverlayFadeIn {
+                        from { opacity: 0; }
+                        to { opacity: 1; }
+                    }
+                    
+                    .drop-message {
+                        background: white;
+                        color: #1a1a1a;
+                        padding: 24px 40px;
+                        border-radius: 12px;
+                        font-size: 18px;
+                        font-weight: 600;
+                        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+                        border: 2px solid #0066ff;
+                    }
+                `;
+                document.head.appendChild(style);
+            }
+            
+            document.body.appendChild(overlay);
+        }
+        overlay.style.display = 'flex';
+    }
+
+    hideDragOverlay() {
+        const overlay = document.getElementById('drop-overlay');
+        if (overlay) {
+            overlay.style.display = 'none';
+        }
     }
 
     addImage(img, x, y, name = 'Layer', width = null, height = null) {
