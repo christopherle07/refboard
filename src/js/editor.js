@@ -9,6 +9,7 @@ let pendingSave = false;
 let dragSourceIndex = null;
 let currentOrder = [];
 let syncChannel = null;
+let showAllAssets = false;
 
 function initTheme() {
     const THEME_KEY = 'app_theme';
@@ -181,6 +182,11 @@ function setupEventListeners() {
         const btn = e.target;
         content.classList.toggle('collapsed');
         btn.textContent = content.classList.contains('collapsed') ? '+' : '−';
+    });
+    
+    document.getElementById('assets-view-toggle').addEventListener('change', (e) => {
+        showAllAssets = e.target.checked;
+        renderAssets();
     });
     
     canvas.canvas.addEventListener('canvasChanged', () => {
@@ -409,29 +415,75 @@ function highlightLayer(imageId) {
     }
 }
 
-function renderAssets() {
+async function renderAssets() {
     const assetsGrid = document.getElementById('assets-grid');
     const board = boardManager.currentBoard;
     
-    if (!board || !board.assets || board.assets.length === 0) {
-        assetsGrid.innerHTML = '<div class="empty-message">No assets yet</div>';
-        return;
+    let assets = [];
+    
+    if (showAllAssets) {
+        assets = await boardManager.getAllAssets();
+        if (!assets || assets.length === 0) {
+            assetsGrid.innerHTML = '<div class="empty-message">No assets yet</div>';
+            return;
+        }
+    } else {
+        if (!board || !board.assets || board.assets.length === 0) {
+            assetsGrid.innerHTML = '<div class="empty-message">No board assets yet</div>';
+            return;
+        }
+        assets = board.assets;
     }
     
     assetsGrid.innerHTML = '';
-    board.assets.forEach(asset => {
+    assets.forEach(asset => {
         const assetItem = document.createElement('div');
         assetItem.className = 'asset-item';
         const img = document.createElement('img');
         img.src = asset.src;
         img.draggable = false;
-        assetItem.appendChild(img);
         
-        assetItem.addEventListener('click', () => {
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'asset-delete-btn';
+        deleteBtn.textContent = '×';
+        deleteBtn.title = showAllAssets ? 'Delete from all assets' : 'Delete from board';
+        deleteBtn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            const confirmMsg = showAllAssets 
+                ? `Delete "${asset.name}" from all assets? This will remove it everywhere.`
+                : `Remove "${asset.name}" from this board?`;
+            
+            showDeleteConfirm(asset.name, async () => {
+                if (showAllAssets) {
+                    await boardManager.deleteFromAllAssets(asset.id);
+                } else {
+                    await boardManager.deleteBoardAsset(currentBoardId, asset.id);
+                }
+                renderAssets();
+            });
+        });
+        
+        assetItem.appendChild(img);
+        assetItem.appendChild(deleteBtn);
+        
+        assetItem.addEventListener('click', async () => {
             const imgElement = new Image();
-            imgElement.onload = () => {
+            imgElement.onload = async () => {
                 canvas.addImage(imgElement, 100, 100, asset.name);
                 renderLayers();
+                
+                if (showAllAssets) {
+                    const boardAssets = board.assets || [];
+                    const existsInBoard = boardAssets.some(a => a.name === asset.name && a.src === asset.src);
+                    if (!existsInBoard) {
+                        boardAssets.push({
+                            id: asset.id,
+                            name: asset.name,
+                            src: asset.src
+                        });
+                        await boardManager.updateBoard(currentBoardId, { assets: boardAssets });
+                    }
+                }
             };
             imgElement.src = asset.src;
         });
@@ -454,13 +506,17 @@ function importAssets() {
                 const board = boardManager.currentBoard;
                 if (!board.assets) board.assets = [];
                 
-                board.assets.push({
-                    id: Date.now() + Math.random(),
-                    src: event.target.result,
-                    name: file.name
-                });
+                const existsInBoard = board.assets.some(a => a.name === file.name);
+                if (!existsInBoard) {
+                    board.assets.push({
+                        id: Date.now() + Math.random(),
+                        src: event.target.result,
+                        name: file.name
+                    });
+                }
                 
                 await boardManager.updateBoard(currentBoardId, { assets: board.assets });
+                await boardManager.addToAllAssets(file.name, event.target.result);
                 renderAssets();
             };
             reader.readAsDataURL(file);

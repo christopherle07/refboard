@@ -70,6 +70,11 @@ fn get_boards_dir(app: &AppHandle) -> PathBuf {
     data_dir.join("boards")
 }
 
+fn get_all_assets_path(app: &AppHandle) -> PathBuf {
+    let data_dir = app.path().app_data_dir().expect("Failed to get app data dir");
+    data_dir.join("all_assets.json")
+}
+
 fn sanitize_filename(name: &str) -> String {
     name.chars()
         .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '-' })
@@ -86,6 +91,14 @@ fn get_board_path(app: &AppHandle, name: &str, id: u64) -> PathBuf {
 pub fn init_storage(app: &AppHandle) -> Result<(), String> {
     let boards_dir = get_boards_dir(app);
     fs::create_dir_all(&boards_dir).map_err(|e| e.to_string())?;
+    
+    let all_assets_path = get_all_assets_path(app);
+    if !all_assets_path.exists() {
+        let empty: Vec<Asset> = Vec::new();
+        let content = serde_json::to_string_pretty(&empty).map_err(|e| e.to_string())?;
+        fs::write(&all_assets_path, content).map_err(|e| e.to_string())?;
+    }
+    
     Ok(())
 }
 
@@ -180,6 +193,53 @@ pub fn delete_board(app: &AppHandle, id: u64) -> Result<(), String> {
     }
     
     Err(format!("Board {} not found", id))
+}
+
+pub fn load_all_assets(app: &AppHandle) -> Result<Vec<Asset>, String> {
+    let path = get_all_assets_path(app);
+    let content = fs::read_to_string(&path).map_err(|e| e.to_string())?;
+    let assets = serde_json::from_str(&content).map_err(|e| e.to_string())?;
+    Ok(assets)
+}
+
+fn save_all_assets(app: &AppHandle, assets: &Vec<Asset>) -> Result<(), String> {
+    let path = get_all_assets_path(app);
+    let content = serde_json::to_string_pretty(assets).map_err(|e| e.to_string())?;
+    fs::write(&path, content).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+pub fn add_to_all_assets(app: &AppHandle, name: String, src: String) -> Result<Asset, String> {
+    let mut all_assets = load_all_assets(app)?;
+    
+    if let Some(existing) = all_assets.iter().find(|a| a.name == name && a.src == src) {
+        return Ok(existing.clone());
+    }
+    
+    let asset = Asset {
+        id: now_millis() as f64,
+        name,
+        src,
+    };
+    
+    all_assets.push(asset.clone());
+    save_all_assets(app, &all_assets)?;
+    Ok(asset)
+}
+
+pub fn delete_from_all_assets(app: &AppHandle, id: f64) -> Result<(), String> {
+    let mut all_assets = load_all_assets(app)?;
+    all_assets.retain(|a| a.id != id);
+    save_all_assets(app, &all_assets)?;
+    Ok(())
+}
+
+pub fn delete_board_asset(app: &AppHandle, board_id: u64, asset_id: f64) -> Result<Board, String> {
+    let mut board = load_board(app, board_id)?;
+    board.assets.retain(|a| a.id != asset_id);
+    board.updated_at = now_millis();
+    save_board(app, &board)?;
+    Ok(board)
 }
 
 pub fn now_millis() -> u64 {

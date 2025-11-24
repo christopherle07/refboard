@@ -49,6 +49,23 @@ body {
     color: rgba(255, 255, 255, 0.8);
 }
 
+.overlay-indicator {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 10px;
+    font-weight: 700;
+    color: #ff6b6b;
+    letter-spacing: 1px;
+    opacity: 0;
+    transition: opacity 0.3s;
+    pointer-events: none;
+}
+
+.overlay-indicator.active {
+    opacity: 1;
+}
+
 .titlebar-controls {
     display: flex;
     gap: 8px;
@@ -91,6 +108,11 @@ body {
 .titlebar-btn.pinned {
     background: rgba(0, 102, 255, 0.15);
     color: #0066ff;
+}
+
+.titlebar-btn.active {
+    background: rgba(255, 107, 107, 0.2);
+    color: #ff6b6b;
 }
 
 .floating-container {

@@ -44,7 +44,17 @@
                 </div>
 
                 <div class="tab-panel" data-panel="assets">
-                    <button class="import-btn" id="import-assets-btn">+ Import Images</button>
+                    <div class="assets-controls">
+                        <button class="import-btn" id="import-assets-btn">+ Import Images</button>
+                        <div class="assets-view-toggle">
+                            <span class="assets-view-label">Board Assets</span>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="assets-view-toggle">
+                                <span class="toggle-slider"></span>
+                            </label>
+                            <span class="assets-view-label">All Assets</span>
+                        </div>
+                    </div>
                     <div class="assets-grid" id="assets-grid">
                         <div class="empty-message">No assets yet</div>
                     </div>

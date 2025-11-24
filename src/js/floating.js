@@ -4,6 +4,8 @@ import { boardManager } from './board-manager.js';
 let canvas;
 let currentBoardId;
 let isPinned = false;
+let overlayMode = false;
+let overlayOpacity = 0.5;
 let saveTimeout = null;
 let pendingSave = false;
 
@@ -31,6 +33,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     setupTitlebarControls();
     setupContextMenu();
     setupDragAndDrop();
+    setupKeyboardShortcuts();
 });
 
 async function initFloatingWindow() {
@@ -101,6 +104,7 @@ function setupDragAndDrop() {
                             name: file.name
                         });
                         await boardManager.updateBoard(currentBoardId, { assets: board.assets });
+                        await boardManager.addToAllAssets(file.name, event.target.result);
                     }
                 };
                 img.src = event.target.result;
@@ -156,6 +160,10 @@ async function setupTitlebarControls() {
         await currentWindow.setAlwaysOnTop(false);
         isPinned = false;
         
+        document.getElementById('overlay-btn').addEventListener('click', async () => {
+            await toggleOverlayMode();
+        });
+        
         document.getElementById('pin-btn').addEventListener('click', async () => {
             isPinned = !isPinned;
             await currentWindow.setAlwaysOnTop(isPinned);
@@ -167,11 +175,61 @@ async function setupTitlebarControls() {
         });
         
         document.getElementById('close-btn').addEventListener('click', async () => {
+            if (overlayMode) {
+                await toggleOverlayMode();
+            }
             saveNow();
             await currentWindow.close();
         });
     } catch (err) {
         console.error('Titlebar setup error:', err);
+    }
+}
+
+function setupKeyboardShortcuts() {
+    document.addEventListener('keydown', async (e) => {
+        if (e.ctrlKey && e.key === 'l') {
+            e.preventDefault();
+            await toggleOverlayMode();
+        }
+    });
+}
+
+async function toggleOverlayMode() {
+    if (!window.__TAURI__) return;
+    
+    overlayMode = !overlayMode;
+    
+    try {
+        const { getCurrentWindow } = window.__TAURI__.window;
+        const currentWindow = getCurrentWindow();
+        
+        await window.__TAURI__.core.invoke('set_overlay_mode', {
+            window: currentWindow,
+            enabled: overlayMode,
+            opacity: overlayOpacity
+        });
+        
+        updateOverlayUI();
+        
+    } catch (err) {
+        console.error('Failed to toggle overlay mode:', err);
+        overlayMode = !overlayMode;
+    }
+}
+
+function updateOverlayUI() {
+    const indicator = document.getElementById('overlay-indicator');
+    const overlayBtn = document.getElementById('overlay-btn');
+    
+    if (overlayMode) {
+        indicator.classList.add('active');
+        indicator.textContent = 'OVERLAY MODE';
+        overlayBtn.classList.add('active');
+    } else {
+        indicator.classList.remove('active');
+        indicator.textContent = '';
+        overlayBtn.classList.remove('active');
     }
 }
 
@@ -255,6 +313,8 @@ function setupContextMenu() {
     
     canvas.canvas.addEventListener('contextmenu', (e) => {
         e.preventDefault();
+        
+        if (overlayMode) return;
         
         hiddenLayersMenu.classList.remove('show');
         

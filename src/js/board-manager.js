@@ -3,6 +3,7 @@ class BoardManager {
         this.boards = [];
         this.currentBoard = null;
         this.STORAGE_KEY = 'reference_boards';
+        this.ALL_ASSETS_KEY = 'all_assets';
     }
 
     async invoke(cmd, args = {}) {
@@ -98,6 +99,90 @@ class BoardManager {
         }
         this.boards = this.boards.filter(b => b.id !== boardId);
         this.saveToStorage();
+    }
+
+    async getAllAssets() {
+        if (window.__TAURI__) {
+            try {
+                return await this.invoke('get_all_assets');
+            } catch (e) {
+                console.error('Failed to load all assets:', e);
+                return [];
+            }
+        }
+        const stored = localStorage.getItem(this.ALL_ASSETS_KEY);
+        if (stored) {
+            return JSON.parse(stored);
+        }
+        return [];
+    }
+
+    async addToAllAssets(name, src) {
+        if (window.__TAURI__) {
+            try {
+                return await this.invoke('add_to_all_assets', { name, src });
+            } catch (e) {
+                console.error('Failed to add to all assets:', e);
+                return null;
+            }
+        }
+        let allAssets = await this.getAllAssets();
+        
+        const existing = allAssets.find(a => a.name === name && a.src === src);
+        if (existing) {
+            return existing;
+        }
+        
+        const asset = {
+            id: Date.now() + Math.random(),
+            name,
+            src
+        };
+        allAssets.push(asset);
+        localStorage.setItem(this.ALL_ASSETS_KEY, JSON.stringify(allAssets));
+        return asset;
+    }
+
+    async deleteFromAllAssets(assetId) {
+        if (window.__TAURI__) {
+            try {
+                await this.invoke('delete_from_all_assets', { id: assetId });
+            } catch (e) {
+                console.error('Failed to delete from all assets:', e);
+            }
+            return;
+        }
+        let allAssets = await this.getAllAssets();
+        allAssets = allAssets.filter(a => a.id !== assetId);
+        localStorage.setItem(this.ALL_ASSETS_KEY, JSON.stringify(allAssets));
+    }
+
+    async deleteBoardAsset(boardId, assetId) {
+        if (window.__TAURI__) {
+            try {
+                const board = await this.invoke('delete_board_asset', { boardId, assetId });
+                const idx = this.boards.findIndex(b => b.id === boardId);
+                if (idx !== -1) {
+                    this.boards[idx] = board;
+                }
+                if (this.currentBoard && this.currentBoard.id === boardId) {
+                    this.currentBoard = board;
+                }
+                return board;
+            } catch (e) {
+                console.error('Failed to delete board asset:', e);
+                return null;
+            }
+        }
+        const board = this.boards.find(b => b.id === boardId);
+        if (board && board.assets) {
+            board.assets = board.assets.filter(a => a.id !== assetId);
+            if (this.currentBoard && this.currentBoard.id === boardId) {
+                this.currentBoard.assets = board.assets;
+            }
+            this.saveToStorage();
+        }
+        return board;
     }
 
     getAllBoards() {

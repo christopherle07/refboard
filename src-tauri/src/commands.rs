@@ -1,4 +1,4 @@
-use crate::database::{self, Board, BoardMetadata, BoardUpdate};
+use crate::database::{self, Board, BoardMetadata, BoardUpdate, Asset};
 use tauri::AppHandle;
 
 #[tauri::command]
@@ -56,4 +56,24 @@ pub fn update_board(app: AppHandle, id: u64, updates: BoardUpdate) -> Result<Boa
 #[tauri::command]
 pub fn delete_board(app: AppHandle, id: u64) -> Result<(), String> {
     database::delete_board(&app, id)
+}
+
+#[tauri::command]
+pub fn get_all_assets(app: AppHandle) -> Result<Vec<Asset>, String> {
+    database::load_all_assets(&app)
+}
+
+#[tauri::command]
+pub fn add_to_all_assets(app: AppHandle, name: String, src: String) -> Result<Asset, String> {
+    database::add_to_all_assets(&app, name, src)
+}
+
+#[tauri::command]
+pub fn delete_from_all_assets(app: AppHandle, id: f64) -> Result<(), String> {
+    database::delete_from_all_assets(&app, id)
+}
+
+#[tauri::command]
+pub fn delete_board_asset(app: AppHandle, board_id: u64, asset_id: f64) -> Result<Board, String> {
+    database::delete_board_asset(&app, board_id, asset_id)
 }
