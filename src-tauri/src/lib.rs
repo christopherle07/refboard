@@ -17,12 +17,11 @@ pub fn run() {
             commands::delete_from_all_assets,
             commands::delete_board_asset,
             overlay::set_overlay_mode,
-            overlay::get_overlay_mode,
         ])
         .setup(|app| {
             database::init_storage(app.handle())?;
             Ok(())
         })
-        .run(tauri::generate_context!("tauri.conf.json"))
+        .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

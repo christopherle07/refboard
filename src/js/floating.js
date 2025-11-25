@@ -5,7 +5,7 @@ let canvas;
 let currentBoardId;
 let isPinned = false;
 let overlayMode = false;
-let overlayOpacity = 0.5;
+let overlayOpacity = 0.7;
 let saveTimeout = null;
 let pendingSave = false;
 
@@ -34,7 +34,134 @@ document.addEventListener('DOMContentLoaded', async () => {
     setupContextMenu();
     setupDragAndDrop();
     setupKeyboardShortcuts();
+    injectDisclaimerStyles();
 });
+
+function injectDisclaimerStyles() {
+    if (document.querySelector('#disclaimer-styles')) return;
+    
+    const style = document.createElement('style');
+    style.id = 'disclaimer-styles';
+    style.textContent = `
+        .overlay-disclaimer {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: #1a1a1a;
+            color: #ffffff;
+            padding: 32px 40px;
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+            z-index: 100000;
+            max-width: 500px;
+            border: 2px solid #ff6b6b;
+            animation: disclaimerFadeIn 0.3s ease;
+            pointer-events: auto;
+        }
+        
+        @keyframes disclaimerFadeIn {
+            from {
+                opacity: 0;
+                transform: translate(-50%, -50%) scale(0.9);
+            }
+            to {
+                opacity: 1;
+                transform: translate(-50%, -50%) scale(1);
+            }
+        }
+        
+        .disclaimer-title {
+            font-size: 18px;
+            font-weight: 700;
+            margin-bottom: 16px;
+            color: #ff6b6b;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .disclaimer-message {
+            font-size: 15px;
+            line-height: 1.6;
+            margin-bottom: 24px;
+            color: #e0e0e0;
+        }
+        
+        .disclaimer-message strong {
+            color: #ffffff;
+            background: rgba(255, 107, 107, 0.2);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+        }
+        
+        .disclaimer-buttons {
+            display: flex;
+            gap: 12px;
+            justify-content: flex-end;
+        }
+        
+        .disclaimer-btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .disclaimer-btn-cancel {
+            background: #3a3a3a;
+            color: #ffffff;
+        }
+        
+        .disclaimer-btn-cancel:hover {
+            background: #4a4a4a;
+        }
+        
+        .disclaimer-btn-confirm {
+            background: #ff6b6b;
+            color: #ffffff;
+        }
+        
+        .disclaimer-btn-confirm:hover {
+            background: #ff5252;
+        }
+    `;
+    document.head.appendChild(style);
+}
+
+function showOverlayDisclaimer() {
+    return new Promise((resolve) => {
+        const disclaimer = document.createElement('div');
+        disclaimer.className = 'overlay-disclaimer';
+        disclaimer.innerHTML = `
+            <div class="disclaimer-title">⚠️ Trace Mode Disclaimer</div>
+            <div class="disclaimer-message">
+                To disable trace mode, you must refocus this window from your taskbar and press <strong>CTRL + L</strong>
+                <br><br>
+                While in trace mode, this window will be click-through and semi-transparent for tracing references.
+            </div>
+            <div class="disclaimer-buttons">
+                <button class="disclaimer-btn disclaimer-btn-cancel">Cancel</button>
+                <button class="disclaimer-btn disclaimer-btn-confirm">I Understand</button>
+            </div>
+        `;
+        
+        document.body.appendChild(disclaimer);
+        
+        disclaimer.querySelector('.disclaimer-btn-cancel').addEventListener('click', () => {
+            disclaimer.remove();
+            resolve(false);
+        });
+        
+        disclaimer.querySelector('.disclaimer-btn-confirm').addEventListener('click', () => {
+            disclaimer.remove();
+            resolve(true);
+        });
+    });
+}
 
 async function initFloatingWindow() {
     await boardManager.loadBoards();
@@ -198,6 +325,13 @@ function setupKeyboardShortcuts() {
 async function toggleOverlayMode() {
     if (!window.__TAURI__) return;
     
+    if (!overlayMode) {
+        const confirmed = await showOverlayDisclaimer();
+        if (!confirmed) {
+            return;
+        }
+    }
+    
     overlayMode = !overlayMode;
     
     try {
@@ -205,10 +339,14 @@ async function toggleOverlayMode() {
         const currentWindow = getCurrentWindow();
         
         await window.__TAURI__.core.invoke('set_overlay_mode', {
-            window: currentWindow,
             enabled: overlayMode,
             opacity: overlayOpacity
         });
+        
+        if (overlayMode) {
+            isPinned = true;
+            document.getElementById('pin-btn').classList.add('pinned');
+        }
         
         updateOverlayUI();
         
@@ -224,7 +362,7 @@ function updateOverlayUI() {
     
     if (overlayMode) {
         indicator.classList.add('active');
-        indicator.textContent = 'OVERLAY MODE';
+        indicator.textContent = 'TRACE MODE ACTIVE';
         overlayBtn.classList.add('active');
     } else {
         indicator.classList.remove('active');
