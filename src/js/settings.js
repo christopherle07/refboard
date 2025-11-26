@@ -109,23 +109,23 @@ function setupThemeOptions() {
 function setupNavigation() {
     const homeBtn = document.getElementById('home-btn');
     const newBoardBtn = document.getElementById('new-board-btn');
-    const openBtn = document.getElementById('open-btn');
-    
+    const importBoardBtn = document.getElementById('import-board-btn');
+
     if (homeBtn) {
         homeBtn.addEventListener('click', () => {
             window.location.href = 'index.html';
         });
     }
-    
+
     if (newBoardBtn) {
         newBoardBtn.addEventListener('click', () => {
             window.location.href = 'index.html';
         });
     }
-    
-    if (openBtn) {
-        openBtn.addEventListener('click', () => {
-            console.log('Open board feature - coming soon');
+
+    if (importBoardBtn) {
+        importBoardBtn.addEventListener('click', () => {
+            window.location.href = 'index.html';
         });
     }
 }

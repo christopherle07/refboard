@@ -4,6 +4,21 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Board Editor</title>
+    <script>
+        // Apply theme immediately to prevent flash
+        (function() {
+            const theme = localStorage.getItem('app_theme') || 'light';
+            const themes = {
+                light: { '--bg-primary': '#ffffff', '--bg-secondary': '#f5f5f5', '--bg-tertiary': '#e8e8e8', '--bg-hover': '#ececec', '--bg-active': '#d4d4d4', '--border-color': '#d0d0d0', '--border-color-hover': '#a0a0a0', '--text-primary': '#1a1a1a', '--text-secondary': '#4a4a4a', '--text-tertiary': '#7a7a7a', '--text-disabled': '#b0b0b0', '--shadow': 'rgba(0, 0, 0, 0.1)', '--modal-overlay': 'rgba(0, 0, 0, 0.4)' },
+                dark: { '--bg-primary': '#1e1e1e', '--bg-secondary': '#2a2a2a', '--bg-tertiary': '#363636', '--bg-hover': '#323232', '--bg-active': '#3e3e3e', '--border-color': '#404040', '--border-color-hover': '#606060', '--text-primary': '#e0e0e0', '--text-secondary': '#b0b0b0', '--text-tertiary': '#808080', '--text-disabled': '#505050', '--shadow': 'rgba(0, 0, 0, 0.3)', '--modal-overlay': 'rgba(0, 0, 0, 0.6)' },
+                midnight: { '--bg-primary': '#0d1117', '--bg-secondary': '#161b22', '--bg-tertiary': '#21262d', '--bg-hover': '#1c2128', '--bg-active': '#292e36', '--border-color': '#30363d', '--border-color-hover': '#484f58', '--text-primary': '#c9d1d9', '--text-secondary': '#8b949e', '--text-tertiary': '#6e7681', '--text-disabled': '#484f58', '--shadow': 'rgba(0, 0, 0, 0.5)', '--modal-overlay': 'rgba(0, 0, 0, 0.7)' }
+            };
+            const colors = themes[theme] || themes.light;
+            for (const [key, value] of Object.entries(colors)) {
+                document.documentElement.style.setProperty(key, value);
+            }
+        })();
+    </script>
     <link rel="stylesheet" href="css/main.css">
     <link rel="stylesheet" href="css/sidebar.css">
     <link rel="stylesheet" href="css/modal.css">
@@ -13,7 +28,16 @@
         <aside class="sidebar">
             <div class="sidebar-header">
                 <button class="back-arrow-btn" id="back-home-btn" title="Back to Home">←</button>
-                <h2 class="board-name" id="board-name">Untitled Board</h2>
+                <div class="board-name-wrapper">
+                    <h2 class="board-name" id="board-name">Untitled Board</h2>
+                    <button class="board-dropdown-btn" id="board-dropdown-btn">▼</button>
+                    <div class="board-dropdown-menu" id="board-dropdown-menu">
+                        <div class="dropdown-item" id="dropdown-rename">Rename Board</div>
+                        <div class="dropdown-separator"></div>
+                        <div class="dropdown-item" id="dropdown-export">Export Board</div>
+                        <div class="dropdown-item" id="dropdown-import">Import to Board</div>
+                    </div>
+                </div>
             </div>
 
             <div class="sidebar-tabs">
@@ -26,7 +50,9 @@
                     <div class="panel-section">
                         <div class="panel-section-header">
                             <h3>Layers</h3>
-                            <button class="collapse-btn" id="collapse-layers-btn">−</button>
+                            <div class="header-actions">
+                                <button class="collapse-btn" id="collapse-layers-btn">−</button>
+                            </div>
                         </div>
                         <div class="panel-section-content" id="layers-content">
                             <div class="layers-list" id="layers-list">
@@ -63,13 +89,18 @@
         </aside>
 
         <main class="canvas-area">
-            <div class="canvas-toolbar">
-                <button class="toolbar-btn" id="open-floating-btn">Open Canvas</button>
-                <button class="toolbar-btn" id="recenter-btn">Recenter View</button>
-            </div>
+            <button class="floating-canvas-btn" id="open-floating-btn" title="Open Canvas Window">⊕</button>
 
             <div class="canvas-container" id="canvas-container">
                 <canvas id="main-canvas"></canvas>
+            </div>
+
+            <div class="canvas-context-menu" id="canvas-context-menu">
+                <div class="context-menu-item" id="context-delete-selected" style="display: none;">Delete Selected</div>
+                <div class="context-menu-item" id="context-deselect-all" style="display: none;">Deselect All</div>
+                <div class="context-menu-separator" id="context-separator" style="display: none;"></div>
+                <div class="context-menu-item" id="context-recenter">Recenter View</div>
+                <div class="context-menu-item" id="context-reset-zoom">Reset Zoom</div>
             </div>
         </main>
     </div>

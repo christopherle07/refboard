@@ -31,11 +31,73 @@
     color: var(--text-primary);
 }
 
+.board-name-wrapper {
+    flex: 1;
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
 .board-name {
     font-size: 13px;
     font-weight: 600;
     color: var(--text-primary);
     flex: 1;
+    cursor: pointer;
+    user-select: none;
+}
+
+.board-dropdown-btn {
+    background: none;
+    border: none;
+    font-size: 10px;
+    cursor: pointer;
+    color: var(--text-secondary);
+    padding: 4px;
+    transition: color 0.1s;
+    line-height: 1;
+}
+
+.board-dropdown-btn:hover {
+    color: var(--text-primary);
+}
+
+.board-dropdown-menu {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    margin-top: 4px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 4px 0;
+    min-width: 180px;
+    box-shadow: 0 4px 12px var(--shadow);
+    z-index: 1000;
+    display: none;
+}
+
+.board-dropdown-menu.show {
+    display: block;
+}
+
+.dropdown-item {
+    padding: 8px 16px;
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--text-primary);
+    transition: background 0.15s;
+}
+
+.dropdown-item:hover {
+    background: var(--bg-hover);
+}
+
+.dropdown-separator {
+    height: 1px;
+    background: var(--border-color);
+    margin: 4px 0;
 }
 
 .sidebar-tabs {
@@ -115,6 +177,36 @@
     border: none;
 }
 
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.icon-btn {
+    width: 24px;
+    height: 24px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1;
+    color: var(--text-tertiary);
+    padding: 0;
+    transition: all 0.2s;
+    border-radius: 4px;
+}
+
+.icon-btn:hover {
+    color: var(--text-primary);
+    background: var(--bg-hover);
+}
+
+.icon-btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+}
+
 .collapse-btn {
     width: 18px;
     height: 18px;
@@ -162,11 +254,12 @@
 }
 
 .layer-item.selected {
-    background: #d0e5ff;
+    background: var(--bg-active);
+    border-left: 3px solid #0066ff;
 }
 
 .layer-item.selected:hover {
-    background: #c0daff;
+    background: var(--bg-active);
 }
 
 .layer-item.layer-hidden {
@@ -333,6 +426,127 @@
 
 .layer-btn-delete:hover {
     color: #f44;
+}
+
+.group-item {
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.group-header {
+    display: flex;
+    align-items: center;
+    height: 32px;
+    cursor: pointer;
+    transition: background 0.1s;
+    user-select: none;
+}
+
+.group-header:hover {
+    background: var(--bg-tertiary);
+}
+
+.group-header.dragging {
+    opacity: 0.4;
+}
+
+.group-header.drag-over {
+    background: rgba(33, 150, 243, 0.2);
+    border: 2px solid #2196f3;
+}
+
+.group-collapse-btn {
+    width: 24px;
+    height: 24px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    font-size: 12px;
+    line-height: 1;
+    color: var(--text-secondary);
+    padding: 0;
+    transition: transform 0.2s;
+}
+
+.group-collapse-btn.collapsed {
+    transform: rotate(-90deg);
+}
+
+.group-visibility-btn {
+    width: 24px;
+    height: 24px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1;
+    color: var(--text-secondary);
+    padding: 0;
+    transition: color 0.1s;
+}
+
+.group-visibility-btn.hidden {
+    color: var(--text-disabled);
+}
+
+.group-name-input {
+    flex: 1;
+    border: none;
+    background: transparent;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 0 4px;
+    outline: none;
+    font-family: inherit;
+    color: var(--text-primary);
+}
+
+.group-name-input:focus {
+    background: var(--bg-hover);
+}
+
+.group-controls {
+    display: flex;
+    padding-right: 8px;
+    opacity: 0;
+    transition: opacity 0.1s;
+}
+
+.group-header:hover .group-controls {
+    opacity: 1;
+}
+
+.group-btn {
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    font-size: 12px;
+    line-height: 1;
+    color: var(--text-disabled);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.1s;
+}
+
+.group-btn:hover {
+    color: var(--text-primary);
+}
+
+.group-children {
+    display: flex;
+    flex-direction: column;
+    padding-left: 24px;
+    background: var(--bg-primary);
+}
+
+.group-children.collapsed {
+    display: none;
 }
 
 .properties-section {

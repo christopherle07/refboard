@@ -1,17 +1,21 @@
 export class Canvas {
     constructor(canvasElement) {
         this.canvas = canvasElement;
-        this.ctx = canvasElement.getContext('2d', { 
+        this.ctx = canvasElement.getContext('2d', {
             alpha: false,
             desynchronized: true,
             willReadFrequently: false
         });
         this.images = [];
         this.selectedImage = null;
+        this.selectedImages = [];
         this.isDragging = false;
         this.isResizing = false;
         this.isPanning = false;
+        this.isBoxSelecting = false;
+        this.selectionBox = null;
         this.dragOffset = { x: 0, y: 0 };
+        this.dragOffsets = new Map();
         this.resizeHandle = null;
         this.resizeStartData = null;
         this.zoom = 1;
@@ -20,20 +24,23 @@ export class Canvas {
         this.needsRender = true;
         this.animationFrame = null;
         this.bgColor = '#ffffff';
-        
+
         this.visibleImages = [];
         this.viewportBounds = { left: 0, right: 0, top: 0, bottom: 0 };
         this.lastCullZoom = 1;
         this.lastCullPan = { x: 0, y: 0 };
         this.cullThreshold = 10;
-        
+
         this.loadSettings();
-        
+
         this.hasShownZoomWarning = false;
         this.zoomWarningThreshold = 0.05;
-        
+
         this.snapLines = [];
-        
+
+        this.historyManager = null;
+        this.dragStartPosition = null;
+
         this.setupCanvas();
         this.setupEventListeners();
         this.startRenderLoop();
@@ -160,6 +167,7 @@ export class Canvas {
         this.canvas.addEventListener('mouseup', this.onMouseUp.bind(this));
         this.canvas.addEventListener('mouseleave', this.onMouseUp.bind(this));
         this.canvas.addEventListener('wheel', this.onWheel.bind(this), { passive: false });
+        this.canvas.addEventListener('contextmenu', this.onContextMenu.bind(this));
         
         this.canvas.addEventListener('dragover', (e) => {
             e.preventDefault();
@@ -228,6 +236,13 @@ export class Canvas {
         return panDelta > this.cullThreshold || zoomDelta > 0.01;
     }
 
+    invalidateCullCache() {
+        // Force a recull on next render by setting cache values to extreme values
+        this.lastCullPan = { x: Infinity, y: Infinity };
+        this.lastCullZoom = -1;
+        this.needsRender = true;
+    }
+
     cullImages() {
         if (!this.shouldRecull()) {
             return this.visibleImages;
@@ -235,8 +250,8 @@ export class Canvas {
 
         this.updateViewportBounds();
         const bounds = this.viewportBounds;
-        
-        this.visibleImages = this.images.filter(img => {
+
+        let filteredImages = this.images.filter(img => {
             if (img.visible === false) return false;
             return !(
                 img.x + img.width < bounds.left ||
@@ -246,11 +261,13 @@ export class Canvas {
             );
         });
 
+        this.visibleImages = filteredImages;
         this.lastCullPan = { x: this.pan.x, y: this.pan.y };
         this.lastCullZoom = this.zoom;
-        
+
         return this.visibleImages;
     }
+
 
     onMouseDown(e) {
         const rect = this.canvas.getBoundingClientRect();
@@ -265,11 +282,14 @@ export class Canvas {
         }
         
         if (e.button === 2) {
-            e.preventDefault();
-            this.isPanning = true;
-            this.lastPanPoint = { x: e.clientX, y: e.clientY };
-            this.canvas.style.cursor = 'grabbing';
-            return;
+            // Don't pan if shift is held (for multi-select)
+            if (!e.shiftKey) {
+                e.preventDefault();
+                this.isPanning = true;
+                this.lastPanPoint = { x: e.clientX, y: e.clientY };
+                this.canvas.style.cursor = 'grabbing';
+                return;
+            }
         }
         
         if (this.selectedImage && this.selectedImage.visible !== false) {
@@ -291,45 +311,88 @@ export class Canvas {
         }
         
         const clickedImage = this.getImageAtPoint(x, y);
-        
+
         if (clickedImage) {
-            this.selectImage(clickedImage);
+            // Handle multi-select with Ctrl/Cmd
+            if (e.ctrlKey || e.metaKey) {
+                this.selectImage(clickedImage, true);
+                return;
+            }
+
+            // Handle range select with Shift
+            if (e.shiftKey && this.selectedImage) {
+                this.selectImagesInRange(this.selectedImage, clickedImage);
+                return;
+            }
+
+            // If clicking an already selected image in multi-select, don't deselect
+            if (!this.isImageSelected(clickedImage)) {
+                this.selectImage(clickedImage);
+            }
+
+            // Setup dragging for all selected images
             this.isDragging = true;
-            this.dragOffset = {
-                x: x - clickedImage.x,
-                y: y - clickedImage.y
-            };
+            this.dragOffsets.clear();
+            for (const img of this.selectedImages) {
+                this.dragOffsets.set(img.id, { x: x - img.x, y: y - img.y });
+            }
+            this.dragStartPosition = { x: clickedImage.x, y: clickedImage.y };
             this.canvas.style.cursor = 'grabbing';
         } else {
-            this.selectImage(null);
-            this.isPanning = true;
-            this.lastPanPoint = { x: e.clientX, y: e.clientY };
-            this.canvas.style.cursor = 'grabbing';
+            // Start box selection
+            if (!e.ctrlKey && !e.metaKey && !e.shiftKey) {
+                this.selectImage(null);
+                this.isBoxSelecting = true;
+                this.selectionBox = { startX: x, startY: y, endX: x, endY: y };
+                this.needsRender = true;
+            } else {
+                this.isPanning = true;
+                this.lastPanPoint = { x: e.clientX, y: e.clientY };
+                this.canvas.style.cursor = 'grabbing';
+            }
         }
     }
 
     onMouseMove(e) {
         const rect = this.canvas.getBoundingClientRect();
         const { x, y } = this.screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
-        
-        if (this.isResizing && this.selectedImage) {
+
+        if (this.isBoxSelecting) {
+            this.selectionBox.endX = x;
+            this.selectionBox.endY = y;
+            this.needsRender = true;
+        } else if (this.isResizing && this.selectedImage) {
             this.resizeImage(x, y);
             this.needsRender = true;
-        } else if (this.isDragging && this.selectedImage) {
-            let newX = x - this.dragOffset.x;
-            let newY = y - this.dragOffset.y;
-            
-            if (this.enableSnapping) {
-                const snapped = this.snapToImages(newX, newY, this.selectedImage);
-                newX = snapped.x;
-                newY = snapped.y;
-                this.snapLines = snapped.guides;
+        } else if (this.isDragging && this.selectedImages.length > 0) {
+            // Move all selected images
+            let finalX = x;
+            let finalY = y;
+
+            // Apply snapping if enabled
+            if (this.enableSnapping && this.selectedImages.length === 1) {
+                const primaryImg = this.selectedImages[0];
+                const offset = this.dragOffsets.get(primaryImg.id);
+                if (offset) {
+                    const tentativeX = x - offset.x;
+                    const tentativeY = y - offset.y;
+                    const snapResult = this.snapToImages(tentativeX, tentativeY, primaryImg);
+                    finalX = snapResult.x + offset.x;
+                    finalY = snapResult.y + offset.y;
+                    this.snapLines = snapResult.guides;
+                }
             } else {
                 this.snapLines = [];
             }
-            
-            this.selectedImage.x = newX;
-            this.selectedImage.y = newY;
+
+            // Apply movement to all selected images
+            for (const img of this.selectedImages) {
+                const offset = this.dragOffsets.get(img.id);
+                if (offset) {
+                    img.x = finalX - offset.x;
+                    img.y = finalY - offset.y;
+                }
+            }
             this.needsRender = true;
         } else if (this.isPanning) {
             const dx = e.clientX - this.lastPanPoint.x;
@@ -346,16 +409,88 @@ export class Canvas {
 
     onMouseUp(e) {
         const wasModifying = this.isDragging || this.isResizing;
+        const wasDragging = this.isDragging;
+        const wasResizing = this.isResizing;
+
+        if (wasDragging && this.selectedImage && this.dragStartPosition && this.historyManager) {
+            if (this.dragStartPosition.x !== this.selectedImage.x || this.dragStartPosition.y !== this.selectedImage.y) {
+                this.historyManager.pushAction({
+                    type: 'move',
+                    data: {
+                        id: this.selectedImage.id,
+                        oldX: this.dragStartPosition.x,
+                        oldY: this.dragStartPosition.y,
+                        newX: this.selectedImage.x,
+                        newY: this.selectedImage.y
+                    }
+                });
+            }
+        }
+
+        if (wasResizing && this.selectedImage && this.resizeStartData && this.historyManager) {
+            if (this.resizeStartData.width !== this.selectedImage.width || this.resizeStartData.height !== this.selectedImage.height) {
+                this.historyManager.pushAction({
+                    type: 'resize',
+                    data: {
+                        id: this.selectedImage.id,
+                        oldWidth: this.resizeStartData.width,
+                        oldHeight: this.resizeStartData.height,
+                        newWidth: this.selectedImage.width,
+                        newHeight: this.selectedImage.height
+                    }
+                });
+            }
+        }
+
+        if (this.isBoxSelecting && this.selectionBox) {
+            const box = this.selectionBox;
+            const boxX = Math.min(box.startX, box.endX);
+            const boxY = Math.min(box.startY, box.endY);
+            const boxWidth = Math.abs(box.endX - box.startX);
+            const boxHeight = Math.abs(box.endY - box.startY);
+
+            if (boxWidth > 5 && boxHeight > 5) {
+                this.selectImagesInBox(boxX, boxY, boxWidth, boxHeight);
+            }
+        }
+
+        const wasPanning = this.isPanning;
+
         this.isDragging = false;
         this.isResizing = false;
         this.isPanning = false;
+        this.isBoxSelecting = false;
+        this.selectionBox = null;
         this.resizeHandle = null;
         this.resizeStartData = null;
+        this.dragStartPosition = null;
         this.snapLines = [];
         this.canvas.style.cursor = 'default';
-        
+
         if (wasModifying) {
             this.notifyChange();
+        }
+
+        if (wasPanning) {
+            this.canvas.dispatchEvent(new CustomEvent('viewChanged'));
+        }
+    }
+
+    onContextMenu(e) {
+        const rect = this.canvas.getBoundingClientRect();
+        const { x, y } = this.screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
+
+        // If shift is held, add to selection
+        if (e.shiftKey) {
+            const clickedImage = this.getImageAtPoint(x, y);
+            if (clickedImage) {
+                this.selectImage(clickedImage, true);
+                e.preventDefault();
+                this.needsRender = true;
+                if (this.onSelectionChange) {
+                    this.onSelectionChange();
+                }
+            }
         }
     }
 
@@ -376,8 +511,9 @@ export class Canvas {
         this.pan.x = mouseX - (mouseX - this.pan.x) * (newZoom / this.zoom);
         this.pan.y = mouseY - (mouseY - this.pan.y) * (newZoom / this.zoom);
         this.zoom = newZoom;
-        
+
         this.needsRender = true;
+        this.canvas.dispatchEvent(new CustomEvent('viewChanged'));
     }
 
     onDrop(e) {
@@ -500,8 +636,27 @@ export class Canvas {
         };
         this.images.push(imageData);
         this.selectImage(imageData);
+        this.invalidateCullCache();
         this.needsRender = true;
+        this.render();
         this.notifyChange();
+
+        if (this.historyManager) {
+            this.historyManager.pushAction({
+                type: 'add_image',
+                data: {
+                    id: imageData.id,
+                    name: imageData.name,
+                    src: img.src,
+                    x: imageData.x,
+                    y: imageData.y,
+                    width: imageData.width,
+                    height: imageData.height,
+                    visible: imageData.visible
+                }
+            });
+        }
+
         return imageData;
     }
 
@@ -522,25 +677,135 @@ export class Canvas {
         return imageData;
     }
 
-    selectImage(img) {
-        this.selectedImage = img;
+    selectImage(img, multiSelect = false) {
+        if (!multiSelect) {
+            this.selectedImage = img;
+            this.selectedImages = img ? [img] : [];
+        } else if (img) {
+            const index = this.selectedImages.findIndex(i => i.id === img.id);
+            if (index >= 0) {
+                this.selectedImages.splice(index, 1);
+                if (this.selectedImages.length === 0) {
+                    this.selectedImage = null;
+                } else {
+                    this.selectedImage = this.selectedImages[this.selectedImages.length - 1];
+                }
+            } else {
+                this.selectedImages.push(img);
+                this.selectedImage = img;
+            }
+        }
         this.needsRender = true;
         this.canvas.dispatchEvent(new CustomEvent('imageSelected', { detail: img }));
     }
 
-    deleteImage(id) {
+    selectImagesInRange(startImg, endImg) {
+        const startIndex = this.images.indexOf(startImg);
+        const endIndex = this.images.indexOf(endImg);
+        if (startIndex === -1 || endIndex === -1) return;
+
+        const min = Math.min(startIndex, endIndex);
+        const max = Math.max(startIndex, endIndex);
+
+        this.selectedImages = [];
+        for (let i = min; i <= max; i++) {
+            if (this.images[i].visible !== false) {
+                this.selectedImages.push(this.images[i]);
+            }
+        }
+        this.selectedImage = this.selectedImages[this.selectedImages.length - 1];
+        this.needsRender = true;
+        this.canvas.dispatchEvent(new CustomEvent('imageSelected', { detail: this.selectedImage }));
+    }
+
+    selectImagesInBox(boxX, boxY, boxWidth, boxHeight) {
+        this.selectedImages = [];
+        for (const img of this.images) {
+            if (img.visible === false) continue;
+
+            const imgRight = img.x + img.width;
+            const imgBottom = img.y + img.height;
+            const boxRight = boxX + boxWidth;
+            const boxBottom = boxY + boxHeight;
+
+            if (img.x < boxRight && imgRight > boxX && img.y < boxBottom && imgBottom > boxY) {
+                this.selectedImages.push(img);
+            }
+        }
+        this.selectedImage = this.selectedImages.length > 0 ? this.selectedImages[this.selectedImages.length - 1] : null;
+        this.needsRender = true;
+    }
+
+    deleteSelectedImages() {
+        if (this.selectedImages.length === 0) return;
+
+        const idsToDelete = this.selectedImages.map(img => img.id);
+        for (const id of idsToDelete) {
+            this.deleteImage(id);
+        }
+        this.selectedImages = [];
+        this.selectedImage = null;
+        this.invalidateCullCache();
+        this.needsRender = true;
+        this.render();
+    }
+
+    isImageSelected(img) {
+        return this.selectedImages.some(i => i.id === img.id);
+    }
+
+
+    deleteImage(id, skipHistory = false) {
+        const img = this.images.find(img => img.id === id);
+        if (!img) return;
+
+        if (this.historyManager && !skipHistory) {
+            this.historyManager.pushAction({
+                type: 'delete_image',
+                data: {
+                    id: img.id,
+                    name: img.name,
+                    src: img.img.src,
+                    x: img.x,
+                    y: img.y,
+                    width: img.width,
+                    height: img.height,
+                    visible: img.visible
+                }
+            });
+        }
+
         this.images = this.images.filter(img => img.id !== id);
+
         if (this.selectedImage && this.selectedImage.id === id) {
             this.selectedImage = null;
         }
+
+        this.invalidateCullCache();
         this.needsRender = true;
-        this.notifyChange();
+        this.render();
+        if (!skipHistory) {
+            this.notifyChange();
+        }
     }
 
     toggleVisibility(id) {
         const img = this.images.find(img => img.id === id);
         if (img) {
+            const oldVisible = img.visible;
             img.visible = !img.visible;
+
+            if (this.historyManager) {
+                this.historyManager.pushAction({
+                    type: 'visibility',
+                    data: {
+                        id: img.id,
+                        oldVisible: oldVisible,
+                        newVisible: img.visible
+                    }
+                });
+            }
+
             if (this.selectedImage && this.selectedImage.id === id && !img.visible) {
                 this.selectedImage = null;
             }
@@ -572,10 +837,22 @@ export class Canvas {
         this.notifyChange();
     }
 
-    renameLayer(id, newName) {
+    renameLayer(id, newName, skipHistory = false) {
         const img = this.images.find(img => img.id === id);
         if (img) {
+            const oldName = img.name;
             img.name = newName;
+
+            if (this.historyManager && !skipHistory && oldName !== newName) {
+                this.historyManager.pushAction({
+                    type: 'rename',
+                    data: {
+                        id: img.id,
+                        oldName: oldName,
+                        newName: newName
+                    }
+                });
+            }
         }
     }
 
@@ -842,50 +1119,130 @@ export class Canvas {
             this.ctx.setLineDash([]);
         }
         
-        if (this.selectedImage && this.selectedImage.visible !== false) {
-            const img = this.selectedImage;
+        // Draw selection boxes for all selected images
+        if (this.selectedImages.length > 0) {
             this.ctx.strokeStyle = '#0066ff';
             this.ctx.lineWidth = 2 / this.zoom;
-            this.ctx.strokeRect(img.x, img.y, img.width, img.height);
-            
-            const handleRadius = 4 / this.zoom;
-            const midX = img.x + img.width / 2;
-            const midY = img.y + img.height / 2;
-            
-            this.ctx.fillStyle = '#ffffff';
-            this.ctx.strokeStyle = '#0066ff';
-            this.ctx.lineWidth = 1.5 / this.zoom;
-            
-            const handles = [
-                [img.x, img.y],
-                [midX, img.y],
-                [img.x + img.width, img.y],
-                [img.x + img.width, midY],
-                [img.x + img.width, img.y + img.height],
-                [midX, img.y + img.height],
-                [img.x, img.y + img.height],
-                [img.x, midY]
-            ];
-            
-            for (let i = 0; i < handles.length; i++) {
-                const [hx, hy] = handles[i];
-                this.ctx.beginPath();
-                this.ctx.arc(hx, hy, handleRadius, 0, Math.PI * 2);
-                this.ctx.fill();
-                this.ctx.stroke();
+
+            for (const img of this.selectedImages) {
+                if (img.visible === false) continue;
+                this.ctx.strokeRect(img.x, img.y, img.width, img.height);
+            }
+
+            // Only draw resize handles for single selection
+            if (this.selectedImages.length === 1 && this.selectedImage) {
+                const img = this.selectedImage;
+                const handleRadius = 4 / this.zoom;
+                const midX = img.x + img.width / 2;
+                const midY = img.y + img.height / 2;
+
+                this.ctx.fillStyle = '#ffffff';
+                this.ctx.strokeStyle = '#0066ff';
+                this.ctx.lineWidth = 1.5 / this.zoom;
+
+                const handles = [
+                    [img.x, img.y],
+                    [midX, img.y],
+                    [img.x + img.width, img.y],
+                    [img.x + img.width, midY],
+                    [img.x + img.width, img.y + img.height],
+                    [midX, img.y + img.height],
+                    [img.x, img.y + img.height],
+                    [img.x, midY]
+                ];
+
+                for (let i = 0; i < handles.length; i++) {
+                    const [hx, hy] = handles[i];
+                    this.ctx.beginPath();
+                    this.ctx.arc(hx, hy, handleRadius, 0, Math.PI * 2);
+                    this.ctx.fill();
+                    this.ctx.stroke();
+                }
             }
         }
-        
+
+        // Draw selection box during drag select
+        if (this.isBoxSelecting && this.selectionBox) {
+            const box = this.selectionBox;
+            const boxX = Math.min(box.startX, box.endX);
+            const boxY = Math.min(box.startY, box.endY);
+            const boxWidth = Math.abs(box.endX - box.startX);
+            const boxHeight = Math.abs(box.endY - box.startY);
+
+            this.ctx.fillStyle = 'rgba(0, 102, 255, 0.1)';
+            this.ctx.fillRect(boxX, boxY, boxWidth, boxHeight);
+
+            this.ctx.strokeStyle = '#0066ff';
+            this.ctx.lineWidth = 1 / this.zoom;
+            this.ctx.setLineDash([5 / this.zoom, 5 / this.zoom]);
+            this.ctx.strokeRect(boxX, boxY, boxWidth, boxHeight);
+            this.ctx.setLineDash([]);
+        }
+
         this.ctx.restore();
+    }
+
+    setHistoryManager(historyManager) {
+        this.historyManager = historyManager;
+    }
+
+    updateImagePosition(id, x, y, skipHistory = false) {
+        const img = this.images.find(img => img.id === id);
+        if (img) {
+            img.x = x;
+            img.y = y;
+            this.needsRender = true;
+            if (!skipHistory) {
+                this.notifyChange();
+            }
+        }
+    }
+
+    updateImageSize(id, width, height, skipHistory = false) {
+        const img = this.images.find(img => img.id === id);
+        if (img) {
+            img.width = width;
+            img.height = height;
+            this.needsRender = true;
+            if (!skipHistory) {
+                this.notifyChange();
+            }
+        }
+    }
+
+    setVisibility(id, visible, skipHistory = false) {
+        const img = this.images.find(img => img.id === id);
+        if (img) {
+            img.visible = visible;
+            if (this.selectedImage && this.selectedImage.id === id && !visible) {
+                this.selectedImage = null;
+            }
+            this.lastCullZoom = -999;
+            this.needsRender = true;
+            if (!skipHistory) {
+                this.notifyChange();
+            }
+        }
     }
 
     notifyChange() {
         this.canvas.dispatchEvent(new CustomEvent('canvasChanged'));
     }
 
-    setBackgroundColor(color) {
+    setBackgroundColor(color, skipHistory = false) {
+        const oldColor = this.bgColor;
         this.bgColor = color;
         this.needsRender = true;
+
+        if (this.historyManager && !skipHistory && oldColor !== color) {
+            this.historyManager.pushAction({
+                type: 'bg_color',
+                data: {
+                    oldColor: oldColor,
+                    newColor: color
+                }
+            });
+        }
     }
 
     getImages() {
@@ -895,7 +1252,14 @@ export class Canvas {
     clear() {
         this.images = [];
         this.selectedImage = null;
+        this.selectedImages = [];
         this.visibleImages = [];
+        this.needsRender = true;
+    }
+
+    resetZoom() {
+        this.zoom = 1;
+        this.pan = { x: 0, y: 0 };
         this.needsRender = true;
     }
 

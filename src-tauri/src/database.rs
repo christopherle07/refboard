@@ -41,6 +41,8 @@ pub struct Board {
     pub assets: Vec<Asset>,
     #[serde(default)]
     pub thumbnail: Option<String>,
+    #[serde(default)]
+    pub view_state: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -63,6 +65,7 @@ pub struct BoardUpdate {
     pub layers: Option<Vec<Layer>>,
     pub assets: Option<Vec<Asset>>,
     pub thumbnail: Option<String>,
+    pub view_state: Option<serde_json::Value>,
 }
 
 fn get_boards_dir(app: &AppHandle) -> PathBuf {

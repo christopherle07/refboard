@@ -1,5 +1,6 @@
 import { boardManager } from './board-manager.js';
 import { showCreateBoardModal, showDeleteConfirm } from './modal.js';
+import { showToast } from './modal-utils.js';
 
 let currentPage = 1;
 const BOARDS_PER_PAGE = 14;
@@ -100,9 +101,7 @@ function setupEventListeners() {
         }
     });
     
-    document.getElementById('open-btn').addEventListener('click', () => {
-        console.log('Open board feature - coming soon');
-    });
+    document.getElementById('import-board-btn').addEventListener('click', importBoardAsNew);
     
     document.getElementById('home-btn').addEventListener('click', () => {
         // Already on home
@@ -186,4 +185,54 @@ async function deleteBoard(boardId) {
 
 function openBoard(boardId) {
     window.location.href = `editor.html?id=${boardId}`;
+}
+
+function importBoardAsNew() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.aref,application/json';
+
+    input.onchange = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = async (event) => {
+            try {
+                const importData = JSON.parse(event.target.result);
+
+                if (!importData.version || !importData.layers) {
+                    showToast('Invalid .aref file format', 'error');
+                    return;
+                }
+
+                const boardName = importData.name || file.name.replace('.aref', '');
+                const bgColor = importData.bgColor || '#ffffff';
+
+                const newBoard = await boardManager.createBoard(boardName, bgColor);
+
+                if (importData.layers && importData.layers.length > 0) {
+                    await boardManager.updateBoard(newBoard.id, { layers: importData.layers });
+                }
+
+                if (importData.assets && importData.assets.length > 0) {
+                    await boardManager.updateBoard(newBoard.id, { assets: importData.assets });
+                }
+
+                showToast(`Board "${boardName}" imported successfully`, 'success');
+                renderBoards();
+
+                setTimeout(() => {
+                    openBoard(newBoard.id);
+                }, 500);
+
+            } catch (err) {
+                console.error('Import error:', err);
+                showToast('Failed to import board: ' + err.message, 'error');
+            }
+        };
+        reader.readAsText(file);
+    };
+
+    input.click();
 }
