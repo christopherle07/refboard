@@ -24,6 +24,7 @@ pub fn create_board(app: AppHandle, name: String, bg_color: String) -> Result<Bo
         assets: Vec::new(),
         thumbnail: None,
         view_state: None,
+        strokes: None,
     };
     database::save_board(&app, &board)?;
     Ok(board)
@@ -50,6 +51,9 @@ pub fn update_board(app: AppHandle, id: u64, updates: BoardUpdate) -> Result<Boa
     }
     if let Some(view_state) = updates.view_state {
         board.view_state = Some(view_state);
+    }
+    if let Some(strokes) = updates.strokes {
+        board.strokes = Some(strokes);
     }
 
     board.updated_at = database::now_millis();

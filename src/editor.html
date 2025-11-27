@@ -30,7 +30,7 @@
                 <button class="back-arrow-btn" id="back-home-btn" title="Back to Home">←</button>
                 <div class="board-name-wrapper">
                     <h2 class="board-name" id="board-name">Untitled Board</h2>
-                    <button class="board-dropdown-btn" id="board-dropdown-btn">▼</button>
+                    <button class="board-dropdown-btn" id="board-dropdown-btn"></button>
                     <div class="board-dropdown-menu" id="board-dropdown-menu">
                         <div class="dropdown-item" id="dropdown-rename">Rename Board</div>
                         <div class="dropdown-separator"></div>
@@ -47,7 +47,7 @@
 
             <div class="sidebar-content">
                 <div class="tab-panel active" data-panel="layers">
-                    <div class="panel-section">
+                    <div class="panel-section layers-section-scrollable">
                         <div class="panel-section-header">
                             <h3>Layers</h3>
                             <div class="header-actions">
@@ -61,10 +61,112 @@
                         </div>
                     </div>
 
-                    <div class="properties-section">
+                    <div class="tools-section">
+                        <div class="tools-section-header">
+                            <h3>Tools</h3>
+                        </div>
+                        <div class="tools-grid">
+                            <button class="tool-btn" id="drawing-mode-btn" title="Drawing Mode (Toggle Toolbar)">
+                                <svg viewBox="0 0 24 24" stroke-width="2">
+                                    <path d="M12 19l7-7 3 3-7 7-3-3z"></path>
+                                    <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"></path>
+                                    <path d="M2 2l7.586 7.586"></path>
+                                    <circle cx="11" cy="11" r="2"></circle>
+                                </svg>
+                            </button>
+                            <button class="tool-btn" id="text-tool-btn" title="Text Box Tool">
+                                <svg viewBox="0 0 24 24" stroke-width="2">
+                                    <path d="M4 7V4h16v3M9 20h6M12 4v16"></path>
+                                </svg>
+                            </button>
+                            <button class="tool-btn" id="shape-tool-btn" title="Shape Tool">
+                                <svg viewBox="0 0 24 24" stroke-width="2">
+                                    <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="properties-section" id="default-properties">
                         <div class="property-row">
                             <label>Background</label>
                             <input type="color" id="bg-color" value="#ffffff">
+                        </div>
+                    </div>
+
+                    <div class="object-properties-section" id="object-properties" style="display: none;">
+                        <div class="properties-header">
+                            <h3 id="object-properties-title">Properties</h3>
+                            <button class="close-properties-btn" id="close-properties-btn">×</button>
+                        </div>
+                        <div class="properties-content" id="properties-content">
+                            <!-- Shape properties -->
+                            <div class="shape-properties" id="shape-properties" style="display: none;">
+                                <div class="property-row">
+                                    <label>Shape Type</label>
+                                    <select id="shape-type" class="property-select">
+                                        <option value="rectangle">Rectangle</option>
+                                        <option value="circle">Circle</option>
+                                        <option value="triangle">Triangle</option>
+                                        <option value="polygon">Polygon</option>
+                                    </select>
+                                </div>
+                                <div class="property-row">
+                                    <label>Fill Color</label>
+                                    <input type="color" id="shape-fill-color" value="#3b82f6">
+                                </div>
+                                <div class="property-row">
+                                    <label>Stroke Color</label>
+                                    <input type="color" id="shape-stroke-color" value="#000000">
+                                </div>
+                                <div class="property-row">
+                                    <label>Stroke Width</label>
+                                    <input type="number" id="shape-stroke-width" min="0" max="20" value="2" class="property-input">
+                                </div>
+                                <div class="property-row" id="polygon-sides-row" style="display: none;">
+                                    <label>Sides</label>
+                                    <input type="number" id="polygon-sides" min="3" max="12" value="6" class="property-input">
+                                </div>
+                            </div>
+
+                            <!-- Text properties -->
+                            <div class="text-properties" id="text-properties" style="display: none;">
+                                <div class="property-row">
+                                    <label>Text</label>
+                                    <textarea id="text-content" class="property-textarea" rows="3"></textarea>
+                                </div>
+                                <div class="property-row">
+                                    <label>Font Family</label>
+                                    <select id="text-font" class="property-select">
+                                        <option value="Arial">Arial</option>
+                                        <option value="Helvetica">Helvetica</option>
+                                        <option value="Times New Roman">Times New Roman</option>
+                                        <option value="Courier New">Courier New</option>
+                                        <option value="Georgia">Georgia</option>
+                                        <option value="Verdana">Verdana</option>
+                                    </select>
+                                </div>
+                                <div class="property-row">
+                                    <label>Font Size</label>
+                                    <input type="number" id="text-size" min="8" max="200" value="16" class="property-input">
+                                </div>
+                                <div class="property-row">
+                                    <label>Color</label>
+                                    <input type="color" id="text-color" value="#000000">
+                                </div>
+                                <div class="property-row">
+                                    <label>Background</label>
+                                    <input type="color" id="text-bg-color" value="#ffffff">
+                                </div>
+                                <div class="property-row">
+                                    <label>Alignment</label>
+                                    <div class="alignment-buttons">
+                                        <button class="alignment-btn active" data-align="left">L</button>
+                                        <button class="alignment-btn" data-align="center">C</button>
+                                        <button class="alignment-btn" data-align="right">R</button>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -89,7 +191,59 @@
         </aside>
 
         <main class="canvas-area">
-            <button class="floating-canvas-btn" id="open-floating-btn" title="Open Canvas Window">⊕</button>
+            <button class="floating-canvas-btn" id="open-floating-btn" title="Open Canvas Window">+</button>
+
+            <div class="drawing-toolbar" id="drawing-toolbar">
+                <div class="toolbar-group">
+                    <button class="toolbar-btn" id="draw-pen-btn" title="Pen Tool">
+                        P
+                    </button>
+                    <button class="toolbar-btn" id="draw-highlighter-btn" title="Highlighter Tool">
+                       H
+                    </button>
+                    <button class="toolbar-btn" id="draw-eraser-btn" title="Eraser Tool">
+                        E
+                    </button>
+                </div>
+
+                <div class="toolbar-separator"></div>
+
+                <div class="toolbar-group">
+                    <input type="color" id="draw-color-picker" class="color-picker-input" value="#000000" title="Drawing Color">
+                    <div class="size-control">
+                        <label class="size-label" id="draw-size-label">Size:</label>
+                        <div class="size-input-group">
+                            <input type="number" id="draw-size-input" class="size-input" min="1" max="500" value="2">
+                            <input type="range" id="draw-size-slider" class="size-slider" min="1" max="100" value="2">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="toolbar-separator"></div>
+
+                <div class="toolbar-group">
+                    <div class="eraser-mode-toggle" id="eraser-mode-toggle" style="display: none;">
+                        <label class="toggle-label">Erase:</label>
+                        <div class="toggle-buttons">
+                            <button class="toggle-option active" data-mode="strokes">Strokes</button>
+                            <button class="toggle-option" data-mode="pixels">Pixels</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="toolbar-separator" id="clear-separator"></div>
+
+                <div class="toolbar-group">
+                    <button class="toolbar-btn" id="draw-clear-btn" title="Clear All Strokes">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="3 6 5 6 21 6"></polyline>
+                            <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6"></path>
+                            <path d="M10 11v6"></path>
+                            <path d="M14 11v6"></path>
+                        </svg>
+                    </button>
+                </div>
+            </div>
 
             <div class="canvas-container" id="canvas-container">
                 <canvas id="main-canvas"></canvas>

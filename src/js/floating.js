@@ -4,8 +4,6 @@ import { boardManager } from './board-manager.js';
 let canvas;
 let currentBoardId;
 let isPinned = false;
-let overlayMode = false;
-let overlayOpacity = 0.7;
 let saveTimeout = null;
 let pendingSave = false;
 
@@ -31,137 +29,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     await initFloatingWindow();
     setupTitlebarControls();
+    setupDrawingToolbar();
+    setupToolbarToggle();
     setupContextMenu();
     setupDragAndDrop();
-    setupKeyboardShortcuts();
-    injectDisclaimerStyles();
 });
-
-function injectDisclaimerStyles() {
-    if (document.querySelector('#disclaimer-styles')) return;
-    
-    const style = document.createElement('style');
-    style.id = 'disclaimer-styles';
-    style.textContent = `
-        .overlay-disclaimer {
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: #1a1a1a;
-            color: #ffffff;
-            padding: 32px 40px;
-            border-radius: 12px;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
-            z-index: 100000;
-            max-width: 500px;
-            border: 2px solid #ff6b6b;
-            animation: disclaimerFadeIn 0.3s ease;
-            pointer-events: auto;
-        }
-        
-        @keyframes disclaimerFadeIn {
-            from {
-                opacity: 0;
-                transform: translate(-50%, -50%) scale(0.9);
-            }
-            to {
-                opacity: 1;
-                transform: translate(-50%, -50%) scale(1);
-            }
-        }
-        
-        .disclaimer-title {
-            font-size: 18px;
-            font-weight: 700;
-            margin-bottom: 16px;
-            color: #ff6b6b;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-        
-        .disclaimer-message {
-            font-size: 15px;
-            line-height: 1.6;
-            margin-bottom: 24px;
-            color: #e0e0e0;
-        }
-        
-        .disclaimer-message strong {
-            color: #ffffff;
-            background: rgba(255, 107, 107, 0.2);
-            padding: 2px 6px;
-            border-radius: 4px;
-            font-family: 'Courier New', monospace;
-        }
-        
-        .disclaimer-buttons {
-            display: flex;
-            gap: 12px;
-            justify-content: flex-end;
-        }
-        
-        .disclaimer-btn {
-            padding: 12px 24px;
-            border: none;
-            border-radius: 8px;
-            font-size: 14px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-        
-        .disclaimer-btn-cancel {
-            background: #3a3a3a;
-            color: #ffffff;
-        }
-        
-        .disclaimer-btn-cancel:hover {
-            background: #4a4a4a;
-        }
-        
-        .disclaimer-btn-confirm {
-            background: #ff6b6b;
-            color: #ffffff;
-        }
-        
-        .disclaimer-btn-confirm:hover {
-            background: #ff5252;
-        }
-    `;
-    document.head.appendChild(style);
-}
-
-function showOverlayDisclaimer() {
-    return new Promise((resolve) => {
-        const disclaimer = document.createElement('div');
-        disclaimer.className = 'overlay-disclaimer';
-        disclaimer.innerHTML = `
-            <div class="disclaimer-title">⚠️ Trace Mode Disclaimer</div>
-            <div class="disclaimer-message">
-                To disable trace mode, you must refocus this window from your taskbar and press <strong>CTRL + L</strong>
-                <br><br>
-                While in trace mode, this window will be click-through and semi-transparent for tracing references.
-            </div>
-            <div class="disclaimer-buttons">
-                <button class="disclaimer-btn disclaimer-btn-cancel">Cancel</button>
-                <button class="disclaimer-btn disclaimer-btn-confirm">I Understand</button>
-            </div>
-        `;
-        
-        document.body.appendChild(disclaimer);
-        
-        disclaimer.querySelector('.disclaimer-btn-cancel').addEventListener('click', () => {
-            disclaimer.remove();
-            resolve(false);
-        });
-        
-        disclaimer.querySelector('.disclaimer-btn-confirm').addEventListener('click', () => {
-            disclaimer.remove();
-            resolve(true);
-        });
-    });
-}
 
 async function initFloatingWindow() {
     await boardManager.loadBoards();
@@ -180,8 +52,19 @@ async function initFloatingWindow() {
     updateTitlebarTheme(bgColor);
     
     await loadLayers(board.layers);
-    
+
+    // Load strokes if they exist
+    if (board.strokes && board.strokes.length > 0) {
+        canvas.loadStrokes(board.strokes);
+    }
+
+    // Load text/shape objects if they exist
+    if (board.objects && board.objects.length > 0) {
+        canvas.objectsManager.loadObjects(board.objects);
+    }
+
     canvas.canvas.addEventListener('canvasChanged', scheduleSave);
+    canvas.canvas.addEventListener('objectsChanged', scheduleSave);
 }
 
 function setupDragAndDrop() {
@@ -287,10 +170,6 @@ async function setupTitlebarControls() {
         await currentWindow.setAlwaysOnTop(false);
         isPinned = false;
         
-        document.getElementById('overlay-btn').addEventListener('click', async () => {
-            await toggleOverlayMode();
-        });
-        
         document.getElementById('pin-btn').addEventListener('click', async () => {
             isPinned = !isPinned;
             await currentWindow.setAlwaysOnTop(isPinned);
@@ -302,72 +181,11 @@ async function setupTitlebarControls() {
         });
         
         document.getElementById('close-btn').addEventListener('click', async () => {
-            if (overlayMode) {
-                await toggleOverlayMode();
-            }
             saveNow();
             await currentWindow.close();
         });
     } catch (err) {
         console.error('Titlebar setup error:', err);
-    }
-}
-
-function setupKeyboardShortcuts() {
-    document.addEventListener('keydown', async (e) => {
-        if (e.ctrlKey && e.key === 'l') {
-            e.preventDefault();
-            await toggleOverlayMode();
-        }
-    });
-}
-
-async function toggleOverlayMode() {
-    if (!window.__TAURI__) return;
-    
-    if (!overlayMode) {
-        const confirmed = await showOverlayDisclaimer();
-        if (!confirmed) {
-            return;
-        }
-    }
-    
-    overlayMode = !overlayMode;
-    
-    try {
-        const { getCurrentWindow } = window.__TAURI__.window;
-        const currentWindow = getCurrentWindow();
-        
-        await window.__TAURI__.core.invoke('set_overlay_mode', {
-            enabled: overlayMode,
-            opacity: overlayOpacity
-        });
-        
-        if (overlayMode) {
-            isPinned = true;
-            document.getElementById('pin-btn').classList.add('pinned');
-        }
-        
-        updateOverlayUI();
-        
-    } catch (err) {
-        console.error('Failed to toggle overlay mode:', err);
-        overlayMode = !overlayMode;
-    }
-}
-
-function updateOverlayUI() {
-    const indicator = document.getElementById('overlay-indicator');
-    const overlayBtn = document.getElementById('overlay-btn');
-    
-    if (overlayMode) {
-        indicator.classList.add('active');
-        indicator.textContent = 'TRACE MODE ACTIVE';
-        overlayBtn.classList.add('active');
-    } else {
-        indicator.classList.remove('active');
-        indicator.textContent = '';
-        overlayBtn.classList.remove('active');
     }
 }
 
@@ -451,9 +269,7 @@ function setupContextMenu() {
     
     canvas.canvas.addEventListener('contextmenu', (e) => {
         e.preventDefault();
-        
-        if (overlayMode) return;
-        
+
         hiddenLayersMenu.classList.remove('show');
         
         const rect = canvas.canvas.getBoundingClientRect();
@@ -551,7 +367,7 @@ function saveNow() {
         clearTimeout(saveTimeout);
         saveTimeout = null;
     }
-    
+
     const images = canvas.getImages();
     const layers = images.map(img => ({
         id: img.id,
@@ -563,8 +379,10 @@ function saveNow() {
         height: img.height,
         visible: img.visible !== false
     }));
+    const strokes = canvas.getStrokes();
+    const objects = canvas.objectsManager.getObjects();
     const thumbnail = canvas.generateThumbnail(200, 150);
-    boardManager.updateBoard(currentBoardId, { layers, thumbnail });
+    boardManager.updateBoard(currentBoardId, { layers, strokes, objects, thumbnail });
 }
 
 function updateTitlebarTheme(bgColor) {
@@ -573,11 +391,165 @@ function updateTitlebarTheme(bgColor) {
     const g = parseInt(hex.substr(2, 2), 16);
     const b = parseInt(hex.substr(4, 2), 16);
     const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-    
+
     const titlebar = document.querySelector('.titlebar');
     if (luminance < 0.5) {
         titlebar.classList.add('dark-mode');
     } else {
         titlebar.classList.remove('dark-mode');
     }
+}
+
+function setupToolbarToggle() {
+    const toggleBtn = document.getElementById('toolbar-toggle-btn');
+    const toolbar = document.getElementById('drawing-toolbar');
+
+    // Load saved state from localStorage
+    const toolbarVisible = localStorage.getItem('floating_toolbar_visible') !== 'false';
+
+    if (!toolbarVisible) {
+        toolbar.style.display = 'none';
+    } else {
+        toggleBtn.classList.add('active');
+    }
+
+    toggleBtn.addEventListener('click', () => {
+        const isVisible = toolbar.style.display !== 'none';
+
+        if (isVisible) {
+            toolbar.style.display = 'none';
+            toggleBtn.classList.remove('active');
+            localStorage.setItem('floating_toolbar_visible', 'false');
+        } else {
+            toolbar.style.display = 'flex';
+            toggleBtn.classList.add('active');
+            localStorage.setItem('floating_toolbar_visible', 'true');
+        }
+    });
+}
+
+function setupDrawingToolbar() {
+    const penBtn = document.getElementById('draw-pen-btn');
+    const highlighterBtn = document.getElementById('draw-highlighter-btn');
+    const eraserBtn = document.getElementById('draw-eraser-btn');
+    const colorPicker = document.getElementById('draw-color-picker');
+    const sizeSlider = document.getElementById('draw-size-slider');
+    const sizeInput = document.getElementById('draw-size-input');
+    const clearBtn = document.getElementById('draw-clear-btn');
+    const eraserModeToggle = document.getElementById('eraser-mode-toggle');
+
+    let currentTool = null;
+
+    function updateSizeControls(size) {
+        sizeInput.value = size;
+        sizeSlider.value = Math.min(size, 100);
+        sizeSlider.max = size > 100 ? size : 100;
+    }
+
+    // Size input handler
+    sizeInput.addEventListener('input', (e) => {
+        let size = parseInt(e.target.value) || 1;
+        size = Math.max(1, Math.min(500, size));
+
+        sizeSlider.value = Math.min(size, 100);
+        if (size > 100) {
+            sizeSlider.max = size;
+        }
+
+        if (currentTool === 'pen') {
+            canvas.setPenSize(size);
+        } else if (currentTool === 'highlighter') {
+            canvas.setHighlighterSize(size);
+        } else if (currentTool === 'eraser') {
+            canvas.setEraserSize(size);
+        }
+    });
+
+    // Size slider handler
+    sizeSlider.addEventListener('input', (e) => {
+        const size = parseInt(e.target.value);
+        sizeInput.value = size;
+
+        if (currentTool === 'pen') {
+            canvas.setPenSize(size);
+        } else if (currentTool === 'highlighter') {
+            canvas.setHighlighterSize(size);
+        } else if (currentTool === 'eraser') {
+            canvas.setEraserSize(size);
+        }
+    });
+
+    // Eraser mode toggle
+    eraserModeToggle.querySelectorAll('.toggle-option').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const mode = btn.dataset.mode;
+
+            // Update active state
+            eraserModeToggle.querySelectorAll('.toggle-option').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+
+            // Set eraser mode
+            canvas.setEraserMode(mode);
+        });
+    });
+
+    function deactivateAllTools() {
+        penBtn.classList.remove('active');
+        highlighterBtn.classList.remove('active');
+        eraserBtn.classList.remove('active');
+        eraserModeToggle.style.display = 'none';
+        document.getElementById('clear-separator').style.display = 'block';
+        canvas.setDrawingMode(null);
+        currentTool = null;
+    }
+
+    penBtn.addEventListener('click', () => {
+        if (currentTool === 'pen') {
+            deactivateAllTools();
+        } else {
+            deactivateAllTools();
+            penBtn.classList.add('active');
+            canvas.setDrawingMode('pen');
+            currentTool = 'pen';
+            updateSizeControls(canvas.penSize);
+        }
+    });
+
+    highlighterBtn.addEventListener('click', () => {
+        if (currentTool === 'highlighter') {
+            deactivateAllTools();
+        } else {
+            deactivateAllTools();
+            highlighterBtn.classList.add('active');
+            canvas.setDrawingMode('highlighter');
+            currentTool = 'highlighter';
+            updateSizeControls(canvas.highlighterSize);
+        }
+    });
+
+    eraserBtn.addEventListener('click', () => {
+        if (currentTool === 'eraser') {
+            deactivateAllTools();
+        } else {
+            deactivateAllTools();
+            eraserBtn.classList.add('active');
+            eraserModeToggle.style.display = 'flex';
+            document.getElementById('clear-separator').style.display = 'none';
+            canvas.setDrawingMode('eraser');
+            currentTool = 'eraser';
+            updateSizeControls(canvas.eraserSize);
+        }
+    });
+
+    colorPicker.addEventListener('input', (e) => {
+        canvas.setPenColor(e.target.value);
+        canvas.setHighlighterColor(e.target.value);
+    });
+
+    clearBtn.addEventListener('click', () => {
+        if (confirm('Clear all strokes? This cannot be undone.')) {
+            canvas.clearStrokes();
+            scheduleSave();
+        }
+    });
 }

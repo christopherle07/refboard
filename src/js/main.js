@@ -120,6 +120,7 @@ function setupEventListeners() {
     } else {
         console.error('Settings button not found in DOM!');
     }
+
 }
 
 function renderBoards() {

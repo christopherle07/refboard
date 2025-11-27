@@ -128,6 +128,7 @@ function setupNavigation() {
             window.location.href = 'index.html';
         });
     }
+
 }
 
 function setupSettingsControls() {
@@ -204,24 +205,6 @@ function setupSettingsControls() {
             }
             saveSettings(settings);
             alert('All "Don\'t show again" choices have been reset.');
-        });
-    }
-    
-    const autosaveIntervalSelect = document.getElementById('autosave-interval');
-    if (autosaveIntervalSelect) {
-        autosaveIntervalSelect.value = settings.autosaveInterval;
-        autosaveIntervalSelect.addEventListener('change', (e) => {
-            settings.autosaveInterval = parseInt(e.target.value);
-            saveSettings(settings);
-        });
-    }
-    
-    const thumbnailQualitySelect = document.getElementById('thumbnail-quality');
-    if (thumbnailQualitySelect) {
-        thumbnailQualitySelect.value = settings.thumbnailQuality;
-        thumbnailQualitySelect.addEventListener('change', (e) => {
-            settings.thumbnailQuality = parseFloat(e.target.value);
-            saveSettings(settings);
         });
     }
 }

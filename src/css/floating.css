@@ -49,23 +49,6 @@ body {
     color: rgba(255, 255, 255, 0.8);
 }
 
-.overlay-indicator {
-    position: absolute;
-    left: 50%;
-    transform: translateX(-50%);
-    font-size: 10px;
-    font-weight: 700;
-    color: #ff6b6b;
-    letter-spacing: 1px;
-    opacity: 0;
-    transition: opacity 0.3s;
-    pointer-events: none;
-}
-
-.overlay-indicator.active {
-    opacity: 1;
-}
-
 .titlebar-controls {
     display: flex;
     gap: 8px;
@@ -110,11 +93,6 @@ body {
     color: #0066ff;
 }
 
-.titlebar-btn.active {
-    background: rgba(255, 107, 107, 0.2);
-    color: #ff6b6b;
-}
-
 .floating-container {
     width: 100vw;
     height: 100vh;
@@ -130,4 +108,205 @@ body {
 
 #floating-canvas:active {
     cursor: grabbing;
+}
+
+/* Drawing Toolbar */
+.drawing-toolbar {
+    position: absolute;
+    top: 48px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 8px 12px;
+    box-shadow: 0 4px 12px var(--shadow);
+    z-index: 10;
+}
+
+.toolbar-group {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.toolbar-separator {
+    width: 1px;
+    height: 24px;
+    background: var(--border-color);
+}
+
+.toolbar-btn {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    cursor: pointer;
+    color: var(--text-primary);
+    transition: all 0.15s;
+    padding: 0;
+}
+
+.toolbar-btn:hover {
+    background: var(--bg-hover);
+    border-color: var(--border-color-hover);
+}
+
+.toolbar-btn.active {
+    background: #0d6efd;
+    border-color: #0d6efd;
+    color: white;
+}
+
+.toolbar-btn svg {
+    pointer-events: none;
+}
+
+.color-picker-input {
+    width: 32px;
+    height: 32px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    cursor: pointer;
+    padding: 2px;
+    background: var(--bg-secondary);
+}
+
+.color-picker-input::-webkit-color-swatch-wrapper {
+    padding: 0;
+}
+
+.color-picker-input::-webkit-color-swatch {
+    border: none;
+    border-radius: 4px;
+}
+
+.size-control {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-left: 4px;
+}
+
+.size-label {
+    font-size: 10px;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.size-input-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.size-input {
+    width: 50px;
+    height: 24px;
+    padding: 2px 4px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    font-size: 11px;
+    text-align: center;
+}
+
+.size-input:focus {
+    outline: none;
+    border-color: #0d6efd;
+}
+
+.size-slider {
+    width: 80px;
+    height: 4px;
+    -webkit-appearance: none;
+    appearance: none;
+    background: var(--bg-tertiary);
+    border-radius: 2px;
+    outline: none;
+}
+
+.size-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    background: #0d6efd;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.size-slider::-webkit-slider-thumb:hover {
+    background: #0b5ed7;
+}
+
+.size-slider::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    background: #0d6efd;
+    border-radius: 50%;
+    cursor: pointer;
+    border: none;
+    transition: background 0.15s;
+}
+
+.size-slider::-moz-range-thumb:hover {
+    background: #0b5ed7;
+}
+
+/* Eraser Mode Toggle */
+.eraser-mode-toggle {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.toggle-label {
+    font-size: 10px;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.toggle-buttons {
+    display: flex;
+    gap: 2px;
+    background: var(--bg-tertiary);
+    border-radius: 4px;
+    padding: 2px;
+}
+
+.toggle-option {
+    padding: 4px 10px;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 11px;
+    font-weight: 500;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.toggle-option:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+.toggle-option.active {
+    background: #0d6efd;
+    color: white;
+}
+
+.titlebar-btn.active {
+    background: rgba(13, 110, 253, 0.15);
+    color: #0d6efd;
 }

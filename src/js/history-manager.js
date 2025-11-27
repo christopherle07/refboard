@@ -123,6 +123,29 @@ export class HistoryManager {
             case 'bg_color':
                 this.canvas.setBackgroundColor(action.data.oldColor, true);
                 break;
+
+            case 'stroke_add':
+                // Remove the last added stroke
+                this.canvas.undoStroke();
+                break;
+
+            case 'strokes_erase':
+                // Restore erased strokes
+                if (action.strokes && action.strokes.length > 0) {
+                    this.canvas.strokes.push(...action.strokes);
+                    this.canvas.redrawDrawingLayer();
+                    this.canvas.needsRender = true;
+                }
+                break;
+
+            case 'strokes_clear':
+                // Restore all cleared strokes
+                if (action.strokes) {
+                    this.canvas.strokes = [...action.strokes];
+                    this.canvas.redrawDrawingLayer();
+                    this.canvas.needsRender = true;
+                }
+                break;
         }
 
         this.canvas.needsRender = true;
@@ -164,6 +187,30 @@ export class HistoryManager {
 
             case 'bg_color':
                 this.canvas.setBackgroundColor(action.data.newColor, true);
+                break;
+
+            case 'stroke_add':
+                // Re-add the stroke
+                if (action.stroke) {
+                    this.canvas.redoStroke(action.stroke);
+                }
+                break;
+
+            case 'strokes_erase':
+                // Re-erase the strokes (remove them again)
+                if (action.strokes && action.strokes.length > 0) {
+                    const strokeIds = action.strokes.map(s => s.id);
+                    this.canvas.strokes = this.canvas.strokes.filter(s => !strokeIds.includes(s.id));
+                    this.canvas.redrawDrawingLayer();
+                    this.canvas.needsRender = true;
+                }
+                break;
+
+            case 'strokes_clear':
+                // Clear strokes again
+                this.canvas.strokes = [];
+                this.canvas.redrawDrawingLayer();
+                this.canvas.needsRender = true;
                 break;
         }
 

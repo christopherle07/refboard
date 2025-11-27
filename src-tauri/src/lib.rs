@@ -1,6 +1,5 @@
 mod commands;
 mod database;
-mod overlay;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -16,7 +15,6 @@ pub fn run() {
             commands::add_to_all_assets,
             commands::delete_from_all_assets,
             commands::delete_board_asset,
-            overlay::set_overlay_mode,
         ])
         .setup(|app| {
             database::init_storage(app.handle())?;

@@ -1,3 +1,5 @@
+import { CanvasObjectsManager } from './canvas-objects.js';
+
 export class Canvas {
     constructor(canvasElement) {
         this.canvas = canvasElement;
@@ -40,6 +42,24 @@ export class Canvas {
 
         this.historyManager = null;
         this.dragStartPosition = null;
+
+        // Drawing state
+        this.strokes = [];
+        this.currentStroke = null;
+        this.isDrawing = false;
+        this.drawingMode = null; // null, 'pen', 'highlighter', 'eraser'
+        this.eraserMode = 'strokes'; // 'strokes' or 'pixels'
+        this.drawingColor = '#000000';
+        this.penSize = 2;
+        this.highlighterSize = 20;
+        this.eraserSize = 20;
+
+        // Create offscreen canvas for drawing layer
+        this.drawingCanvas = document.createElement('canvas');
+        this.drawingCtx = this.drawingCanvas.getContext('2d');
+
+        // Text and shapes manager
+        this.objectsManager = new CanvasObjectsManager(this);
 
         this.setupCanvas();
         this.setupEventListeners();
@@ -144,8 +164,21 @@ export class Canvas {
 
     resizeCanvas() {
         const container = this.canvas.parentElement;
-        this.canvas.width = container.clientWidth;
-        this.canvas.height = container.clientHeight;
+        const width = container.clientWidth;
+        const height = container.clientHeight;
+
+        this.canvas.width = width;
+        this.canvas.height = height;
+
+        // Resize drawing canvas to match and redraw strokes
+        this.drawingCanvas.width = width;
+        this.drawingCanvas.height = height;
+
+        // Redraw all strokes on the new drawing canvas
+        if (this.strokes.length > 0) {
+            this.redrawDrawingLayer();
+        }
+
         this.updateViewportBounds();
         this.needsRender = true;
     }
@@ -166,6 +199,9 @@ export class Canvas {
         this.canvas.addEventListener('mousemove', this.onMouseMove.bind(this));
         this.canvas.addEventListener('mouseup', this.onMouseUp.bind(this));
         this.canvas.addEventListener('mouseleave', this.onMouseUp.bind(this));
+        this.canvas.addEventListener('dblclick', this.onDoubleClick.bind(this));
+        // Add window mouseup to catch cases where mouse is released outside canvas
+        window.addEventListener('mouseup', this.onMouseUp.bind(this));
         this.canvas.addEventListener('wheel', this.onWheel.bind(this), { passive: false });
         this.canvas.addEventListener('contextmenu', this.onContextMenu.bind(this));
         
@@ -272,7 +308,18 @@ export class Canvas {
     onMouseDown(e) {
         const rect = this.canvas.getBoundingClientRect();
         const { x, y } = this.screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
-        
+
+        // Handle text/shape objects first
+        if (this.objectsManager.handleMouseDown(e, { x, y })) {
+            return;
+        }
+
+        // Handle drawing mode
+        if (this.drawingMode && e.button === 0) {
+            this.startDrawing(x, y);
+            return;
+        }
+
         if (e.button === 1 || (e.button === 0 && e.key === ' ')) {
             e.preventDefault();
             this.isPanning = true;
@@ -280,7 +327,7 @@ export class Canvas {
             this.canvas.style.cursor = 'grabbing';
             return;
         }
-        
+
         if (e.button === 2) {
             // Don't pan if shift is held (for multi-select)
             if (!e.shiftKey) {
@@ -357,6 +404,15 @@ export class Canvas {
         const rect = this.canvas.getBoundingClientRect();
         const { x, y } = this.screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
 
+        // Handle text/shape object dragging
+        this.objectsManager.handleMouseMove(e, { x, y });
+
+        // Handle drawing mode
+        if (this.isDrawing) {
+            this.continueDrawing(x, y);
+            return;
+        }
+
         if (this.isBoxSelecting) {
             this.selectionBox.endX = x;
             this.selectionBox.endY = y;
@@ -408,6 +464,17 @@ export class Canvas {
     }
 
     onMouseUp(e) {
+        // Handle text/shape objects
+        const rect = this.canvas.getBoundingClientRect();
+        const { x, y } = this.screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
+        this.objectsManager.handleMouseUp(e, { x, y });
+
+        // Handle drawing mode
+        if (this.isDrawing) {
+            this.endDrawing();
+            return;
+        }
+
         const wasModifying = this.isDragging || this.isResizing;
         const wasDragging = this.isDragging;
         const wasResizing = this.isResizing;
@@ -474,6 +541,12 @@ export class Canvas {
         if (wasPanning) {
             this.canvas.dispatchEvent(new CustomEvent('viewChanged'));
         }
+    }
+
+    onDoubleClick(e) {
+        const rect = this.canvas.getBoundingClientRect();
+        const { x, y } = this.screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
+        this.objectsManager.handleDoubleClick(e, { x, y });
     }
 
     onContextMenu(e) {
@@ -1179,6 +1252,43 @@ export class Canvas {
             this.ctx.setLineDash([]);
         }
 
+        // Redraw the offscreen drawing layer with current pan/zoom
+        if (this.strokes.length > 0 || (this.currentStroke && this.currentStroke.points.length > 0)) {
+            this.redrawDrawingLayer();
+
+            // Also render current stroke to offscreen canvas if it's a pixel eraser
+            if (this.currentStroke && this.currentStroke.points.length > 0) {
+                const isPixelEraser = this.currentStroke.tool === 'eraser' && this.currentStroke.mode === 'pixels';
+                if (isPixelEraser) {
+                    this.drawingCtx.save();
+                    this.drawingCtx.translate(this.pan.x, this.pan.y);
+                    this.drawingCtx.scale(this.zoom, this.zoom);
+                    this.drawStroke(this.drawingCtx, this.currentStroke);
+                    this.drawingCtx.restore();
+                }
+            }
+        }
+
+        // Composite the drawing layer on top of images
+        // Reset transform temporarily for 1:1 pixel composite
+        this.ctx.setTransform(1, 0, 0, 1, 0, 0);
+        this.ctx.drawImage(this.drawingCanvas, 0, 0);
+
+        // Reapply transform for current stroke preview
+        this.ctx.translate(this.pan.x, this.pan.y);
+        this.ctx.scale(this.zoom, this.zoom);
+
+        // Draw current stroke being drawn (preview) - skip pixel eraser since it's on offscreen canvas
+        if (this.currentStroke && this.currentStroke.points.length > 0) {
+            const isPixelEraser = this.currentStroke.tool === 'eraser' && this.currentStroke.mode === 'pixels';
+            if (!isPixelEraser) {
+                this.drawStroke(this.ctx, this.currentStroke);
+            }
+        }
+
+        // Render text and shape objects
+        this.objectsManager.render(this.ctx);
+
         this.ctx.restore();
     }
 
@@ -1367,5 +1477,233 @@ export class Canvas {
         } catch (e) {
             return null;
         }
+    }
+
+    // Drawing methods
+    setDrawingMode(mode) {
+        this.drawingMode = mode;
+        if (mode) {
+            this.canvas.style.cursor = 'crosshair';
+        } else {
+            this.canvas.style.cursor = 'default';
+        }
+    }
+
+    setDrawingColor(color) {
+        this.drawingColor = color;
+    }
+
+    setPenSize(size) {
+        this.penSize = size;
+    }
+
+    setHighlighterSize(size) {
+        this.highlighterSize = size;
+    }
+
+    setEraserSize(size) {
+        this.eraserSize = size;
+    }
+
+    setEraserMode(mode) {
+        this.eraserMode = mode; // 'strokes' or 'pixels'
+    }
+
+    redrawDrawingLayer() {
+        // Clear the drawing canvas
+        this.drawingCtx.clearRect(0, 0, this.drawingCanvas.width, this.drawingCanvas.height);
+
+        // Apply the same transform as the main canvas
+        this.drawingCtx.save();
+        this.drawingCtx.translate(this.pan.x, this.pan.y);
+        this.drawingCtx.scale(this.zoom, this.zoom);
+
+        // Redraw all strokes
+        for (const stroke of this.strokes) {
+            this.drawStroke(this.drawingCtx, stroke);
+        }
+
+        this.drawingCtx.restore();
+    }
+
+    drawStroke(ctx, stroke) {
+        if (!stroke || stroke.points.length < 2) return;
+
+        // Skip rendering stroke-based eraser strokes since they remove other strokes
+        if (stroke.tool === 'eraser' && stroke.mode === 'strokes') return;
+
+        ctx.save();
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+
+        if (stroke.tool === 'pen') {
+            ctx.globalAlpha = 1;
+            ctx.strokeStyle = stroke.color;
+            ctx.lineWidth = stroke.size;
+        } else if (stroke.tool === 'highlighter') {
+            ctx.globalAlpha = 0.3;
+            ctx.strokeStyle = stroke.color;
+            ctx.lineWidth = stroke.size;
+        } else if (stroke.tool === 'eraser' && stroke.mode === 'pixels') {
+            // Pixel-based eraser uses destination-out
+            ctx.globalCompositeOperation = 'destination-out';
+            ctx.strokeStyle = 'rgba(0,0,0,1)';
+            ctx.lineWidth = stroke.size;
+        }
+
+        ctx.beginPath();
+        ctx.moveTo(stroke.points[0].x, stroke.points[0].y);
+
+        // Draw smooth curves using quadratic curves
+        for (let i = 1; i < stroke.points.length - 1; i++) {
+            const xc = (stroke.points[i].x + stroke.points[i + 1].x) / 2;
+            const yc = (stroke.points[i].y + stroke.points[i + 1].y) / 2;
+            ctx.quadraticCurveTo(stroke.points[i].x, stroke.points[i].y, xc, yc);
+        }
+
+        // Draw the last point
+        const lastPoint = stroke.points[stroke.points.length - 1];
+        ctx.lineTo(lastPoint.x, lastPoint.y);
+        ctx.stroke();
+
+        ctx.restore();
+    }
+
+    startDrawing(worldX, worldY) {
+        if (!this.drawingMode) return;
+
+        this.isDrawing = true;
+        this.currentStroke = {
+            id: Date.now(),
+            tool: this.drawingMode,
+            mode: this.drawingMode === 'eraser' ? this.eraserMode : undefined,
+            color: this.drawingColor,
+            size: this.drawingMode === 'pen' ? this.penSize :
+                  this.drawingMode === 'highlighter' ? this.highlighterSize :
+                  this.eraserSize,
+            points: [{ x: worldX, y: worldY }]
+        };
+        this.needsRender = true;
+    }
+
+    continueDrawing(worldX, worldY) {
+        if (!this.isDrawing || !this.currentStroke) return;
+
+        this.currentStroke.points.push({ x: worldX, y: worldY });
+        this.needsRender = true;
+    }
+
+    endDrawing() {
+        if (!this.isDrawing || !this.currentStroke) return;
+
+        if (this.currentStroke.points.length > 1) {
+            // If eraser tool in strokes mode, remove strokes that intersect with it
+            if (this.currentStroke.tool === 'eraser' && this.currentStroke.mode === 'strokes') {
+                const removedStrokes = [];
+                const eraserPoints = this.currentStroke.points;
+                const eraserRadius = this.currentStroke.size / 2;
+
+                // Check each existing stroke for intersection with eraser path
+                this.strokes = this.strokes.filter(stroke => {
+                    if (stroke.tool === 'eraser') return true; // Keep other eraser strokes
+
+                    // Check if any point in the stroke intersects with eraser path
+                    for (const strokePoint of stroke.points) {
+                        for (const eraserPoint of eraserPoints) {
+                            const dx = strokePoint.x - eraserPoint.x;
+                            const dy = strokePoint.y - eraserPoint.y;
+                            const distance = Math.sqrt(dx * dx + dy * dy);
+
+                            if (distance < eraserRadius + stroke.size / 2) {
+                                removedStrokes.push(stroke);
+                                return false; // Remove this stroke
+                            }
+                        }
+                    }
+                    return true; // Keep this stroke
+                });
+
+                // Add eraser action to history if strokes were removed
+                if (removedStrokes.length > 0 && this.historyManager) {
+                    this.historyManager.pushAction({
+                        type: 'strokes_erase',
+                        strokes: removedStrokes
+                    });
+                }
+            } else {
+                // For pen, highlighter, and pixel-based eraser, add the stroke normally
+                this.strokes.push(this.currentStroke);
+
+                // Add to history for undo/redo
+                if (this.historyManager) {
+                    this.historyManager.pushAction({
+                        type: 'stroke_add',
+                        stroke: JSON.parse(JSON.stringify(this.currentStroke))
+                    });
+                }
+            }
+
+            // Redraw the drawing layer
+            this.redrawDrawingLayer();
+
+            // Trigger canvas change event for autosave
+            const event = new CustomEvent('canvasChanged');
+            this.canvas.dispatchEvent(event);
+        }
+
+        this.currentStroke = null;
+        this.isDrawing = false;
+        this.needsRender = true;
+    }
+
+    clearStrokes() {
+        if (this.strokes.length === 0) return;
+
+        const oldStrokes = [...this.strokes];
+        this.strokes = [];
+
+        if (this.historyManager) {
+            this.historyManager.pushAction({
+                type: 'strokes_clear',
+                strokes: oldStrokes
+            });
+        }
+
+        this.redrawDrawingLayer();
+        this.needsRender = true;
+        const event = new CustomEvent('canvasChanged');
+        this.canvas.dispatchEvent(event);
+    }
+
+    undoStroke() {
+        if (this.strokes.length === 0) return;
+
+        const removedStroke = this.strokes.pop();
+        this.redrawDrawingLayer();
+        this.needsRender = true;
+
+        const event = new CustomEvent('canvasChanged');
+        this.canvas.dispatchEvent(event);
+
+        return removedStroke;
+    }
+
+    redoStroke(stroke) {
+        this.strokes.push(stroke);
+        this.redrawDrawingLayer();
+        this.needsRender = true;
+
+        const event = new CustomEvent('canvasChanged');
+        this.canvas.dispatchEvent(event);
+    }
+
+    loadStrokes(strokes) {
+        this.strokes = strokes || [];
+        this.redrawDrawingLayer();
+        this.needsRender = true;
+    }
+
+    getStrokes() {
+        return this.strokes;
     }
 }

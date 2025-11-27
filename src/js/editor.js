@@ -117,12 +117,46 @@ async function initEditor() {
 
     await loadLayers(board.layers, board.viewState);
 
+    // Load strokes if they exist
+    if (board.strokes && board.strokes.length > 0) {
+        canvas.loadStrokes(board.strokes);
+    }
+
+    // Load text/shape objects if they exist
+    if (board.objects && board.objects.length > 0) {
+        console.log('Loading objects:', board.objects);
+        canvas.objectsManager.loadObjects(board.objects);
+    } else {
+        console.log('No objects to load');
+    }
+
     // Listen for canvas changes to trigger save
     canvasElement.addEventListener('canvasChanged', () => {
         scheduleSave();
     });
     canvasElement.addEventListener('viewChanged', () => {
         scheduleSave();
+    });
+
+    // Text/shape object events
+    canvasElement.addEventListener('objectSelected', (e) => {
+        showPropertiesPanel(e.detail);
+    });
+    canvasElement.addEventListener('objectDeselected', () => {
+        hidePropertiesPanel();
+    });
+    canvasElement.addEventListener('objectsChanged', () => {
+        renderLayers();
+        scheduleSave();
+    });
+    canvasElement.addEventListener('toolDeactivated', () => {
+        const textToolBtn = document.getElementById('text-tool-btn');
+        if (textToolBtn) {
+            textToolBtn.classList.remove('active');
+        }
+    });
+    canvasElement.addEventListener('textEditStart', (e) => {
+        showTextEditOverlay(e.detail);
     });
 
     renderLayers();
@@ -265,6 +299,219 @@ function setupEventListeners() {
             }
         }
     });
+
+    // Drawing toolbar event listeners
+    setupDrawingToolbar();
+}
+
+function setupDrawingToolbar() {
+    const penBtn = document.getElementById('draw-pen-btn');
+    const highlighterBtn = document.getElementById('draw-highlighter-btn');
+    const eraserBtn = document.getElementById('draw-eraser-btn');
+    const colorPicker = document.getElementById('draw-color-picker');
+    const sizeSlider = document.getElementById('draw-size-slider');
+    const sizeInput = document.getElementById('draw-size-input');
+    const clearBtn = document.getElementById('draw-clear-btn');
+    const eraserModeToggle = document.getElementById('eraser-mode-toggle');
+
+    let currentTool = null;
+
+    function updateSizeControls(size) {
+        sizeInput.value = size;
+        sizeSlider.value = Math.min(size, 100);
+        sizeSlider.max = size > 100 ? size : 100;
+    }
+
+    function setActiveTool(tool) {
+        // Remove active class from all tool buttons
+        penBtn.classList.remove('active');
+        highlighterBtn.classList.remove('active');
+        eraserBtn.classList.remove('active');
+
+        // Hide/show eraser mode toggle
+        if (tool === 'eraser') {
+            eraserModeToggle.style.display = 'flex';
+        } else {
+            eraserModeToggle.style.display = 'none';
+        }
+
+        // Set the drawing mode
+        if (tool === currentTool) {
+            // Toggle off if clicking the same tool
+            currentTool = null;
+            canvas.setDrawingMode(null);
+            eraserModeToggle.style.display = 'none';
+        } else {
+            currentTool = tool;
+            canvas.setDrawingMode(tool);
+
+            // Add active class to the clicked button
+            if (tool === 'pen') penBtn.classList.add('active');
+            else if (tool === 'highlighter') highlighterBtn.classList.add('active');
+            else if (tool === 'eraser') eraserBtn.classList.add('active');
+
+            // Update size controls based on tool
+            if (tool === 'pen') {
+                updateSizeControls(canvas.penSize);
+            } else if (tool === 'highlighter') {
+                updateSizeControls(canvas.highlighterSize);
+            } else if (tool === 'eraser') {
+                updateSizeControls(canvas.eraserSize);
+            }
+        }
+    }
+
+    penBtn.addEventListener('click', () => setActiveTool('pen'));
+    highlighterBtn.addEventListener('click', () => setActiveTool('highlighter'));
+    eraserBtn.addEventListener('click', () => setActiveTool('eraser'));
+
+    colorPicker.addEventListener('input', (e) => {
+        canvas.setDrawingColor(e.target.value);
+    });
+
+    // Size slider handler
+    sizeSlider.addEventListener('input', (e) => {
+        const size = parseInt(e.target.value);
+        sizeInput.value = size;
+
+        if (currentTool === 'pen') {
+            canvas.setPenSize(size);
+        } else if (currentTool === 'highlighter') {
+            canvas.setHighlighterSize(size);
+        } else if (currentTool === 'eraser') {
+            canvas.setEraserSize(size);
+        }
+    });
+
+    // Size input handler
+    sizeInput.addEventListener('input', (e) => {
+        let size = parseInt(e.target.value) || 1;
+        size = Math.max(1, Math.min(500, size));
+
+        sizeSlider.value = Math.min(size, 100);
+        if (size > 100) {
+            sizeSlider.max = size;
+        }
+
+        if (currentTool === 'pen') {
+            canvas.setPenSize(size);
+        } else if (currentTool === 'highlighter') {
+            canvas.setHighlighterSize(size);
+        } else if (currentTool === 'eraser') {
+            canvas.setEraserSize(size);
+        }
+    });
+
+    // Eraser mode toggle
+    eraserModeToggle.querySelectorAll('.toggle-option').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const mode = btn.dataset.mode;
+
+            // Update active state
+            eraserModeToggle.querySelectorAll('.toggle-option').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+
+            // Set eraser mode
+            canvas.setEraserMode(mode);
+        });
+    });
+
+    // Drawing mode button (in sidebar tools section)
+    const drawingModeBtn = document.getElementById('drawing-mode-btn');
+    const drawingToolbar = document.getElementById('drawing-toolbar');
+
+    if (drawingModeBtn && drawingToolbar) {
+        // Load saved state from localStorage
+        const toolbarVisible = localStorage.getItem('editor_toolbar_visible') !== 'false';
+
+        if (!toolbarVisible) {
+            drawingToolbar.style.display = 'none';
+            drawingModeBtn.classList.remove('active');
+        } else {
+            drawingModeBtn.classList.add('active');
+        }
+
+        drawingModeBtn.addEventListener('click', () => {
+            const isVisible = drawingToolbar.style.display !== 'none';
+
+            if (isVisible) {
+                // Hide toolbar and disable all drawing tools
+                drawingToolbar.style.display = 'none';
+                drawingModeBtn.classList.remove('active');
+                localStorage.setItem('editor_toolbar_visible', 'false');
+
+                // Disable current tool
+                currentTool = null;
+                canvas.setDrawingMode(null);
+                penBtn.classList.remove('active');
+                highlighterBtn.classList.remove('active');
+                eraserBtn.classList.remove('active');
+                eraserModeToggle.style.display = 'none';
+            } else {
+                // Show toolbar and enable pen tool by default
+                drawingToolbar.style.display = 'flex';
+                drawingModeBtn.classList.add('active');
+                localStorage.setItem('editor_toolbar_visible', 'true');
+                setActiveTool('pen');
+            }
+        });
+
+        // Sync button state when tools are clicked
+        const syncDrawingModeBtn = () => {
+            if (currentTool !== null) {
+                drawingModeBtn.classList.add('active');
+            }
+        };
+
+        // Add sync to tool button clicks
+        const originalSetActiveTool = setActiveTool;
+        setActiveTool = (tool) => {
+            originalSetActiveTool(tool);
+            syncDrawingModeBtn();
+        };
+    }
+
+    // Text tool button
+    const textToolBtn = document.getElementById('text-tool-btn');
+    if (textToolBtn) {
+        textToolBtn.addEventListener('click', () => {
+            const isActive = textToolBtn.classList.contains('active');
+
+            // Deactivate all other tools
+            if (drawingModeBtn) {
+                const drawingToolbar = document.getElementById('drawing-toolbar');
+                if (drawingToolbar) {
+                    drawingToolbar.style.display = 'none';
+                    drawingModeBtn.classList.remove('active');
+                    canvas.setDrawingMode(null);
+                }
+            }
+
+            if (isActive) {
+                // Deactivate text tool
+                textToolBtn.classList.remove('active');
+                canvas.objectsManager.setTool(null);
+            } else {
+                // Activate text tool
+                textToolBtn.classList.add('active');
+                canvas.objectsManager.setTool('text');
+            }
+        });
+    }
+
+    clearBtn.addEventListener('click', async () => {
+        if (canvas.strokes.length === 0) return;
+
+        const confirmed = await showConfirmModal(
+            'Clear All Strokes',
+            'Are you sure you want to clear all drawing strokes? This action can be undone.'
+        );
+
+        if (confirmed) {
+            canvas.clearStrokes();
+            scheduleSave();
+        }
+    });
 }
 
 function scheduleSave() {
@@ -282,7 +529,7 @@ function saveNow() {
         clearTimeout(saveTimeout);
         saveTimeout = null;
     }
-    
+
     const images = canvas.getImages();
     const layers = images.map(img => ({
         id: img.id,
@@ -299,9 +546,11 @@ function saveNow() {
         pan: { x: canvas.pan.x, y: canvas.pan.y },
         zoom: canvas.zoom
     };
+    const strokes = canvas.getStrokes();
+    const objects = canvas.objectsManager.getObjects();
     const thumbnail = canvas.generateThumbnail(200, 150);
-    console.log('Saving board:', { layersCount: layers.length, viewState });
-    boardManager.updateBoard(currentBoardId, { layers, bgColor, viewState, thumbnail });
+    console.log('Saving board:', { layersCount: layers.length, strokesCount: strokes.length, objectsCount: objects.length, objects, viewState });
+    boardManager.updateBoard(currentBoardId, { layers, bgColor, viewState, strokes, objects, thumbnail });
 }
 
 function createLayerItem(img, images) {
@@ -490,18 +739,80 @@ function createLayerItem(img, images) {
     return layerItem;
 }
 
+function createObjectLayerItem(obj) {
+    const layerItem = document.createElement('div');
+    layerItem.className = 'layer-item';
+    layerItem.dataset.objectId = obj.id;
+
+    if (canvas.objectsManager.selectedObject && canvas.objectsManager.selectedObject.id === obj.id) {
+        layerItem.classList.add('selected');
+    }
+
+    const icon = document.createElement('div');
+    icon.className = 'layer-icon';
+    icon.textContent = obj.type === 'text' ? 'T' : '▢';
+    icon.style.fontSize = '14px';
+    icon.style.fontWeight = 'bold';
+    icon.style.width = '24px';
+    icon.style.textAlign = 'center';
+
+    const layerContent = document.createElement('div');
+    layerContent.className = 'layer-content';
+
+    const layerName = document.createElement('span');
+    layerName.className = 'layer-name';
+    layerName.textContent = obj.name;
+    layerName.style.cursor = 'pointer';
+
+    const layerControls = document.createElement('div');
+    layerControls.className = 'layer-controls';
+
+    const deleteBtn = document.createElement('button');
+    deleteBtn.type = 'button';
+    deleteBtn.textContent = '×';
+    deleteBtn.className = 'layer-btn-delete';
+    deleteBtn.title = 'Delete object';
+    deleteBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        canvas.objectsManager.deleteObject(obj.id);
+        renderLayers();
+    });
+
+    layerControls.appendChild(deleteBtn);
+    layerContent.appendChild(layerName);
+
+    layerItem.appendChild(icon);
+    layerItem.appendChild(layerContent);
+    layerItem.appendChild(layerControls);
+
+    layerItem.addEventListener('click', () => {
+        canvas.objectsManager.selectObject(obj);
+        renderLayers();
+    });
+
+    return layerItem;
+}
+
 function renderLayers() {
     const layersList = document.getElementById('layers-list');
     const images = canvas.getImages();
+    const objects = canvas.objectsManager.getObjects();
 
-    if (images.length === 0) {
+    if (images.length === 0 && objects.length === 0) {
         layersList.innerHTML = '<div class="empty-message">No layers yet</div>';
         return;
     }
 
     layersList.innerHTML = '';
 
-    // Render layers in reverse order (top = front, bottom = back)
+    // Render text/shape objects first (they appear on top)
+    [...objects].reverse().forEach(obj => {
+        const layerItem = createObjectLayerItem(obj);
+        layersList.appendChild(layerItem);
+    });
+
+    // Render image layers in reverse order (top = front, bottom = back)
     [...images].reverse().forEach(img => {
         const layerItem = createLayerItem(img, images);
         layersList.appendChild(layerItem);
@@ -910,4 +1221,286 @@ async function openFloatingWindow() {
     } catch (err) {
         console.error('Error opening floating window:', err);
     }
+}
+
+// Text edit overlay function (Konva-style implementation)
+function showTextEditOverlay(textObject) {
+    const canvasRect = canvas.canvas.getBoundingClientRect();
+
+    // Convert world coordinates to screen coordinates
+    const screenX = (textObject.x * canvas.zoom) + canvas.pan.x;
+    const screenY = (textObject.y * canvas.zoom) + canvas.pan.y;
+
+    const overlayPos = {
+        x: canvasRect.left + screenX,
+        y: canvasRect.top + screenY
+    };
+
+    // Create textarea overlay
+    const textarea = document.createElement('textarea');
+    document.body.appendChild(textarea);
+
+    textarea.value = textObject.text || '';
+    textarea.style.position = 'absolute';
+    textarea.style.top = overlayPos.y + 'px';
+    textarea.style.left = overlayPos.x + 'px';
+    textarea.style.width = (textObject.width * canvas.zoom) + 'px';
+    textarea.style.height = (textObject.height * canvas.zoom) + 'px';
+    textarea.style.fontSize = (textObject.fontSize * canvas.zoom) + 'px';
+    textarea.style.fontFamily = textObject.font || 'Arial';
+    textarea.style.color = textObject.color || '#000000';
+    textarea.style.backgroundColor = textObject.backgroundColor || '#ffffff';
+    textarea.style.textAlign = textObject.align || 'left';
+    textarea.style.padding = ((textObject.padding || 10) * canvas.zoom) + 'px';
+    textarea.style.border = '2px solid #0066ff';
+    textarea.style.outline = 'none';
+    textarea.style.resize = 'none';
+    textarea.style.overflow = 'hidden';
+    textarea.style.lineHeight = '1.2';
+    textarea.style.zIndex = '10000';
+    textarea.focus();
+    textarea.select();
+
+    // Update textarea position and size when view changes
+    function updateTextareaTransform() {
+        const canvasRect = canvas.canvas.getBoundingClientRect();
+        const screenX = (textObject.x * canvas.zoom) + canvas.pan.x;
+        const screenY = (textObject.y * canvas.zoom) + canvas.pan.y;
+
+        textarea.style.top = (canvasRect.top + screenY) + 'px';
+        textarea.style.left = (canvasRect.left + screenX) + 'px';
+        textarea.style.width = (textObject.width * canvas.zoom) + 'px';
+        textarea.style.height = (textObject.height * canvas.zoom) + 'px';
+        textarea.style.fontSize = (textObject.fontSize * canvas.zoom) + 'px';
+        textarea.style.padding = ((textObject.padding || 10) * canvas.zoom) + 'px';
+    }
+
+    function removeTextarea() {
+        if (textarea.parentNode) {
+            textarea.parentNode.removeChild(textarea);
+        }
+        window.removeEventListener('click', handleOutsideClick);
+        canvas.canvas.removeEventListener('viewChanged', updateTextareaTransform);
+        canvas.objectsManager.stopTextEdit();
+        canvas.needsRender = true;
+    }
+
+    function saveText() {
+        const newText = textarea.value;
+        console.log('Saving text:', newText);
+        canvas.objectsManager.updateSelectedObject({ text: newText });
+        removeTextarea();
+    }
+
+    // Listen for view changes (zoom/pan)
+    canvas.canvas.addEventListener('viewChanged', updateTextareaTransform);
+
+    // Save on Enter (without Shift)
+    textarea.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            saveText();
+        }
+        if (e.key === 'Escape') {
+            removeTextarea();
+        }
+    });
+
+    // Save on outside click
+    function handleOutsideClick(e) {
+        if (e.target !== textarea) {
+            saveText();
+        }
+    }
+    setTimeout(() => {
+        window.addEventListener('click', handleOutsideClick);
+    }, 10);
+}
+
+// Property panel functions
+function showPropertiesPanel(obj) {
+    const propertiesPanel = document.getElementById('object-properties');
+    const defaultProperties = document.getElementById('default-properties');
+    const textProperties = document.getElementById('text-properties');
+    const shapeProperties = document.getElementById('shape-properties');
+    const propertiesTitle = document.getElementById('object-properties-title');
+
+    if (!propertiesPanel) return;
+
+    // Hide default properties
+    if (defaultProperties) defaultProperties.style.display = 'none';
+
+    // Show properties panel
+    propertiesPanel.style.display = 'flex';
+
+    if (obj.type === 'text') {
+        propertiesTitle.textContent = 'Text Properties';
+        textProperties.style.display = 'block';
+        shapeProperties.style.display = 'none';
+
+        // Populate text properties
+        document.getElementById('text-content').value = obj.text || '';
+        document.getElementById('text-font').value = obj.font || 'Arial';
+        document.getElementById('text-size').value = obj.fontSize || 16;
+        document.getElementById('text-color').value = obj.color || '#000000';
+        document.getElementById('text-bg-color').value = obj.backgroundColor || '#ffffff';
+
+        // Set alignment buttons
+        document.querySelectorAll('.alignment-btn').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.align === obj.align);
+        });
+
+        // Add event listeners for text properties
+        setupTextPropertyListeners();
+    } else if (obj.type === 'shape') {
+        propertiesTitle.textContent = 'Shape Properties';
+        textProperties.style.display = 'none';
+        shapeProperties.style.display = 'block';
+
+        // Populate shape properties
+        document.getElementById('shape-type').value = obj.shapeType || 'rectangle';
+        document.getElementById('shape-fill-color').value = obj.fillColor || '#3b82f6';
+        document.getElementById('shape-stroke-color').value = obj.strokeColor || '#000000';
+        document.getElementById('shape-stroke-width').value = obj.strokeWidth || 2;
+
+        if (obj.shapeType === 'polygon') {
+            document.getElementById('polygon-sides-row').style.display = 'flex';
+            document.getElementById('polygon-sides').value = obj.sides || 6;
+        } else {
+            document.getElementById('polygon-sides-row').style.display = 'none';
+        }
+
+        // Add event listeners for shape properties
+        setupShapePropertyListeners();
+    }
+
+    // Close button
+    const closeBtn = document.getElementById('close-properties-btn');
+    if (closeBtn) {
+        closeBtn.onclick = () => {
+            canvas.objectsManager.deselectAll();
+        };
+    }
+}
+
+function hidePropertiesPanel() {
+    const propertiesPanel = document.getElementById('object-properties');
+    const defaultProperties = document.getElementById('default-properties');
+
+    if (propertiesPanel) propertiesPanel.style.display = 'none';
+    if (defaultProperties) defaultProperties.style.display = 'block';
+
+    // Remove event listeners
+    removeTextPropertyListeners();
+    removeShapePropertyListeners();
+}
+
+function setupTextPropertyListeners() {
+    const textContent = document.getElementById('text-content');
+    const textFont = document.getElementById('text-font');
+    const textSize = document.getElementById('text-size');
+    const textColor = document.getElementById('text-color');
+    const textBgColor = document.getElementById('text-bg-color');
+    const alignmentBtns = document.querySelectorAll('.alignment-btn');
+
+    textContent.oninput = () => {
+        // Allow empty text during editing, but preserve the value
+        const value = textContent.value;
+        canvas.objectsManager.updateSelectedObject({ text: value || '' });
+    };
+
+    textFont.onchange = () => {
+        canvas.objectsManager.updateSelectedObject({ font: textFont.value });
+    };
+
+    textSize.oninput = () => {
+        const value = parseInt(textSize.value);
+        // Allow any input during typing (including empty for backspace)
+        // Only update if we have a valid number within range
+        if (!isNaN(value) && value >= 8 && value <= 200) {
+            canvas.objectsManager.updateSelectedObject({ fontSize: value });
+        }
+    };
+
+    textColor.oninput = () => {
+        canvas.objectsManager.updateSelectedObject({ color: textColor.value });
+    };
+
+    textBgColor.oninput = () => {
+        canvas.objectsManager.updateSelectedObject({ backgroundColor: textBgColor.value });
+    };
+
+    alignmentBtns.forEach(btn => {
+        btn.onclick = () => {
+            alignmentBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            canvas.objectsManager.updateSelectedObject({ align: btn.dataset.align });
+        };
+    });
+}
+
+function removeTextPropertyListeners() {
+    const textContent = document.getElementById('text-content');
+    const textFont = document.getElementById('text-font');
+    const textSize = document.getElementById('text-size');
+    const textColor = document.getElementById('text-color');
+    const textBgColor = document.getElementById('text-bg-color');
+    const alignmentBtns = document.querySelectorAll('.alignment-btn');
+
+    if (textContent) textContent.oninput = null;
+    if (textFont) textFont.onchange = null;
+    if (textSize) textSize.oninput = null;
+    if (textColor) textColor.oninput = null;
+    if (textBgColor) textBgColor.oninput = null;
+    alignmentBtns.forEach(btn => btn.onclick = null);
+}
+
+function setupShapePropertyListeners() {
+    const shapeType = document.getElementById('shape-type');
+    const shapeFillColor = document.getElementById('shape-fill-color');
+    const shapeStrokeColor = document.getElementById('shape-stroke-color');
+    const shapeStrokeWidth = document.getElementById('shape-stroke-width');
+    const polygonSides = document.getElementById('polygon-sides');
+
+    shapeType.onchange = () => {
+        const value = shapeType.value;
+        canvas.objectsManager.updateSelectedObject({ shapeType: value });
+
+        const polygonSidesRow = document.getElementById('polygon-sides-row');
+        if (value === 'polygon') {
+            polygonSidesRow.style.display = 'flex';
+        } else {
+            polygonSidesRow.style.display = 'none';
+        }
+    };
+
+    shapeFillColor.oninput = () => {
+        canvas.objectsManager.updateSelectedObject({ fillColor: shapeFillColor.value });
+    };
+
+    shapeStrokeColor.oninput = () => {
+        canvas.objectsManager.updateSelectedObject({ strokeColor: shapeStrokeColor.value });
+    };
+
+    shapeStrokeWidth.oninput = () => {
+        canvas.objectsManager.updateSelectedObject({ strokeWidth: parseInt(shapeStrokeWidth.value) });
+    };
+
+    polygonSides.oninput = () => {
+        canvas.objectsManager.updateSelectedObject({ sides: parseInt(polygonSides.value) });
+    };
+}
+
+function removeShapePropertyListeners() {
+    const shapeType = document.getElementById('shape-type');
+    const shapeFillColor = document.getElementById('shape-fill-color');
+    const shapeStrokeColor = document.getElementById('shape-stroke-color');
+    const shapeStrokeWidth = document.getElementById('shape-stroke-width');
+    const polygonSides = document.getElementById('polygon-sides');
+
+    if (shapeType) shapeType.onchange = null;
+    if (shapeFillColor) shapeFillColor.oninput = null;
+    if (shapeStrokeColor) shapeStrokeColor.oninput = null;
+    if (shapeStrokeWidth) shapeStrokeWidth.oninput = null;
+    if (polygonSides) polygonSides.oninput = null;
 }

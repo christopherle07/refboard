@@ -357,3 +357,29 @@ body {
     display: block;
     cursor: default;
 }
+
+/* Sidebar Footer */
+.sidebar-footer {
+    margin-top: auto;
+    padding-top: 12px;
+    border-top: 1px solid var(--border-color);
+}
+
+.discord-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #5865F2 !important;
+    color: white !important;
+    border-radius: 4px;
+    margin: 0 12px;
+    padding: 10px;
+    border-left: none !important;
+    width: calc(100% - 24px);
+    transition: background 0.15s;
+    text-decoration: none;
+}
+
+.discord-btn:hover {
+    background: #4752C4 !important;
+}
