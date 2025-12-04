@@ -651,8 +651,8 @@
 .toggle-switch {
     position: relative;
     display: inline-block;
-    width: 51px;
-    height: 31px;
+    width: 36px;
+    height: 22px;
 }
 
 .toggle-switch input {
@@ -670,14 +670,14 @@
     bottom: 0;
     background-color: #c8c8c8;
     transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    border-radius: 31px;
+    border-radius: 22px;
 }
 
 .toggle-slider:before {
     position: absolute;
     content: "";
-    height: 27px;
-    width: 27px;
+    height: 18px;
+    width: 18px;
     left: 2px;
     bottom: 2px;
     background-color: white;
@@ -691,7 +691,7 @@
 }
 
 .toggle-switch input:checked + .toggle-slider:before {
-    transform: translateX(20px);
+    transform: translateX(14px);
 }
 
 .assets-grid {
@@ -1170,4 +1170,26 @@
     background: #0d6efd;
     border-color: #0d6efd;
     color: white;
+}
+
+/* Theme-based icon coloring */
+.tool-icon {
+    width: 24px;
+    height: 24px;
+    display: block;
+}
+
+/* Light theme - black icons */
+[data-theme="light"] .theme-icon {
+    filter: brightness(0) saturate(100%);
+}
+
+/* Dark theme - white icons */
+[data-theme="dark"] .theme-icon {
+    filter: brightness(0) saturate(100%) invert(100%);
+}
+
+/* Midnight theme - light gray icons */
+[data-theme="midnight"] .theme-icon {
+    filter: brightness(0) saturate(100%) invert(85%);
 }

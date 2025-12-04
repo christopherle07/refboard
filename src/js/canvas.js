@@ -309,8 +309,29 @@ export class Canvas {
         const rect = this.canvas.getBoundingClientRect();
         const { x, y } = this.screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
 
-        // Handle text/shape objects first
-        if (this.objectsManager.handleMouseDown(e, { x, y })) {
+        // Check if a tool is active (text or shape tool)
+        if (this.objectsManager.currentTool) {
+            if (this.objectsManager.handleMouseDown(e, { x, y })) {
+                return;
+            }
+        }
+
+        // Check what's at this point - objects or images
+        const clickedObject = this.objectsManager.getObjectAtPoint(x, y);
+        const clickedImage = this.getImageAtPoint(x, y);
+
+        // If both exist, check which has higher zIndex
+        let shouldHandleObject = false;
+        if (clickedObject && clickedImage) {
+            const objectZ = clickedObject.zIndex || 0;
+            const imageZ = clickedImage.zIndex || 0;
+            shouldHandleObject = objectZ > imageZ;
+        } else if (clickedObject) {
+            shouldHandleObject = true;
+        }
+
+        // Handle text/shape objects if they're on top
+        if (shouldHandleObject && this.objectsManager.handleMouseDown(e, { x, y })) {
             return;
         }
 
@@ -356,9 +377,8 @@ export class Canvas {
                 return;
             }
         }
-        
-        const clickedImage = this.getImageAtPoint(x, y);
 
+        // clickedImage already declared above, reuse it
         if (clickedImage) {
             // Handle multi-select with Ctrl/Cmd
             if (e.ctrlKey || e.metaKey) {
@@ -1161,17 +1181,33 @@ export class Canvas {
         this.ctx.scale(this.zoom, this.zoom);
         
         this.drawGrid();
-        
+
         const visibleImages = this.cullImages();
-        
-        for (let i = 0; i < visibleImages.length; i++) {
-            const img = visibleImages[i];
-            try {
-                this.ctx.drawImage(img.img, img.x, img.y, img.width, img.height);
-            } catch (e) {
+        const visibleObjects = this.objectsManager.getObjects().filter(obj => obj.visible !== false);
+
+        // Combine images and objects, sort by zIndex
+        const allRenderables = [
+            ...visibleImages.map(img => ({ type: 'image', data: img, zIndex: img.zIndex || 0 })),
+            ...visibleObjects.map(obj => ({ type: 'object', data: obj, zIndex: obj.zIndex || 0 }))
+        ];
+        allRenderables.sort((a, b) => a.zIndex - b.zIndex);
+
+        // Render in zIndex order
+        for (const item of allRenderables) {
+            if (item.type === 'image') {
+                const img = item.data;
+                try {
+                    this.ctx.drawImage(img.img, img.x, img.y, img.width, img.height);
+                } catch (e) {
+                }
+            } else if (item.type === 'object') {
+                this.objectsManager.renderSingle(this.ctx, item.data);
             }
         }
-        
+
+        // Render object preview and selection after all objects
+        this.objectsManager.renderPreviewAndSelection(this.ctx);
+
         if (this.snapLines.length > 0) {
             this.ctx.strokeStyle = '#ff00ff';
             this.ctx.lineWidth = 1 / this.zoom;
@@ -1286,8 +1322,7 @@ export class Canvas {
             }
         }
 
-        // Render text and shape objects
-        this.objectsManager.render(this.ctx);
+        // Text objects are now rendered in zIndex order above with images
 
         this.ctx.restore();
     }

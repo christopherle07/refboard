@@ -12,6 +12,9 @@ let pendingSave = false;
 let dragSourceIndex = null;
 let currentOrder = [];
 let draggedImageId = null;
+let draggedLayerId = null;
+let draggedLayerType = null;
+let allLayersOrder = [];
 let syncChannel = null;
 let showAllAssets = false;
 
@@ -71,6 +74,9 @@ function initTheme() {
     Object.entries(theme).forEach(([property, value]) => {
         document.documentElement.style.setProperty(property, value);
     });
+
+    // Set theme attribute for icon filtering
+    document.documentElement.setAttribute('data-theme', savedTheme);
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -85,7 +91,38 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     
     syncChannel = new BroadcastChannel('board_sync_' + currentBoardId);
-    
+
+    // Handle sync requests from floating window
+    syncChannel.onmessage = (event) => {
+        if (event.data.type === 'sync_state_request') {
+            // Send current layer order to requesting window
+            const zIndexUpdates = [];
+
+            // Add all images
+            canvas.images.forEach(img => {
+                zIndexUpdates.push({
+                    type: 'image',
+                    id: img.id,
+                    zIndex: img.zIndex || 0
+                });
+            });
+
+            // Add all objects
+            canvas.objectsManager.objects.forEach(obj => {
+                zIndexUpdates.push({
+                    type: 'object',
+                    id: obj.id,
+                    zIndex: obj.zIndex || 0
+                });
+            });
+
+            syncChannel.postMessage({
+                type: 'sync_state_response',
+                updates: zIndexUpdates
+            });
+        }
+    };
+
     await initEditor();
     setupEventListeners();
 });
@@ -97,11 +134,18 @@ async function initEditor() {
         window.location.href = 'index.html';
         return;
     }
-    
+
+    console.log('Board loaded from database:', {
+        hasStrokes: !!board.strokes,
+        strokesCount: board.strokes?.length || 0,
+        hasObjects: !!board.objects,
+        objectsCount: board.objects?.length || 0
+    });
+
     window.boardManagerInstance = boardManager;
     window.currentBoardId = currentBoardId;
     window.renderAssetsCallback = renderAssets;
-    
+
     document.getElementById('board-name').textContent = board.name;
     
     const canvasElement = document.getElementById('main-canvas');
@@ -145,18 +189,33 @@ async function initEditor() {
     canvasElement.addEventListener('objectDeselected', () => {
         hidePropertiesPanel();
     });
+    canvasElement.addEventListener('objectDoubleClicked', (e) => {
+        const obj = e.detail;
+        if (obj.type === 'text') {
+            // Focus the text content textarea
+            setTimeout(() => {
+                const textContent = document.getElementById('text-content');
+                if (textContent) {
+                    textContent.focus();
+                    textContent.select();
+                }
+            }, 100);
+        }
+    });
     canvasElement.addEventListener('objectsChanged', () => {
         renderLayers();
         scheduleSave();
     });
-    canvasElement.addEventListener('toolDeactivated', () => {
+    canvasElement.addEventListener('toolChanged', (e) => {
+        // Update text tool button state when tool changes
         const textToolBtn = document.getElementById('text-tool-btn');
         if (textToolBtn) {
-            textToolBtn.classList.remove('active');
+            if (e.detail.tool === 'text') {
+                textToolBtn.classList.add('active');
+            } else {
+                textToolBtn.classList.remove('active');
+            }
         }
-    });
-    canvasElement.addEventListener('textEditStart', (e) => {
-        showTextEditOverlay(e.detail);
     });
 
     renderLayers();
@@ -196,6 +255,7 @@ function loadLayers(layers, viewState = null) {
                 const visible = layer.visible !== false;
                 const added = canvas.addImageSilent(img, layer.x, layer.y, layer.name, layer.width, layer.height, visible);
                 added.id = layer.id;
+                added.zIndex = layer.zIndex || 0;
                 loaded++;
                 if (loaded >= total) {
                     canvas.selectImage(null);
@@ -236,6 +296,15 @@ function setupEventListeners() {
     document.getElementById('bg-color').addEventListener('change', (e) => {
         const color = e.target.value;
         canvas.setBackgroundColor(color);
+
+        // Sync background color to floating window
+        if (syncChannel) {
+            syncChannel.postMessage({
+                type: 'background_color_changed',
+                color: color
+            });
+        }
+
         scheduleSave();
     });
     
@@ -278,6 +347,9 @@ function setupEventListeners() {
     });
 
     document.addEventListener('keydown', (e) => {
+        // Don't intercept keyboard events when typing in inputs or textareas
+        const isTyping = e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA';
+
         if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
             e.preventDefault();
             if (historyManager.undo()) {
@@ -290,10 +362,14 @@ function setupEventListeners() {
                 renderLayers();
                 scheduleSave();
             }
-        } else if (e.key === 'Delete' || e.key === 'Backspace') {
+        } else if ((e.key === 'Delete' || e.key === 'Backspace') && !isTyping) {
             e.preventDefault();
             if (canvas.selectedImages.length > 0) {
                 canvas.deleteSelectedImages();
+                renderLayers();
+                scheduleSave();
+            } else if (canvas.objectsManager.selectedObject) {
+                canvas.objectsManager.deleteSelectedObject();
                 renderLayers();
                 scheduleSave();
             }
@@ -302,6 +378,10 @@ function setupEventListeners() {
 
     // Drawing toolbar event listeners
     setupDrawingToolbar();
+
+    // Text tool button
+    setupTextTool();
+    setupShapeTool();
 }
 
 function setupDrawingToolbar() {
@@ -471,33 +551,6 @@ function setupDrawingToolbar() {
         };
     }
 
-    // Text tool button
-    const textToolBtn = document.getElementById('text-tool-btn');
-    if (textToolBtn) {
-        textToolBtn.addEventListener('click', () => {
-            const isActive = textToolBtn.classList.contains('active');
-
-            // Deactivate all other tools
-            if (drawingModeBtn) {
-                const drawingToolbar = document.getElementById('drawing-toolbar');
-                if (drawingToolbar) {
-                    drawingToolbar.style.display = 'none';
-                    drawingModeBtn.classList.remove('active');
-                    canvas.setDrawingMode(null);
-                }
-            }
-
-            if (isActive) {
-                // Deactivate text tool
-                textToolBtn.classList.remove('active');
-                canvas.objectsManager.setTool(null);
-            } else {
-                // Activate text tool
-                textToolBtn.classList.add('active');
-                canvas.objectsManager.setTool('text');
-            }
-        });
-    }
 
     clearBtn.addEventListener('click', async () => {
         if (canvas.strokes.length === 0) return;
@@ -539,7 +592,8 @@ function saveNow() {
         y: img.y,
         width: img.width,
         height: img.height,
-        visible: img.visible !== false
+        visible: img.visible !== false,
+        zIndex: img.zIndex || 0
     }));
     const bgColor = canvas.bgColor;
     const viewState = {
@@ -550,6 +604,8 @@ function saveNow() {
     const objects = canvas.objectsManager.getObjects();
     const thumbnail = canvas.generateThumbnail(200, 150);
     console.log('Saving board:', { layersCount: layers.length, strokesCount: strokes.length, objectsCount: objects.length, objects, viewState });
+    console.log('Layers zIndex:', layers.map(l => ({ id: l.id, name: l.name, zIndex: l.zIndex })));
+    console.log('Objects zIndex:', objects.map(o => ({ id: o.id, type: o.type, zIndex: o.zIndex })));
     boardManager.updateBoard(currentBoardId, { layers, bgColor, viewState, strokes, objects, thumbnail });
 }
 
@@ -680,27 +736,21 @@ function createLayerItem(img, images) {
             e.preventDefault();
             return;
         }
-        dragSourceIndex = realIndex;
-        currentOrder = [...images].reverse();
-        draggedImageId = img.id;
+        draggedLayerId = img.id;
+        draggedLayerType = 'image';
+        allLayersOrder = getAllLayersForDragging();
+        dragSourceIndex = allLayersOrder.findIndex(l => l.type === 'image' && l.data.id === img.id);
         layerItem.classList.add('dragging');
         e.dataTransfer.effectAllowed = 'move';
         e.dataTransfer.setData('text/plain', '');
     });
 
     layerItem.addEventListener('dragend', () => {
-        if (currentOrder.length > 0) {
-            const newCanvasOrder = [...currentOrder].reverse();
-            canvas.images = newCanvasOrder;
-            canvas.invalidateCullCache();
-            canvas.needsRender = true;
-            canvas.render();
-            canvas.notifyChange();
-        }
-
+        applyLayerOrder();
+        draggedLayerId = null;
+        draggedLayerType = null;
         dragSourceIndex = null;
-        currentOrder = [];
-        draggedImageId = null;
+        allLayersOrder = [];
         renderLayers();
         scheduleSave();
     });
@@ -709,28 +759,26 @@ function createLayerItem(img, images) {
         e.preventDefault();
         e.dataTransfer.dropEffect = 'move';
 
-        if (!draggedImageId) return;
+        if (!draggedLayerId) return;
 
         const targetId = img.id;
-        if (targetId === draggedImageId) return;
+        if (targetId === draggedLayerId && draggedLayerType === 'image') return;
 
         if (dragSourceIndex !== null) {
-            const fromIdx = currentOrder.findIndex(i => i.id === draggedImageId);
-            const toIdx = currentOrder.findIndex(i => i.id === targetId);
+            const fromIdx = allLayersOrder.findIndex(l => {
+                if (draggedLayerType === 'image') {
+                    return l.type === 'image' && l.data.id === draggedLayerId;
+                } else {
+                    return l.type === 'object' && l.data.id === draggedLayerId;
+                }
+            });
+            const toIdx = allLayersOrder.findIndex(l => l.type === 'image' && l.data.id === targetId);
 
             if (fromIdx !== -1 && toIdx !== -1 && fromIdx !== toIdx) {
-                const newOrder = [...currentOrder];
+                const newOrder = [...allLayersOrder];
                 const [moved] = newOrder.splice(fromIdx, 1);
                 newOrder.splice(toIdx, 0, moved);
-                currentOrder = newOrder;
-
-                // Update canvas preview in real-time
-                const newCanvasOrder = [...currentOrder].reverse();
-                canvas.images = newCanvasOrder;
-                canvas.invalidateCullCache();
-                canvas.needsRender = true;
-                canvas.render();
-
+                allLayersOrder = newOrder;
                 renderLayers();
             }
         }
@@ -739,30 +787,70 @@ function createLayerItem(img, images) {
     return layerItem;
 }
 
-function createObjectLayerItem(obj) {
+function createObjectLayerItem(obj, objects) {
     const layerItem = document.createElement('div');
     layerItem.className = 'layer-item';
-    layerItem.dataset.objectId = obj.id;
+    layerItem.dataset.layerId = obj.id;
+    layerItem.draggable = true;
 
-    if (canvas.objectsManager.selectedObject && canvas.objectsManager.selectedObject.id === obj.id) {
+    if (obj.visible === false) {
+        layerItem.classList.add('layer-hidden');
+    }
+
+    if (canvas.objectsManager.selectedObject === obj) {
         layerItem.classList.add('selected');
     }
 
-    const icon = document.createElement('div');
-    icon.className = 'layer-icon';
-    icon.textContent = obj.type === 'text' ? 'T' : '▢';
-    icon.style.fontSize = '14px';
-    icon.style.fontWeight = 'bold';
-    icon.style.width = '24px';
-    icon.style.textAlign = 'center';
+    const dragHandle = document.createElement('div');
+    dragHandle.className = 'layer-drag-handle';
+    dragHandle.innerHTML = `
+        <div class="drag-row"><span></span><span></span></div>
+        <div class="drag-row"><span></span><span></span></div>
+        <div class="drag-row"><span></span><span></span></div>
+    `;
+
+    const visibilityBtn = document.createElement('button');
+    visibilityBtn.className = 'layer-visibility-btn';
+    visibilityBtn.type = 'button';
+    if (obj.visible === false) {
+        visibilityBtn.classList.add('hidden');
+        visibilityBtn.innerHTML = '◯';
+        visibilityBtn.title = 'Show layer';
+    } else {
+        visibilityBtn.innerHTML = '●';
+        visibilityBtn.title = 'Hide layer';
+    }
+    visibilityBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        obj.visible = obj.visible === false ? true : false;
+        canvas.needsRender = true;
+        renderLayers();
+        scheduleSave();
+    });
 
     const layerContent = document.createElement('div');
     layerContent.className = 'layer-content';
 
-    const layerName = document.createElement('span');
-    layerName.className = 'layer-name';
-    layerName.textContent = obj.name;
-    layerName.style.cursor = 'pointer';
+    const layerName = document.createElement('input');
+    layerName.type = 'text';
+    layerName.className = 'layer-name-input';
+    if (obj.type === 'text') {
+        layerName.value = (obj.text || 'Text').substring(0, 20);
+    } else if (obj.type === 'shape') {
+        const shapeType = obj.shapeType || 'square';
+        layerName.value = shapeType.charAt(0).toUpperCase() + shapeType.slice(1);
+    }
+    layerName.draggable = false;
+    layerName.addEventListener('change', (e) => {
+        if (obj.type === 'text') {
+            canvas.objectsManager.updateSelectedObject({ text: e.target.value });
+        }
+        scheduleSave();
+    });
+    layerName.addEventListener('click', (e) => e.stopPropagation());
+    layerName.addEventListener('mousedown', (e) => e.stopPropagation());
+    layerName.addEventListener('dragstart', (e) => e.preventDefault());
 
     const layerControls = document.createElement('div');
     layerControls.className = 'layer-controls';
@@ -771,27 +859,134 @@ function createObjectLayerItem(obj) {
     deleteBtn.type = 'button';
     deleteBtn.textContent = '×';
     deleteBtn.className = 'layer-btn-delete';
-    deleteBtn.title = 'Delete object';
+    deleteBtn.title = 'Delete layer';
     deleteBtn.addEventListener('click', (e) => {
         e.stopPropagation();
         e.preventDefault();
-        canvas.objectsManager.deleteObject(obj.id);
-        renderLayers();
+        const objectName = obj.type === 'text' ? (obj.text || 'Text').substring(0, 20) : 'Shape';
+        showDeleteConfirm(objectName, () => {
+            canvas.objectsManager.deleteObject(obj.id);
+            renderLayers();
+            scheduleSave();
+        });
     });
 
     layerControls.appendChild(deleteBtn);
     layerContent.appendChild(layerName);
 
-    layerItem.appendChild(icon);
+    layerItem.appendChild(dragHandle);
+    layerItem.appendChild(visibilityBtn);
     layerItem.appendChild(layerContent);
     layerItem.appendChild(layerControls);
 
-    layerItem.addEventListener('click', () => {
-        canvas.objectsManager.selectObject(obj);
+    layerItem.addEventListener('click', (e) => {
+        if (e.target.tagName === 'INPUT') return;
+        if (obj.visible !== false) {
+            canvas.objectsManager.selectObject(obj);
+            renderLayers();
+        }
+    });
+
+    // Drag and drop for unified layer reordering
+    layerItem.addEventListener('dragstart', (e) => {
+        if (e.target.tagName === 'INPUT') {
+            e.preventDefault();
+            return;
+        }
+        draggedLayerId = obj.id;
+        draggedLayerType = 'object';
+        allLayersOrder = getAllLayersForDragging();
+        dragSourceIndex = allLayersOrder.findIndex(l => l.type === 'object' && l.data.id === obj.id);
+        layerItem.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', '');
+    });
+
+    layerItem.addEventListener('dragend', () => {
+        applyLayerOrder();
+        draggedLayerId = null;
+        draggedLayerType = null;
+        dragSourceIndex = null;
+        allLayersOrder = [];
         renderLayers();
+        scheduleSave();
+    });
+
+    layerItem.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+
+        if (!draggedLayerId) return;
+
+        const targetId = obj.id;
+        if (targetId === draggedLayerId && draggedLayerType === 'object') return;
+
+        if (dragSourceIndex !== null) {
+            const fromIdx = allLayersOrder.findIndex(l => {
+                if (draggedLayerType === 'object') {
+                    return l.type === 'object' && l.data.id === draggedLayerId;
+                } else {
+                    return l.type === 'image' && l.data.id === draggedLayerId;
+                }
+            });
+            const toIdx = allLayersOrder.findIndex(l => l.type === 'object' && l.data.id === targetId);
+
+            if (fromIdx !== -1 && toIdx !== -1 && fromIdx !== toIdx) {
+                const newOrder = [...allLayersOrder];
+                const [moved] = newOrder.splice(fromIdx, 1);
+                newOrder.splice(toIdx, 0, moved);
+                allLayersOrder = newOrder;
+                renderLayers();
+            }
+        }
     });
 
     return layerItem;
+}
+
+
+function getAllLayersForDragging() {
+    const images = canvas.getImages();
+    const objects = canvas.objectsManager.getObjects();
+
+    const allLayers = [
+        ...images.map(img => ({ type: 'image', data: img, zIndex: img.zIndex || 0 })),
+        ...objects.map(obj => ({ type: 'object', data: obj, zIndex: obj.zIndex || 0 }))
+    ];
+
+    // Sort by zIndex (lower zIndex = back, higher = front)
+    allLayers.sort((a, b) => a.zIndex - b.zIndex);
+
+    return allLayers;
+}
+
+function applyLayerOrder() {
+    if (allLayersOrder.length === 0) return;
+
+    // Assign zIndex based on position in array (0 = back, higher = front)
+    const zIndexUpdates = [];
+    allLayersOrder.forEach((layer, index) => {
+        console.log(`Setting ${layer.type} ${layer.data.id} zIndex from ${layer.data.zIndex} to ${index}`);
+        layer.data.zIndex = index;
+        zIndexUpdates.push({
+            type: layer.type,
+            id: layer.data.id,
+            zIndex: index
+        });
+    });
+
+    // Sync to floating window
+    if (syncChannel) {
+        syncChannel.postMessage({
+            type: 'layer_order_changed',
+            updates: zIndexUpdates
+        });
+    }
+
+    canvas.invalidateCullCache();
+    canvas.needsRender = true;
+    canvas.render();
+    canvas.notifyChange();
 }
 
 function renderLayers() {
@@ -799,23 +994,37 @@ function renderLayers() {
     const images = canvas.getImages();
     const objects = canvas.objectsManager.getObjects();
 
-    if (images.length === 0 && objects.length === 0) {
+    // Combine images and objects into a unified layer list
+    let allLayers;
+    if (allLayersOrder.length > 0) {
+        // Use the current drag order if dragging
+        allLayers = allLayersOrder;
+    } else {
+        // Normal rendering - combine and sort by zIndex
+        allLayers = [
+            ...images.map(img => ({ type: 'image', data: img, zIndex: img.zIndex || 0 })),
+            ...objects.map(obj => ({ type: 'object', data: obj, zIndex: obj.zIndex || 0 }))
+        ];
+        // Sort by zIndex (lower zIndex = back, higher = front)
+        allLayers.sort((a, b) => a.zIndex - b.zIndex);
+    }
+
+    if (allLayers.length === 0) {
         layersList.innerHTML = '<div class="empty-message">No layers yet</div>';
         return;
     }
 
     layersList.innerHTML = '';
 
-    // Render text/shape objects first (they appear on top)
-    [...objects].reverse().forEach(obj => {
-        const layerItem = createObjectLayerItem(obj);
-        layersList.appendChild(layerItem);
-    });
-
-    // Render image layers in reverse order (top = front, bottom = back)
-    [...images].reverse().forEach(img => {
-        const layerItem = createLayerItem(img, images);
-        layersList.appendChild(layerItem);
+    // Render layers in reverse order (top = front, bottom = back)
+    [...allLayers].reverse().forEach(layer => {
+        if (layer.type === 'image') {
+            const layerItem = createLayerItem(layer.data, images);
+            layersList.appendChild(layerItem);
+        } else if (layer.type === 'object') {
+            const layerItem = createObjectLayerItem(layer.data, objects);
+            layersList.appendChild(layerItem);
+        }
     });
 }
 
@@ -866,10 +1075,6 @@ async function renderAssets() {
         deleteBtn.title = showAllAssets ? 'Delete from all assets' : 'Delete from board';
         deleteBtn.addEventListener('click', async (e) => {
             e.stopPropagation();
-            const confirmMsg = showAllAssets 
-                ? `Delete "${asset.name}" from all assets? This will remove it everywhere.`
-                : `Remove "${asset.name}" from this board?`;
-            
             showDeleteConfirm(asset.name, async () => {
                 if (showAllAssets) {
                     await boardManager.deleteFromAllAssets(asset.id);
@@ -1037,13 +1242,17 @@ function importAssets() {
 }
 
 async function exportBoard() {
-    saveNow();
+    // Get EVERYTHING from canvas
+    const images = canvas.getImages();
+    const strokes = canvas.getStrokes() || [];
+    const objects = canvas.objectsManager.getObjects() || [];
     const board = boardManager.currentBoard;
+
     const exportData = {
         version: 1,
         name: board.name,
-        bgColor: board.bgColor || board.bg_color,
-        layers: canvas.getImages().map(img => ({
+        bgColor: canvas.bgColor,
+        layers: images.map(img => ({
             id: img.id,
             name: img.name,
             src: img.img.src,
@@ -1051,14 +1260,23 @@ async function exportBoard() {
             y: img.y,
             width: img.width,
             height: img.height,
-            visible: img.visible
+            visible: img.visible !== false,
+            zIndex: img.zIndex || 0
         })),
         groups: canvas.groups || [],
         assets: board.assets || [],
+        strokes: strokes,
+        objects: objects,
         exportedAt: Date.now()
     };
 
     const json = JSON.stringify(exportData, null, 2);
+
+    console.log('[EXPORT] Images:', images.length, 'Strokes:', strokes.length, 'Objects:', objects.length);
+
+    console.log('JSON contains strokes:', json.includes('"strokes"'));
+    console.log('JSON contains objects:', json.includes('"objects"'));
+
     const filename = `${board.name.replace(/[^a-z0-9]/gi, '_')}.aref`;
 
     // Try to use File System Access API (modern browsers)
@@ -1111,6 +1329,12 @@ function importBoard() {
             try {
                 const importData = JSON.parse(event.target.result);
 
+                console.log('[IMPORT] File loaded:', {
+                    layers: importData.layers?.length || 0,
+                    strokes: importData.strokes?.length || 0,
+                    objects: importData.objects?.length || 0
+                });
+
                 if (!importData.version || !importData.layers) {
                     showToast('Invalid .aref file format', 'error');
                     return;
@@ -1153,25 +1377,63 @@ function importBoard() {
                     if (importData.groups && Array.isArray(importData.groups)) {
                         canvas.groups = [...(canvas.groups || []), ...importData.groups];
                     }
+                    // Merge strokes
+                    if (importData.strokes && Array.isArray(importData.strokes)) {
+                        const currentStrokes = canvas.getStrokes();
+                        canvas.loadStrokes([...currentStrokes, ...importData.strokes]);
+                    }
+                    // Merge objects
+                    if (importData.objects && Array.isArray(importData.objects)) {
+                        const currentObjects = canvas.objectsManager.getObjects();
+                        canvas.objectsManager.loadObjects([...currentObjects, ...importData.objects]);
+                    }
                     showToast(`Merged ${importData.layers.length} layer(s)`, 'success');
                 } else {
+                    // OVERRIDE MODE - Clear everything first
                     canvas.clear();
+
+                    console.log('[IMPORT OVERRIDE] Clearing canvas and importing:', {
+                        layers: importData.layers?.length || 0,
+                        strokes: importData.strokes?.length || 0,
+                        objects: importData.objects?.length || 0
+                    });
+
+                    // Load images
                     for (const layer of importData.layers) {
                         const img = new Image();
                         await new Promise((resolve) => {
                             img.onload = () => {
                                 const added = canvas.addImageSilent(img, layer.x, layer.y, layer.name, layer.width, layer.height, layer.visible);
                                 added.id = layer.id;
+                                added.zIndex = layer.zIndex || 0;
                                 resolve();
                             };
                             img.onerror = resolve;
                             img.src = layer.src;
                         });
                     }
-                    // Replace groups
+
+                    // Load groups
                     canvas.groups = importData.groups || [];
+
+                    // Load strokes
+                    if (importData.strokes && importData.strokes.length > 0) {
+                        console.log('[IMPORT] Loading', importData.strokes.length, 'strokes');
+                        canvas.loadStrokes(importData.strokes);
+                    }
+
+                    // Load objects (text/shapes)
+                    if (importData.objects && importData.objects.length > 0) {
+                        console.log('[IMPORT] Loading', importData.objects.length, 'objects');
+                        canvas.objectsManager.loadObjects(importData.objects);
+                        console.log('[IMPORT] Loaded objects, count in manager:', canvas.objectsManager.getObjects().length);
+                    }
+
+                    // Force render
+                    canvas.invalidateCullCache();
                     canvas.needsRender = true;
                     canvas.render();
+
                     showToast(`Imported ${importData.layers.length} layer(s)`, 'success');
                 }
 
@@ -1223,99 +1485,6 @@ async function openFloatingWindow() {
     }
 }
 
-// Text edit overlay function (Konva-style implementation)
-function showTextEditOverlay(textObject) {
-    const canvasRect = canvas.canvas.getBoundingClientRect();
-
-    // Convert world coordinates to screen coordinates
-    const screenX = (textObject.x * canvas.zoom) + canvas.pan.x;
-    const screenY = (textObject.y * canvas.zoom) + canvas.pan.y;
-
-    const overlayPos = {
-        x: canvasRect.left + screenX,
-        y: canvasRect.top + screenY
-    };
-
-    // Create textarea overlay
-    const textarea = document.createElement('textarea');
-    document.body.appendChild(textarea);
-
-    textarea.value = textObject.text || '';
-    textarea.style.position = 'absolute';
-    textarea.style.top = overlayPos.y + 'px';
-    textarea.style.left = overlayPos.x + 'px';
-    textarea.style.width = (textObject.width * canvas.zoom) + 'px';
-    textarea.style.height = (textObject.height * canvas.zoom) + 'px';
-    textarea.style.fontSize = (textObject.fontSize * canvas.zoom) + 'px';
-    textarea.style.fontFamily = textObject.font || 'Arial';
-    textarea.style.color = textObject.color || '#000000';
-    textarea.style.backgroundColor = textObject.backgroundColor || '#ffffff';
-    textarea.style.textAlign = textObject.align || 'left';
-    textarea.style.padding = ((textObject.padding || 10) * canvas.zoom) + 'px';
-    textarea.style.border = '2px solid #0066ff';
-    textarea.style.outline = 'none';
-    textarea.style.resize = 'none';
-    textarea.style.overflow = 'hidden';
-    textarea.style.lineHeight = '1.2';
-    textarea.style.zIndex = '10000';
-    textarea.focus();
-    textarea.select();
-
-    // Update textarea position and size when view changes
-    function updateTextareaTransform() {
-        const canvasRect = canvas.canvas.getBoundingClientRect();
-        const screenX = (textObject.x * canvas.zoom) + canvas.pan.x;
-        const screenY = (textObject.y * canvas.zoom) + canvas.pan.y;
-
-        textarea.style.top = (canvasRect.top + screenY) + 'px';
-        textarea.style.left = (canvasRect.left + screenX) + 'px';
-        textarea.style.width = (textObject.width * canvas.zoom) + 'px';
-        textarea.style.height = (textObject.height * canvas.zoom) + 'px';
-        textarea.style.fontSize = (textObject.fontSize * canvas.zoom) + 'px';
-        textarea.style.padding = ((textObject.padding || 10) * canvas.zoom) + 'px';
-    }
-
-    function removeTextarea() {
-        if (textarea.parentNode) {
-            textarea.parentNode.removeChild(textarea);
-        }
-        window.removeEventListener('click', handleOutsideClick);
-        canvas.canvas.removeEventListener('viewChanged', updateTextareaTransform);
-        canvas.objectsManager.stopTextEdit();
-        canvas.needsRender = true;
-    }
-
-    function saveText() {
-        const newText = textarea.value;
-        console.log('Saving text:', newText);
-        canvas.objectsManager.updateSelectedObject({ text: newText });
-        removeTextarea();
-    }
-
-    // Listen for view changes (zoom/pan)
-    canvas.canvas.addEventListener('viewChanged', updateTextareaTransform);
-
-    // Save on Enter (without Shift)
-    textarea.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            saveText();
-        }
-        if (e.key === 'Escape') {
-            removeTextarea();
-        }
-    });
-
-    // Save on outside click
-    function handleOutsideClick(e) {
-        if (e.target !== textarea) {
-            saveText();
-        }
-    }
-    setTimeout(() => {
-        window.addEventListener('click', handleOutsideClick);
-    }, 10);
-}
 
 // Property panel functions
 function showPropertiesPanel(obj) {
@@ -1333,45 +1502,35 @@ function showPropertiesPanel(obj) {
     // Show properties panel
     propertiesPanel.style.display = 'flex';
 
-    if (obj.type === 'text') {
+    if (obj.type === 'shape') {
+        propertiesTitle.textContent = 'Shape Properties';
+        textProperties.style.display = 'none';
+        shapeProperties.style.display = 'block';
+
+        // Populate shape properties
+        document.getElementById('shape-type').value = obj.shapeType || 'square';
+        document.getElementById('shape-fill-color').value = obj.fillColor || '#3b82f6';
+        document.getElementById('shape-has-stroke').checked = obj.hasStroke !== false;
+        document.getElementById('shape-stroke-color').value = obj.strokeColor || '#000000';
+        document.getElementById('shape-stroke-width').value = obj.strokeWidth || 2;
+
+        // Add event listeners for shape properties
+        setupShapePropertyListeners();
+    } else if (obj.type === 'text') {
         propertiesTitle.textContent = 'Text Properties';
         textProperties.style.display = 'block';
         shapeProperties.style.display = 'none';
 
         // Populate text properties
         document.getElementById('text-content').value = obj.text || '';
-        document.getElementById('text-font').value = obj.font || 'Arial';
-        document.getElementById('text-size').value = obj.fontSize || 16;
+        document.getElementById('text-font-size').value = obj.fontSize || 32;
+        document.getElementById('text-font-family').value = obj.fontFamily || 'Arial';
         document.getElementById('text-color').value = obj.color || '#000000';
-        document.getElementById('text-bg-color').value = obj.backgroundColor || '#ffffff';
-
-        // Set alignment buttons
-        document.querySelectorAll('.alignment-btn').forEach(btn => {
-            btn.classList.toggle('active', btn.dataset.align === obj.align);
-        });
+        document.getElementById('text-font-weight').value = obj.fontWeight || 'normal';
+        document.getElementById('text-align').value = obj.textAlign || 'left';
 
         // Add event listeners for text properties
         setupTextPropertyListeners();
-    } else if (obj.type === 'shape') {
-        propertiesTitle.textContent = 'Shape Properties';
-        textProperties.style.display = 'none';
-        shapeProperties.style.display = 'block';
-
-        // Populate shape properties
-        document.getElementById('shape-type').value = obj.shapeType || 'rectangle';
-        document.getElementById('shape-fill-color').value = obj.fillColor || '#3b82f6';
-        document.getElementById('shape-stroke-color').value = obj.strokeColor || '#000000';
-        document.getElementById('shape-stroke-width').value = obj.strokeWidth || 2;
-
-        if (obj.shapeType === 'polygon') {
-            document.getElementById('polygon-sides-row').style.display = 'flex';
-            document.getElementById('polygon-sides').value = obj.sides || 6;
-        } else {
-            document.getElementById('polygon-sides-row').style.display = 'none';
-        }
-
-        // Add event listeners for shape properties
-        setupShapePropertyListeners();
     }
 
     // Close button
@@ -1391,91 +1550,27 @@ function hidePropertiesPanel() {
     if (defaultProperties) defaultProperties.style.display = 'block';
 
     // Remove event listeners
-    removeTextPropertyListeners();
     removeShapePropertyListeners();
 }
 
-function setupTextPropertyListeners() {
-    const textContent = document.getElementById('text-content');
-    const textFont = document.getElementById('text-font');
-    const textSize = document.getElementById('text-size');
-    const textColor = document.getElementById('text-color');
-    const textBgColor = document.getElementById('text-bg-color');
-    const alignmentBtns = document.querySelectorAll('.alignment-btn');
-
-    textContent.oninput = () => {
-        // Allow empty text during editing, but preserve the value
-        const value = textContent.value;
-        canvas.objectsManager.updateSelectedObject({ text: value || '' });
-    };
-
-    textFont.onchange = () => {
-        canvas.objectsManager.updateSelectedObject({ font: textFont.value });
-    };
-
-    textSize.oninput = () => {
-        const value = parseInt(textSize.value);
-        // Allow any input during typing (including empty for backspace)
-        // Only update if we have a valid number within range
-        if (!isNaN(value) && value >= 8 && value <= 200) {
-            canvas.objectsManager.updateSelectedObject({ fontSize: value });
-        }
-    };
-
-    textColor.oninput = () => {
-        canvas.objectsManager.updateSelectedObject({ color: textColor.value });
-    };
-
-    textBgColor.oninput = () => {
-        canvas.objectsManager.updateSelectedObject({ backgroundColor: textBgColor.value });
-    };
-
-    alignmentBtns.forEach(btn => {
-        btn.onclick = () => {
-            alignmentBtns.forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            canvas.objectsManager.updateSelectedObject({ align: btn.dataset.align });
-        };
-    });
-}
-
-function removeTextPropertyListeners() {
-    const textContent = document.getElementById('text-content');
-    const textFont = document.getElementById('text-font');
-    const textSize = document.getElementById('text-size');
-    const textColor = document.getElementById('text-color');
-    const textBgColor = document.getElementById('text-bg-color');
-    const alignmentBtns = document.querySelectorAll('.alignment-btn');
-
-    if (textContent) textContent.oninput = null;
-    if (textFont) textFont.onchange = null;
-    if (textSize) textSize.oninput = null;
-    if (textColor) textColor.oninput = null;
-    if (textBgColor) textBgColor.oninput = null;
-    alignmentBtns.forEach(btn => btn.onclick = null);
-}
 
 function setupShapePropertyListeners() {
     const shapeType = document.getElementById('shape-type');
     const shapeFillColor = document.getElementById('shape-fill-color');
+    const shapeHasStroke = document.getElementById('shape-has-stroke');
     const shapeStrokeColor = document.getElementById('shape-stroke-color');
     const shapeStrokeWidth = document.getElementById('shape-stroke-width');
-    const polygonSides = document.getElementById('polygon-sides');
 
     shapeType.onchange = () => {
-        const value = shapeType.value;
-        canvas.objectsManager.updateSelectedObject({ shapeType: value });
-
-        const polygonSidesRow = document.getElementById('polygon-sides-row');
-        if (value === 'polygon') {
-            polygonSidesRow.style.display = 'flex';
-        } else {
-            polygonSidesRow.style.display = 'none';
-        }
+        canvas.objectsManager.updateSelectedObject({ shapeType: shapeType.value });
     };
 
     shapeFillColor.oninput = () => {
         canvas.objectsManager.updateSelectedObject({ fillColor: shapeFillColor.value });
+    };
+
+    shapeHasStroke.onchange = () => {
+        canvas.objectsManager.updateSelectedObject({ hasStroke: shapeHasStroke.checked });
     };
 
     shapeStrokeColor.oninput = () => {
@@ -1485,22 +1580,142 @@ function setupShapePropertyListeners() {
     shapeStrokeWidth.oninput = () => {
         canvas.objectsManager.updateSelectedObject({ strokeWidth: parseInt(shapeStrokeWidth.value) });
     };
-
-    polygonSides.oninput = () => {
-        canvas.objectsManager.updateSelectedObject({ sides: parseInt(polygonSides.value) });
-    };
 }
 
 function removeShapePropertyListeners() {
+    // Event listeners are now managed per panel show, cleanup not strictly necessary
+}
+
+function setupTextPropertyListeners() {
+    const textContent = document.getElementById('text-content');
+    const textFontSize = document.getElementById('text-font-size');
+    const textFontFamily = document.getElementById('text-font-family');
+    const textColor = document.getElementById('text-color');
+    const textFontWeight = document.getElementById('text-font-weight');
+    const textAlign = document.getElementById('text-align');
+
+    textContent.oninput = () => {
+        canvas.objectsManager.updateSelectedObject({ text: textContent.value });
+    };
+
+    textFontSize.oninput = () => {
+        canvas.objectsManager.updateSelectedObject({ fontSize: parseInt(textFontSize.value) });
+    };
+
+    textFontFamily.onchange = () => {
+        canvas.objectsManager.updateSelectedObject({ fontFamily: textFontFamily.value });
+    };
+
+    textColor.oninput = () => {
+        canvas.objectsManager.updateSelectedObject({ color: textColor.value });
+    };
+
+    textFontWeight.onchange = () => {
+        canvas.objectsManager.updateSelectedObject({ fontWeight: textFontWeight.value });
+    };
+
+    textAlign.onchange = () => {
+        canvas.objectsManager.updateSelectedObject({ textAlign: textAlign.value });
+    };
+}
+
+function setupTextTool() {
+    const textToolBtn = document.getElementById('text-tool-btn');
+    if (!textToolBtn) return;
+
+    textToolBtn.addEventListener('click', () => {
+        // Toggle text tool mode
+        if (canvas.objectsManager.currentTool === 'text') {
+            canvas.objectsManager.setTool(null);
+            textToolBtn.classList.remove('active');
+        } else {
+            canvas.objectsManager.setTool('text');
+            textToolBtn.classList.add('active');
+        }
+    });
+}
+
+function setupShapeTool() {
+    const shapeToolBtn = document.getElementById('shape-tool-btn');
+    if (!shapeToolBtn) return;
+
     const shapeType = document.getElementById('shape-type');
     const shapeFillColor = document.getElementById('shape-fill-color');
+    const shapeHasStroke = document.getElementById('shape-has-stroke');
     const shapeStrokeColor = document.getElementById('shape-stroke-color');
     const shapeStrokeWidth = document.getElementById('shape-stroke-width');
-    const polygonSides = document.getElementById('polygon-sides');
+    const shapeLineColor = document.getElementById('shape-line-color');
+    const shapeLineThickness = document.getElementById('shape-line-thickness');
+    const lineColorRow = document.getElementById('shape-line-color-row');
+    const lineThicknessRow = document.getElementById('shape-line-thickness-row');
+    const fillColorRow = shapeFillColor.closest('.property-row');
+    const strokeToggleRow = shapeHasStroke.closest('.property-row').parentElement;
+    const strokeColorRow = document.getElementById('shape-stroke-color-row');
+    const strokeWidthRow = document.getElementById('shape-stroke-width-row');
 
-    if (shapeType) shapeType.onchange = null;
-    if (shapeFillColor) shapeFillColor.oninput = null;
-    if (shapeStrokeColor) shapeStrokeColor.oninput = null;
-    if (shapeStrokeWidth) shapeStrokeWidth.oninput = null;
-    if (polygonSides) polygonSides.oninput = null;
+    // Show/hide properties based on shape type
+    function updatePropertiesVisibility() {
+        const type = shapeType.value;
+        const isLineOrArrow = type === 'line' || type === 'arrow';
+
+        // For lines/arrows: show line color and thickness, hide fill and stroke options
+        lineColorRow.style.display = isLineOrArrow ? 'flex' : 'none';
+        lineThicknessRow.style.display = isLineOrArrow ? 'flex' : 'none';
+        fillColorRow.style.display = isLineOrArrow ? 'none' : 'flex';
+        strokeToggleRow.style.display = isLineOrArrow ? 'none' : 'flex';
+        strokeColorRow.style.display = isLineOrArrow ? 'none' : 'flex';
+        strokeWidthRow.style.display = isLineOrArrow ? 'none' : 'flex';
+    }
+
+    // Update shape settings when properties change
+    function updateShapeSettings() {
+        const type = shapeType.value;
+        const isLineOrArrow = type === 'line' || type === 'arrow';
+
+        canvas.objectsManager.currentShapeSettings = {
+            type: type,
+            fillColor: shapeFillColor.value,
+            hasStroke: shapeHasStroke.checked,
+            strokeColor: isLineOrArrow ? shapeLineColor.value : shapeStrokeColor.value,
+            strokeWidth: isLineOrArrow ? (parseInt(shapeLineThickness.value) || 5) : (parseInt(shapeStrokeWidth.value) || 2)
+        };
+    }
+
+    shapeType.addEventListener('change', () => {
+        updatePropertiesVisibility();
+        updateShapeSettings();
+    });
+    shapeFillColor.addEventListener('change', updateShapeSettings);
+    shapeHasStroke.addEventListener('change', updateShapeSettings);
+    shapeStrokeColor.addEventListener('change', updateShapeSettings);
+    shapeStrokeWidth.addEventListener('change', updateShapeSettings);
+    shapeLineColor.addEventListener('change', updateShapeSettings);
+    shapeLineThickness.addEventListener('change', updateShapeSettings);
+
+    // Initialize settings
+    updatePropertiesVisibility();
+    updateShapeSettings();
+
+    shapeToolBtn.addEventListener('click', () => {
+        // Toggle shape tool mode
+        if (canvas.objectsManager.currentTool === 'shape') {
+            canvas.objectsManager.setTool(null);
+            shapeToolBtn.classList.remove('active');
+            hidePropertiesPanel();
+        } else {
+            canvas.objectsManager.setTool('shape');
+            shapeToolBtn.classList.add('active');
+            // Show shape properties panel
+            showPropertiesPanel({ type: 'shape' });
+        }
+    });
+
+    // Listen for tool changes to deactivate button and close properties
+    canvas.canvas.addEventListener('toolChanged', (e) => {
+        if (e.detail.tool !== 'shape') {
+            shapeToolBtn.classList.remove('active');
+            // Close properties panel when tool is deactivated (after creating shape)
+            hidePropertiesPanel();
+        }
+    });
 }

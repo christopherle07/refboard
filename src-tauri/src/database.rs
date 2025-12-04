@@ -15,6 +15,8 @@ pub struct Layer {
     pub height: f64,
     #[serde(default = "default_visible")]
     pub visible: bool,
+    #[serde(default)]
+    pub z_index: f64,
 }
 
 fn default_visible() -> bool {
@@ -45,6 +47,8 @@ pub struct Board {
     pub view_state: Option<serde_json::Value>,
     #[serde(default)]
     pub strokes: Option<serde_json::Value>,
+    #[serde(default)]
+    pub objects: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -69,6 +73,7 @@ pub struct BoardUpdate {
     pub thumbnail: Option<String>,
     pub view_state: Option<serde_json::Value>,
     pub strokes: Option<serde_json::Value>,
+    pub objects: Option<serde_json::Value>,
 }
 
 fn get_boards_dir(app: &AppHandle) -> PathBuf {

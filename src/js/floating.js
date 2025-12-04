@@ -24,6 +24,50 @@ document.addEventListener('DOMContentLoaded', async () => {
                 img.visible = event.data.visible;
                 canvas.needsRender = true;
             }
+        } else if (event.data.type === 'background_color_changed') {
+            canvas.setBackgroundColor(event.data.color);
+            document.body.style.backgroundColor = event.data.color;
+            updateTitlebarTheme(event.data.color);
+        } else if (event.data.type === 'layer_order_changed') {
+            console.log('Floating window received layer order update:', event.data.updates);
+            // Update zIndex for all layers
+            event.data.updates.forEach(update => {
+                if (update.type === 'image') {
+                    const img = canvas.images.find(i => i.id === update.id);
+                    if (img) {
+                        console.log('Updated image', img.id, 'zIndex to', update.zIndex);
+                        img.zIndex = update.zIndex;
+                    }
+                } else if (update.type === 'object') {
+                    const obj = canvas.objectsManager.objects.find(o => o.id === update.id);
+                    if (obj) {
+                        console.log('Updated object', obj.id, 'zIndex to', update.zIndex);
+                        obj.zIndex = update.zIndex;
+                    }
+                }
+            });
+            canvas.invalidateCullCache();
+            canvas.needsRender = true;
+            canvas.render();
+        } else if (event.data.type === 'sync_state_response') {
+            // Received current state from editor
+            console.log('Floating window received state sync:', event.data.updates);
+            event.data.updates.forEach(update => {
+                if (update.type === 'image') {
+                    const img = canvas.images.find(i => i.id === update.id);
+                    if (img) {
+                        img.zIndex = update.zIndex;
+                    }
+                } else if (update.type === 'object') {
+                    const obj = canvas.objectsManager.objects.find(o => o.id === update.id);
+                    if (obj) {
+                        obj.zIndex = update.zIndex;
+                    }
+                }
+            });
+            canvas.invalidateCullCache();
+            canvas.needsRender = true;
+            canvas.render();
         }
     };
     
@@ -60,11 +104,19 @@ async function initFloatingWindow() {
 
     // Load text/shape objects if they exist
     if (board.objects && board.objects.length > 0) {
+        console.log('Loading objects in floating window:', board.objects);
         canvas.objectsManager.loadObjects(board.objects);
+        // Force render after loading objects
+        canvas.needsRender = true;
+    } else {
+        console.log('No objects to load in floating window', board.objects);
     }
 
     canvas.canvas.addEventListener('canvasChanged', scheduleSave);
     canvas.canvas.addEventListener('objectsChanged', scheduleSave);
+
+    // Request current state from editor
+    syncChannel.postMessage({ type: 'sync_state_request' });
 }
 
 function setupDragAndDrop() {
@@ -142,6 +194,7 @@ function loadLayers(layers) {
                 const visible = layer.visible !== false;
                 const added = canvas.addImageSilent(img, layer.x, layer.y, layer.name, layer.width, layer.height, visible);
                 added.id = layer.id;
+                added.zIndex = layer.zIndex || 0;
                 loaded++;
                 if (loaded >= total) {
                     canvas.selectImage(null);
@@ -395,8 +448,10 @@ function updateTitlebarTheme(bgColor) {
     const titlebar = document.querySelector('.titlebar');
     if (luminance < 0.5) {
         titlebar.classList.add('dark-mode');
+        document.documentElement.setAttribute('data-bg-luminance', 'dark');
     } else {
         titlebar.classList.remove('dark-mode');
+        document.documentElement.setAttribute('data-bg-luminance', 'light');
     }
 }
 
@@ -553,3 +608,4 @@ function setupDrawingToolbar() {
         }
     });
 }
+

@@ -6,7 +6,12 @@
       "Bash(rm:*)",
       "Bash(npm install:*)",
       "Bash(npm run build:*)",
-      "Bash(npm run tauri:build:*)"
+      "Bash(npm run tauri:build:*)",
+      "Bash(npm run tauri:dev:*)",
+      "Bash(npm run:*)",
+      "Bash(timeout /t 5 /nobreak)",
+      "Bash(taskkill:*)",
+      "Bash(start \"\" \"c:\\Users\\chris\\Tauri_AREF\\src-tauri\\target\\release\\tauri_aref.exe\")"
     ],
     "deny": [],
     "ask": []

@@ -310,3 +310,18 @@ body {
     background: rgba(13, 110, 253, 0.15);
     color: #0d6efd;
 }
+
+/* Background-adaptive icon coloring */
+.titlebar-icon {
+    display: block;
+}
+
+/* Default to dark icons (for light backgrounds) */
+.bg-adaptive-icon {
+    filter: brightness(0) saturate(100%);
+}
+
+/* Light icons for dark backgrounds */
+[data-bg-luminance="dark"] .bg-adaptive-icon {
+    filter: brightness(0) saturate(100%) invert(100%);
+}

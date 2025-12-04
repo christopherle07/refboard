@@ -210,15 +210,25 @@ function importBoardAsNew() {
                 const boardName = importData.name || file.name.replace('.aref', '');
                 const bgColor = importData.bgColor || '#ffffff';
 
+                console.log('[IMPORT AS NEW] Creating board with:', {
+                    layers: importData.layers?.length || 0,
+                    assets: importData.assets?.length || 0,
+                    strokes: importData.strokes?.length || 0,
+                    objects: importData.objects?.length || 0
+                });
+
                 const newBoard = await boardManager.createBoard(boardName, bgColor);
 
-                if (importData.layers && importData.layers.length > 0) {
-                    await boardManager.updateBoard(newBoard.id, { layers: importData.layers });
-                }
+                // Import EVERYTHING
+                const updates = {};
+                if (importData.layers) updates.layers = importData.layers;
+                if (importData.assets) updates.assets = importData.assets;
+                if (importData.strokes) updates.strokes = importData.strokes;
+                if (importData.objects) updates.objects = importData.objects;
+                if (importData.groups) updates.groups = importData.groups;
+                if (importData.viewState) updates.viewState = importData.viewState;
 
-                if (importData.assets && importData.assets.length > 0) {
-                    await boardManager.updateBoard(newBoard.id, { assets: importData.assets });
-                }
+                await boardManager.updateBoard(newBoard.id, updates);
 
                 showToast(`Board "${boardName}" imported successfully`, 'success');
                 renderBoards();

@@ -1,6 +1,4 @@
-// Canvas Objects Manager - Handles text boxes
-// Uses overlay HTML elements for editing (best practice per W3C and modern libraries like Konva)
-
+// Canvas Objects Manager - Handles shapes
 export class CanvasObjectsManager {
     constructor(canvas) {
         this.canvas = canvas;
@@ -15,7 +13,6 @@ export class CanvasObjectsManager {
         this.resizeHandle = null;
         this.dragOffset = { x: 0, y: 0 };
         this.resizeStart = { x: 0, y: 0, width: 0, height: 0 };
-        this.editingTextId = null;
     }
 
     setTool(tool) {
@@ -60,23 +57,16 @@ export class CanvasObjectsManager {
             return true;
         }
 
-        // No object clicked - check if creating new object
+        // No object clicked - deselect if no tool active
         if (!this.currentTool) {
             this.deselectAll();
             return false;
         }
 
-        // Creating new text object - start drag-to-create
-        if (this.currentTool === 'text') {
+        // Start drawing text or shape if tool is active
+        if (this.currentTool === 'text' || this.currentTool === 'shape') {
             this.isDrawing = true;
             this.startPoint = { x: worldPos.x, y: worldPos.y };
-
-            // Create preview object
-            this.previewObject = this.createTextObject(worldPos.x, worldPos.y);
-            this.previewObject.width = 0;
-            this.previewObject.height = 0;
-
-            this.canvas.needsRender = true;
             return true;
         }
 
@@ -84,81 +74,98 @@ export class CanvasObjectsManager {
     }
 
     handleMouseMove(e, worldPos) {
-        if (this.isDrawing && this.currentTool === 'text' && this.startPoint && this.previewObject) {
-            // Update preview object size while dragging
-            const minSize = 50;
-            const width = worldPos.x - this.startPoint.x;
-            const height = worldPos.y - this.startPoint.y;
-
-            // Support dragging in any direction
-            if (width < 0) {
-                this.previewObject.x = worldPos.x;
-                this.previewObject.width = Math.max(minSize, Math.abs(width));
-            } else {
-                this.previewObject.x = this.startPoint.x;
-                this.previewObject.width = Math.max(minSize, width);
-            }
-
-            if (height < 0) {
-                this.previewObject.y = worldPos.y;
-                this.previewObject.height = Math.max(minSize, Math.abs(height));
-            } else {
-                this.previewObject.y = this.startPoint.y;
-                this.previewObject.height = Math.max(minSize, height);
-            }
-
-            this.canvas.needsRender = true;
-        } else if (this.isResizing && this.selectedObject && this.resizeHandle) {
+        if (this.isResizing && this.selectedObject && this.resizeHandle) {
             // Resize the selected object
             this.resizeObject(this.selectedObject, this.resizeHandle, worldPos.x, worldPos.y);
             this.canvas.needsRender = true;
             this.dispatchObjectsChanged();
         } else if (this.isDragging && this.selectedObject) {
             // Drag the selected object
-            this.selectedObject.x = worldPos.x - this.dragOffset.x;
-            this.selectedObject.y = worldPos.y - this.dragOffset.y;
+            const newX = worldPos.x - this.dragOffset.x;
+            const newY = worldPos.y - this.dragOffset.y;
+
+            // For lines/arrows, move both start and end points
+            if (this.selectedObject.type === 'shape' &&
+                (this.selectedObject.shapeType === 'line' || this.selectedObject.shapeType === 'arrow')) {
+                const deltaX = newX - this.selectedObject.x;
+                const deltaY = newY - this.selectedObject.y;
+
+                this.selectedObject.x = newX;
+                this.selectedObject.y = newY;
+                if (this.selectedObject.x2 !== undefined) {
+                    this.selectedObject.x2 += deltaX;
+                }
+                if (this.selectedObject.y2 !== undefined) {
+                    this.selectedObject.y2 += deltaY;
+                }
+            } else {
+                // Normal objects just move x and y
+                this.selectedObject.x = newX;
+                this.selectedObject.y = newY;
+            }
+
             this.canvas.needsRender = true;
             this.dispatchObjectsChanged();
+        } else if (this.isDrawing && this.currentTool === 'text' && this.startPoint) {
+            // Preview text box as user drags
+            const x = Math.min(this.startPoint.x, worldPos.x);
+            const y = Math.min(this.startPoint.y, worldPos.y);
+            const width = Math.abs(worldPos.x - this.startPoint.x);
+            const height = Math.abs(worldPos.y - this.startPoint.y);
+
+            this.previewObject = {
+                type: 'text',
+                x, y, width, height,
+                text: 'Text',
+                fontSize: 32,
+                fontFamily: 'Arial',
+                fontWeight: 'normal',
+                color: '#000000',
+                textAlign: 'left'
+            };
+            this.canvas.needsRender = true;
+        } else if (this.isDrawing && this.currentTool === 'shape' && this.startPoint) {
+            // Preview shape as user drags
+            const shapeType = this.currentShapeSettings?.type || 'square';
+
+            if (shapeType === 'line' || shapeType === 'arrow') {
+                // For lines/arrows, use direct start and end points
+                this.previewObject = {
+                    type: 'shape',
+                    shapeType: shapeType,
+                    x: this.startPoint.x,
+                    y: this.startPoint.y,
+                    x2: worldPos.x,
+                    y2: worldPos.y,
+                    width: 0,
+                    height: 0,
+                    fillColor: this.currentShapeSettings?.fillColor || '#3b82f6',
+                    hasStroke: this.currentShapeSettings?.hasStroke !== false,
+                    strokeColor: this.currentShapeSettings?.strokeColor || '#000000',
+                    strokeWidth: this.currentShapeSettings?.strokeWidth || 2
+                };
+            } else {
+                // For other shapes, use bounding box
+                const x = Math.min(this.startPoint.x, worldPos.x);
+                const y = Math.min(this.startPoint.y, worldPos.y);
+                const width = Math.abs(worldPos.x - this.startPoint.x);
+                const height = Math.abs(worldPos.y - this.startPoint.y);
+
+                this.previewObject = {
+                    type: 'shape',
+                    x, y, width, height,
+                    shapeType: shapeType,
+                    fillColor: this.currentShapeSettings?.fillColor || '#3b82f6',
+                    hasStroke: this.currentShapeSettings?.hasStroke !== false,
+                    strokeColor: this.currentShapeSettings?.strokeColor || '#000000',
+                    strokeWidth: this.currentShapeSettings?.strokeWidth || 2
+                };
+            }
+            this.canvas.needsRender = true;
         }
     }
 
     handleMouseUp(e, worldPos) {
-        if (this.isDrawing && this.currentTool === 'text' && this.previewObject) {
-            // Finalize the text object creation
-            const minSize = 50;
-
-            // If the dragged size is too small, use default size
-            if (this.previewObject.width < minSize || this.previewObject.height < minSize) {
-                this.previewObject.width = 200;
-                this.previewObject.height = 80;
-                // Recalculate font size for default dimensions
-                this.previewObject.fontSize = 16;
-            } else {
-                // Recalculate font size based on final dimensions
-                const baseDimension = Math.min(this.previewObject.width, this.previewObject.height);
-                this.previewObject.fontSize = Math.max(12, Math.floor(baseDimension / 5));
-            }
-
-            // Add the textbox to objects
-            this.objects.push(this.previewObject);
-            this.selectObject(this.previewObject);
-
-            // Clean up
-            this.isDrawing = false;
-            this.startPoint = null;
-            this.previewObject = null;
-
-            // Deactivate tool and notify UI
-            this.currentTool = null;
-            const toolEvent = new CustomEvent('toolDeactivated');
-            this.canvas.canvas.dispatchEvent(toolEvent);
-
-            // Dispatch event to show in layers
-            this.dispatchObjectsChanged();
-            this.canvas.needsRender = true;
-            return true;
-        }
-
         if (this.isResizing) {
             this.isResizing = false;
             this.resizeHandle = null;
@@ -168,66 +175,182 @@ export class CanvasObjectsManager {
             this.isDragging = false;
             return true;
         }
+        if (this.isDrawing && this.currentTool === 'text' && this.startPoint) {
+            // Create text object
+            const x = Math.min(this.startPoint.x, worldPos.x);
+            const y = Math.min(this.startPoint.y, worldPos.y);
+            const width = Math.abs(worldPos.x - this.startPoint.x);
+            const height = Math.abs(worldPos.y - this.startPoint.y);
+
+            // Only create if dragged a reasonable size
+            if (width > 30 && height > 20) {
+                const textObj = {
+                    id: this.generateId(),
+                    type: 'text',
+                    x, y, width, height,
+                    text: 'Double-click to edit',
+                    fontSize: 32,
+                    fontFamily: 'Arial',
+                    fontWeight: 'normal',
+                    color: '#000000',
+                    textAlign: 'left',
+                    visible: true,
+                    zIndex: this.getNextZIndex()
+                };
+
+                this.objects.push(textObj);
+                this.selectObject(textObj);
+                this.dispatchObjectsChanged();
+
+                // Exit text tool mode after creating textbox
+                this.setTool(null);
+                // Dispatch event to update UI button state
+                const event = new CustomEvent('toolChanged', { detail: { tool: null } });
+                this.canvas.canvas.dispatchEvent(event);
+            }
+
+            this.isDrawing = false;
+            this.startPoint = null;
+            this.previewObject = null;
+            this.canvas.needsRender = true;
+            return true;
+        }
+
+        if (this.isDrawing && this.currentTool === 'shape' && this.startPoint) {
+            // Create shape object
+            const shapeType = this.currentShapeSettings?.type || 'square';
+
+            // For lines and arrows, store start and end points directly
+            // For other shapes, normalize to top-left corner with width/height
+            let shapeObj;
+            const distance = Math.sqrt(
+                Math.pow(worldPos.x - this.startPoint.x, 2) +
+                Math.pow(worldPos.y - this.startPoint.y, 2)
+            );
+
+            // Only create if dragged a reasonable distance
+            if (distance > 10) {
+                if (shapeType === 'line' || shapeType === 'arrow') {
+                    // Store actual start/end for lines and arrows
+                    shapeObj = {
+                        id: this.generateId(),
+                        type: 'shape',
+                        shapeType: shapeType,
+                        x: this.startPoint.x,
+                        y: this.startPoint.y,
+                        x2: worldPos.x,
+                        y2: worldPos.y,
+                        width: 0,  // Not used for lines
+                        height: 0, // Not used for lines
+                        fillColor: this.currentShapeSettings?.fillColor || '#3b82f6',
+                        hasStroke: this.currentShapeSettings?.hasStroke !== false,
+                        strokeColor: this.currentShapeSettings?.strokeColor || '#000000',
+                        strokeWidth: this.currentShapeSettings?.strokeWidth || 2,
+                        visible: true,
+                        zIndex: this.getNextZIndex()
+                    };
+                } else {
+                    // Normal shapes use bounding box
+                    const x = Math.min(this.startPoint.x, worldPos.x);
+                    const y = Math.min(this.startPoint.y, worldPos.y);
+                    const width = Math.abs(worldPos.x - this.startPoint.x);
+                    const height = Math.abs(worldPos.y - this.startPoint.y);
+
+                    shapeObj = {
+                        id: this.generateId(),
+                        type: 'shape',
+                        x, y, width, height,
+                        shapeType: shapeType,
+                        fillColor: this.currentShapeSettings?.fillColor || '#3b82f6',
+                        hasStroke: this.currentShapeSettings?.hasStroke !== false,
+                        strokeColor: this.currentShapeSettings?.strokeColor || '#000000',
+                        strokeWidth: this.currentShapeSettings?.strokeWidth || 2,
+                        visible: true,
+                        zIndex: this.getNextZIndex()
+                    };
+                }
+
+                this.objects.push(shapeObj);
+                this.selectObject(shapeObj);
+                this.dispatchObjectsChanged();
+
+                // Exit shape tool mode after creating shape
+                this.setTool(null);
+                // Dispatch event to update UI button state
+                const event = new CustomEvent('toolChanged', { detail: { tool: null } });
+                this.canvas.canvas.dispatchEvent(event);
+            }
+
+            this.isDrawing = false;
+            this.startPoint = null;
+            this.previewObject = null;
+            this.canvas.needsRender = true;
+            return true;
+        }
         return false;
     }
 
     handleDoubleClick(e, worldPos) {
         const clickedObject = this.getObjectAtPoint(worldPos.x, worldPos.y);
         if (clickedObject && clickedObject.type === 'text') {
-            this.startTextEdit(clickedObject);
+            // Double-click on text opens edit mode
+            this.selectObject(clickedObject, true);
             return true;
         }
         return false;
     }
 
-    createTextObject(x, y, width = 200, height = 80) {
-        // Calculate font size based on textbox dimensions
-        // Use the smaller dimension (width or height) as the basis
-        // Scale: roughly 1px font size per 12-15 pixels of textbox dimension
-        const baseDimension = Math.min(width, height);
-        const fontSize = Math.max(12, Math.floor(baseDimension / 5));
-
-        return {
-            type: 'text',
-            id: this.generateId(),
-            name: 'Text Box',
-            x,
-            y,
-            width,
-            height,
-            text: 'Double-click to edit',
-            font: 'Arial',
-            fontSize: fontSize,
-            color: '#000000',
-            backgroundColor: '#ffffff',
-            align: 'left',
-            padding: 10
-        };
-    }
-
-    startTextEdit(textObject) {
-        this.editingTextId = textObject.id;
-
-        // Dispatch event for UI to handle text editing
-        const event = new CustomEvent('textEditStart', { detail: textObject });
-        this.canvas.canvas.dispatchEvent(event);
-    }
-
-    stopTextEdit() {
-        if (this.editingTextId) {
-            this.editingTextId = null;
-            const event = new CustomEvent('textEditStop');
-            this.canvas.canvas.dispatchEvent(event);
-        }
-    }
-
     getObjectAtPoint(x, y) {
-        // Check in reverse order (top to bottom)
-        for (let i = this.objects.length - 1; i >= 0; i--) {
-            const obj = this.objects[i];
-            if (x >= obj.x && x <= obj.x + obj.width &&
-                y >= obj.y && y <= obj.y + obj.height) {
-                return obj;
+        // Sort objects by zIndex (highest first = on top)
+        const sortedObjects = [...this.objects].sort((a, b) => (b.zIndex || 0) - (a.zIndex || 0));
+
+        // Check in zIndex order (highest zIndex = topmost)
+        for (const obj of sortedObjects) {
+            // Special handling for lines and arrows
+            if (obj.type === 'shape' && (obj.shapeType === 'line' || obj.shapeType === 'arrow')) {
+                const x1 = obj.x;
+                const y1 = obj.y;
+                const x2 = obj.x2 !== undefined ? obj.x2 : obj.x + obj.width;
+                const y2 = obj.y2 !== undefined ? obj.y2 : obj.y + obj.height;
+
+                // Calculate distance from point to line
+                const A = x - x1;
+                const B = y - y1;
+                const C = x2 - x1;
+                const D = y2 - y1;
+
+                const dot = A * C + B * D;
+                const lenSq = C * C + D * D;
+                let param = -1;
+                if (lenSq !== 0) param = dot / lenSq;
+
+                let xx, yy;
+                if (param < 0) {
+                    xx = x1;
+                    yy = y1;
+                } else if (param > 1) {
+                    xx = x2;
+                    yy = y2;
+                } else {
+                    xx = x1 + param * C;
+                    yy = y1 + param * D;
+                }
+
+                const dx = x - xx;
+                const dy = y - yy;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+
+                // Click within 10 pixels of the line
+                const threshold = Math.max(10, (obj.strokeWidth || 5) + 5);
+                if (distance <= threshold) {
+                    return obj;
+                }
+            } else {
+                // Normal bounding box check for other shapes
+                if (x >= obj.x && x <= obj.x + obj.width &&
+                    y >= obj.y && y <= obj.y + obj.height) {
+                    return obj;
+                }
             }
         }
         return null;
@@ -235,6 +358,31 @@ export class CanvasObjectsManager {
 
     getResizeHandleAtPoint(obj, x, y) {
         const handleRadius = 8 / this.canvas.zoom; // Slightly larger hit area
+
+        // Special handling for lines and arrows - only start and end handles
+        if (obj.type === 'shape' && (obj.shapeType === 'line' || obj.shapeType === 'arrow')) {
+            const x1 = obj.x;
+            const y1 = obj.y;
+            const x2 = obj.x2 !== undefined ? obj.x2 : obj.x + obj.width;
+            const y2 = obj.y2 !== undefined ? obj.y2 : obj.y + obj.height;
+
+            const handles = [
+                { name: 'start', x: x1, y: y1 },
+                { name: 'end', x: x2, y: y2 }
+            ];
+
+            for (const handle of handles) {
+                const dx = x - handle.x;
+                const dy = y - handle.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                if (distance <= handleRadius) {
+                    return handle.name;
+                }
+            }
+            return null;
+        }
+
+        // Normal shapes - 8 resize handles
         const midX = obj.x + obj.width / 2;
         const midY = obj.y + obj.height / 2;
 
@@ -261,7 +409,22 @@ export class CanvasObjectsManager {
     }
 
     resizeObject(obj, handle, mouseX, mouseY) {
-        const minSize = 50; // Minimum width/height
+        // Special handling for lines and arrows
+        if (obj.type === 'shape' && (obj.shapeType === 'line' || obj.shapeType === 'arrow')) {
+            if (handle === 'start') {
+                // Move the start point
+                obj.x = mouseX;
+                obj.y = mouseY;
+            } else if (handle === 'end') {
+                // Move the end point
+                obj.x2 = mouseX;
+                obj.y2 = mouseY;
+            }
+            return;
+        }
+
+        // Normal shapes - minimum size constraint
+        const minSize = 50;
 
         switch (handle) {
             case 'se': // Bottom-right
@@ -308,22 +471,27 @@ export class CanvasObjectsManager {
         }
     }
 
-    selectObject(obj) {
-        if (this.selectedObject === obj) return;
+    selectObject(obj, isDoubleClick = false) {
+        const wasAlreadySelected = this.selectedObject === obj;
 
         this.selectedObject = obj;
         this.canvas.needsRender = true;
 
         // Dispatch event for UI to update
-        const event = new CustomEvent('objectSelected', { detail: obj });
-        this.canvas.canvas.dispatchEvent(event);
+        if (!wasAlreadySelected) {
+            const event = new CustomEvent('objectSelected', { detail: obj });
+            this.canvas.canvas.dispatchEvent(event);
+        } else if (isDoubleClick) {
+            // If already selected and double-clicked, focus the text input
+            const event = new CustomEvent('objectDoubleClicked', { detail: obj });
+            this.canvas.canvas.dispatchEvent(event);
+        }
     }
 
     deselectAll() {
         if (this.selectedObject) {
             this.selectedObject = null;
             this.canvas.needsRender = true;
-            this.stopTextEdit();
 
             // Dispatch event for UI
             const event = new CustomEvent('objectDeselected');
@@ -370,9 +538,14 @@ export class CanvasObjectsManager {
     }
 
     render(ctx) {
-        // Render all objects
+        // Render all visible objects
+        if (this.objects.length > 0) {
+            console.log('Rendering', this.objects.length, 'objects');
+        }
         for (const obj of this.objects) {
-            this.renderObject(ctx, obj);
+            if (obj.visible !== false) {
+                this.renderObject(ctx, obj);
+            }
         }
 
         // Render preview
@@ -381,7 +554,24 @@ export class CanvasObjectsManager {
         }
 
         // Render selection
-        if (this.selectedObject) {
+        if (this.selectedObject && this.selectedObject.visible !== false) {
+            this.renderSelection(ctx, this.selectedObject);
+        }
+    }
+
+    renderSingle(ctx, obj) {
+        // Render a single object (used for zIndex ordering)
+        this.renderObject(ctx, obj);
+    }
+
+    renderPreviewAndSelection(ctx) {
+        // Render preview if applicable
+        if (this.previewObject) {
+            this.renderObject(ctx, this.previewObject, true);
+        }
+
+        // Render selection
+        if (this.selectedObject && this.selectedObject.visible !== false) {
             this.renderSelection(ctx, this.selectedObject);
         }
     }
@@ -399,9 +589,12 @@ export class CanvasObjectsManager {
     }
 
     renderShape(ctx, shape, isPreview) {
-        ctx.fillStyle = shape.fillColor;
-        ctx.strokeStyle = shape.strokeColor;
-        ctx.lineWidth = shape.strokeWidth;
+        const hasStroke = shape.hasStroke !== false;
+        const strokeWidth = shape.strokeWidth || 2;
+
+        ctx.fillStyle = shape.fillColor || '#3b82f6';
+        ctx.strokeStyle = shape.strokeColor || '#000000';
+        ctx.lineWidth = strokeWidth;
 
         if (isPreview) {
             ctx.globalAlpha = 0.7;
@@ -411,9 +604,10 @@ export class CanvasObjectsManager {
         const centerY = shape.y + shape.height / 2;
 
         switch (shape.shapeType) {
+            case 'square':
             case 'rectangle':
                 ctx.fillRect(shape.x, shape.y, shape.width, shape.height);
-                if (shape.strokeWidth > 0) {
+                if (hasStroke && strokeWidth > 0) {
                     ctx.strokeRect(shape.x, shape.y, shape.width, shape.height);
                 }
                 break;
@@ -423,7 +617,7 @@ export class CanvasObjectsManager {
                 ctx.beginPath();
                 ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
                 ctx.fill();
-                if (shape.strokeWidth > 0) {
+                if (hasStroke && strokeWidth > 0) {
                     ctx.stroke();
                 }
                 break;
@@ -435,157 +629,219 @@ export class CanvasObjectsManager {
                 ctx.lineTo(shape.x, shape.y + shape.height);
                 ctx.closePath();
                 ctx.fill();
-                if (shape.strokeWidth > 0) {
+                if (hasStroke && strokeWidth > 0) {
                     ctx.stroke();
                 }
                 break;
 
-            case 'polygon':
-                const sides = shape.sides || 6;
-                const polygonRadius = Math.min(shape.width, shape.height) / 2;
+            case 'line':
+                // Use x2/y2 if available, otherwise use x+width/y+height
+                const lineEndX = shape.x2 !== undefined ? shape.x2 : shape.x + shape.width;
+                const lineEndY = shape.y2 !== undefined ? shape.y2 : shape.y + shape.height;
+
+                console.log('Rendering line with strokeWidth:', strokeWidth, 'from shape.strokeWidth:', shape.strokeWidth);
                 ctx.beginPath();
-                for (let i = 0; i < sides; i++) {
-                    const angle = (i * 2 * Math.PI / sides) - Math.PI / 2;
-                    const x = centerX + polygonRadius * Math.cos(angle);
-                    const y = centerY + polygonRadius * Math.sin(angle);
-                    if (i === 0) {
-                        ctx.moveTo(x, y);
-                    } else {
-                        ctx.lineTo(x, y);
-                    }
-                }
-                ctx.closePath();
-                ctx.fill();
-                if (shape.strokeWidth > 0) {
-                    ctx.stroke();
-                }
+                ctx.moveTo(shape.x, shape.y);
+                ctx.lineTo(lineEndX, lineEndY);
+                ctx.lineWidth = strokeWidth;
+                ctx.strokeStyle = shape.strokeColor || '#000000';
+                ctx.stroke();
+                break;
+
+            case 'arrow':
+                // Use x2/y2 if available, otherwise use x+width/y+height
+                const arrowEndX = shape.x2 !== undefined ? shape.x2 : shape.x + shape.width;
+                const arrowEndY = shape.y2 !== undefined ? shape.y2 : shape.y + shape.height;
+
+                // Draw arrow line
+                ctx.beginPath();
+                ctx.moveTo(shape.x, shape.y);
+                ctx.lineTo(arrowEndX, arrowEndY);
+                ctx.lineWidth = strokeWidth;
+                ctx.strokeStyle = shape.strokeColor || '#000000';
+                ctx.stroke();
+
+                // Draw arrowhead
+                const arrowSize = Math.max(10, strokeWidth * 3);
+                const angle = Math.atan2(arrowEndY - shape.y, arrowEndX - shape.x);
+
+                ctx.beginPath();
+                ctx.moveTo(arrowEndX, arrowEndY);
+                ctx.lineTo(
+                    arrowEndX - arrowSize * Math.cos(angle - Math.PI / 6),
+                    arrowEndY - arrowSize * Math.sin(angle - Math.PI / 6)
+                );
+                ctx.moveTo(arrowEndX, arrowEndY);
+                ctx.lineTo(
+                    arrowEndX - arrowSize * Math.cos(angle + Math.PI / 6),
+                    arrowEndY - arrowSize * Math.sin(angle + Math.PI / 6)
+                );
+                ctx.stroke();
                 break;
         }
     }
 
     renderText(ctx, textObj, isPreview) {
-        const padding = textObj.padding || 10;
-        const zoom = this.canvas.zoom;
-
-        // Background - always render to prevent disappearing
-        ctx.fillStyle = textObj.backgroundColor || '#ffffff';
-        ctx.fillRect(textObj.x, textObj.y, textObj.width, textObj.height);
-
-        // Border - always render to prevent disappearing
-        ctx.strokeStyle = '#d0d0d0';
-        ctx.lineWidth = 1 / zoom;
-        ctx.strokeRect(textObj.x, textObj.y, textObj.width, textObj.height);
-
-        // Skip rendering text if currently editing (will be handled by HTML overlay)
-        if (this.editingTextId === textObj.id) {
-            return;
+        if (isPreview) {
+            // Draw textbox border preview when creating
+            const zoom = this.canvas.zoom;
+            ctx.strokeStyle = '#999999';
+            ctx.lineWidth = 1 / zoom;
+            ctx.strokeRect(textObj.x, textObj.y, textObj.width, textObj.height);
+            ctx.globalAlpha = 0.7;
         }
 
-        // Text - use defaults if properties are missing
-        ctx.fillStyle = textObj.color || '#000000';
-        ctx.font = `${textObj.fontSize || 16}px ${textObj.font || 'Arial'}`;
-        ctx.textAlign = textObj.align || 'left';
+        const text = textObj.text || '';
+        const fontSize = textObj.fontSize || 32;
+        const fontFamily = textObj.fontFamily || 'Arial';
+        const fontWeight = textObj.fontWeight || 'normal';
+        const color = textObj.color || '#000000';
+        const textAlign = textObj.textAlign || 'left';
+
+        ctx.font = `${fontWeight} ${fontSize}px ${fontFamily}`;
+        ctx.fillStyle = color;
+        ctx.textAlign = textAlign;
         ctx.textBaseline = 'top';
 
-        const text = textObj.text !== undefined ? textObj.text : 'Double-click to edit';
-        const lines = this.wrapText(ctx, text, textObj.width - padding * 2);
-        const lineHeight = (textObj.fontSize || 16) * 1.2;
+        const lineHeight = fontSize * 1.2;
+        const padding = 10;
+        const maxWidth = textObj.width - (padding * 2); // Padding from edges
 
-        let textX = textObj.x + padding;
-        if (textObj.align === 'center') {
-            textX = textObj.x + textObj.width / 2;
-        } else if (textObj.align === 'right') {
-            textX = textObj.x + textObj.width - padding;
+        // Calculate text alignment offset
+        let xOffset = padding; // Left padding
+        if (textAlign === 'center') {
+            xOffset = textObj.width / 2;
+        } else if (textAlign === 'right') {
+            xOffset = textObj.width - padding;
         }
 
-        for (let i = 0; i < lines.length; i++) {
-            const y = textObj.y + padding + i * lineHeight;
-            if (y + lineHeight <= textObj.y + textObj.height - padding) {
-                ctx.fillText(lines[i], textX, y);
-            }
-        }
-    }
-
-    wrapText(ctx, text, maxWidth) {
-        // Always return at least an empty string to avoid disappearing text
-        if (text === null || text === undefined) {
-            return [''];
-        }
-
-        // Convert to string if not already
-        text = String(text);
-
-        // If completely empty, return empty string array to show the box
-        if (text === '') {
-            return [''];
-        }
-
-        const lines = [];
+        // Word wrap text to fit within textbox width
         const paragraphs = text.split('\n');
+        const wrappedLines = [];
 
         for (const paragraph of paragraphs) {
-            // Preserve empty lines for spacing
-            if (paragraph === '') {
-                lines.push('');
+            if (paragraph.trim() === '') {
+                wrappedLines.push('');
                 continue;
             }
 
             const words = paragraph.split(' ');
             let currentLine = '';
 
-            for (const word of words) {
-                const testLine = currentLine + (currentLine ? ' ' : '') + word;
+            for (let i = 0; i < words.length; i++) {
+                const testLine = currentLine ? currentLine + ' ' + words[i] : words[i];
                 const metrics = ctx.measureText(testLine);
 
                 if (metrics.width > maxWidth && currentLine) {
-                    lines.push(currentLine);
-                    currentLine = word;
+                    wrappedLines.push(currentLine);
+                    currentLine = words[i];
                 } else {
                     currentLine = testLine;
                 }
             }
 
-            // Always push the current line, even if empty
-            lines.push(currentLine);
+            if (currentLine) {
+                wrappedLines.push(currentLine);
+            }
         }
 
-        return lines.length > 0 ? lines : [''];
+        // Clip to textbox boundaries to prevent overflow
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(textObj.x, textObj.y, textObj.width, textObj.height);
+        ctx.clip();
+
+        // Draw each wrapped line
+        wrappedLines.forEach((line, i) => {
+            const y = textObj.y + padding + i * lineHeight; // Top padding
+            ctx.fillText(line, textObj.x + xOffset, y);
+        });
+
+        ctx.restore();
     }
+
 
     renderSelection(ctx, obj) {
         const zoom = this.canvas.zoom;
 
-        // Selection box - same style as images
-        ctx.strokeStyle = '#0066ff';
-        ctx.lineWidth = 2 / zoom;
-        ctx.strokeRect(obj.x, obj.y, obj.width, obj.height);
+        // Special handling for lines and arrows
+        if (obj.type === 'shape' && (obj.shapeType === 'line' || obj.shapeType === 'arrow')) {
+            const x1 = obj.x;
+            const y1 = obj.y;
+            const x2 = obj.x2 !== undefined ? obj.x2 : obj.x + obj.width;
+            const y2 = obj.y2 !== undefined ? obj.y2 : obj.y + obj.height;
 
-        // Resize handles - same style as images
-        const handleRadius = 4 / zoom;
-        const midX = obj.x + obj.width / 2;
-        const midY = obj.y + obj.height / 2;
+            // Calculate bounding box
+            const minX = Math.min(x1, x2);
+            const minY = Math.min(y1, y2);
+            const maxX = Math.max(x1, x2);
+            const maxY = Math.max(y1, y2);
+            const width = maxX - minX;
+            const height = maxY - minY;
 
-        ctx.fillStyle = '#ffffff';
-        ctx.strokeStyle = '#0066ff';
-        ctx.lineWidth = 1.5 / zoom;
+            // Add padding for better visibility
+            const padding = 10;
+            const boxX = minX - padding;
+            const boxY = minY - padding;
+            const boxWidth = width + padding * 2;
+            const boxHeight = height + padding * 2;
 
-        const handles = [
-            [obj.x, obj.y],
-            [midX, obj.y],
-            [obj.x + obj.width, obj.y],
-            [obj.x + obj.width, midY],
-            [obj.x + obj.width, obj.y + obj.height],
-            [midX, obj.y + obj.height],
-            [obj.x, obj.y + obj.height],
-            [obj.x, midY]
-        ];
+            // Selection box
+            ctx.strokeStyle = '#0066ff';
+            ctx.lineWidth = 2 / zoom;
+            ctx.strokeRect(boxX, boxY, boxWidth, boxHeight);
 
-        for (let i = 0; i < handles.length; i++) {
-            const [hx, hy] = handles[i];
-            ctx.beginPath();
-            ctx.arc(hx, hy, handleRadius, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.stroke();
+            // Draw handles at the start and end points only
+            const handleRadius = 4 / zoom;
+            ctx.fillStyle = '#ffffff';
+            ctx.strokeStyle = '#0066ff';
+            ctx.lineWidth = 1.5 / zoom;
+
+            const handles = [
+                [x1, y1],  // Start point
+                [x2, y2]   // End point
+            ];
+
+            for (let i = 0; i < handles.length; i++) {
+                const [hx, hy] = handles[i];
+                ctx.beginPath();
+                ctx.arc(hx, hy, handleRadius, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+            }
+        } else {
+            // Normal selection box for other shapes
+            ctx.strokeStyle = '#0066ff';
+            ctx.lineWidth = 2 / zoom;
+            ctx.strokeRect(obj.x, obj.y, obj.width, obj.height);
+
+            // Resize handles
+            const handleRadius = 4 / zoom;
+            const midX = obj.x + obj.width / 2;
+            const midY = obj.y + obj.height / 2;
+
+            ctx.fillStyle = '#ffffff';
+            ctx.strokeStyle = '#0066ff';
+            ctx.lineWidth = 1.5 / zoom;
+
+            const handles = [
+                [obj.x, obj.y],
+                [midX, obj.y],
+                [obj.x + obj.width, obj.y],
+                [obj.x + obj.width, midY],
+                [obj.x + obj.width, obj.y + obj.height],
+                [midX, obj.y + obj.height],
+                [obj.x, obj.y + obj.height],
+                [obj.x, midY]
+            ];
+
+            for (let i = 0; i < handles.length; i++) {
+                const [hx, hy] = handles[i];
+                ctx.beginPath();
+                ctx.arc(hx, hy, handleRadius, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+            }
         }
     }
 
@@ -593,12 +849,29 @@ export class CanvasObjectsManager {
         return 'obj_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
     }
 
+    getNextZIndex() {
+        // Get highest zIndex from all objects
+        let maxZIndex = -1;
+        this.objects.forEach(obj => {
+            const z = obj.zIndex || 0;
+            if (z > maxZIndex) maxZIndex = z;
+        });
+        // Also check images
+        this.canvas.images.forEach(img => {
+            const z = img.zIndex || 0;
+            if (z > maxZIndex) maxZIndex = z;
+        });
+        return maxZIndex + 1;
+    }
+
     getObjects() {
         return this.objects;
     }
 
     loadObjects(objects) {
+        console.log('CanvasObjectsManager.loadObjects called with:', objects);
         this.objects = objects || [];
+        console.log('Objects loaded, count:', this.objects.length);
         this.canvas.needsRender = true;
     }
 
@@ -606,5 +879,29 @@ export class CanvasObjectsManager {
         this.objects = [];
         this.selectedObject = null;
         this.canvas.needsRender = true;
+    }
+
+    addText(x, y) {
+        const textObj = {
+            id: this.generateId(),
+            type: 'text',
+            x: x,
+            y: y,
+            width: 300,
+            height: 100,
+            text: 'Double-click to edit',
+            fontSize: 32,
+            fontFamily: 'Arial',
+            fontWeight: 'normal',
+            color: '#000000',
+            textAlign: 'left'
+        };
+
+        this.objects.push(textObj);
+        this.selectObject(textObj);
+        this.canvas.needsRender = true;
+        this.dispatchObjectsChanged();
+
+        return textObj;
     }
 }

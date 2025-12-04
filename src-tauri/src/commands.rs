@@ -25,6 +25,7 @@ pub fn create_board(app: AppHandle, name: String, bg_color: String) -> Result<Bo
         thumbnail: None,
         view_state: None,
         strokes: None,
+        objects: None,
     };
     database::save_board(&app, &board)?;
     Ok(board)
@@ -54,6 +55,9 @@ pub fn update_board(app: AppHandle, id: u64, updates: BoardUpdate) -> Result<Boa
     }
     if let Some(strokes) = updates.strokes {
         board.strokes = Some(strokes);
+    }
+    if let Some(objects) = updates.objects {
+        board.objects = Some(objects);
     }
 
     board.updated_at = database::now_millis();
