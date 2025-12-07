@@ -1,6 +1,7 @@
 .settings-page {
-    height: 100vh;
+    flex: 1;
     display: flex;
+    overflow: hidden;
 }
 
 .settings-main {

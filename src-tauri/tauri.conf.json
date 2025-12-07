@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "AniRef",
-  "version": "1.5.0",
-  "identifier": "site.anihaven.aref",
+  "productName": "EyeDea",
+  "version": "2.0.0",
+  "identifier": "site.anihaven.eye",
   "build": {
     "frontendDist": "../src"
   },
@@ -10,15 +10,49 @@
     "withGlobalTauri": true,
     "windows": [
       {
-        "title": "AniRef",
+        "title": "EyeDea",
         "fullscreen": false,
         "maximized": true,
-        "dragDropEnabled": false
-        
+        "dragDropEnabled": false,
+        "decorations": false
+
       }
     ],
     "security": {
-      "csp": null
+      "csp": null,
+      "capabilities": [
+        {
+          "identifier": "main-capability",
+          "description": "Capability for the main window",
+          "windows": ["main"],
+          "permissions": [
+            "core:window:allow-close",
+            "core:window:allow-minimize",
+            "core:window:allow-maximize",
+            "core:window:allow-unmaximize",
+            "core:window:allow-toggle-maximize",
+            "core:window:allow-is-maximized",
+            "core:webview:allow-create-webview-window",
+            "core:webview:allow-create-webview",
+            "core:webview:default",
+            "core:app:allow-version",
+            "opener:default",
+            "updater:default",
+            "updater:allow-check",
+            "updater:allow-download-and-install"
+          ]
+        },
+        {
+          "identifier": "floating-capability",
+          "description": "Capability for floating windows",
+          "windows": ["floating_*"],
+          "permissions": [
+            "core:window:allow-close",
+            "core:window:allow-minimize",
+            "core:window:allow-set-always-on-top"
+          ]
+        }
+      ]
     }
   },
   "bundle": {
@@ -30,5 +64,15 @@
       "icons/256x256.png",
       "icons/icon.ico"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "active": true,
+      "endpoints": [
+        "https://github.com/AniHvn/AniReference/releases/latest/download/latest.json"
+      ],
+      "dialog": false,
+      "pubkey": ""
+    }
   }
 }

@@ -1,0 +1,190 @@
+/* Update Notification Styles */
+.update-notification {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 16px 20px;
+    box-shadow: 0 4px 12px var(--shadow);
+    z-index: 9999;
+    min-width: 320px;
+    max-width: 400px;
+    animation: slideInUp 0.3s ease;
+}
+
+@keyframes slideInUp {
+    from {
+        transform: translateY(20px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+.update-notification.hiding {
+    animation: slideOutDown 0.3s ease forwards;
+}
+
+@keyframes slideOutDown {
+    from {
+        transform: translateY(0);
+        opacity: 1;
+    }
+    to {
+        transform: translateY(20px);
+        opacity: 0;
+    }
+}
+
+.update-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+}
+
+.update-icon {
+    width: 24px;
+    height: 24px;
+    color: #0066ff;
+    flex-shrink: 0;
+}
+
+.update-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+    flex: 1;
+}
+
+.update-close {
+    width: 24px;
+    height: 24px;
+    border: none;
+    background: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    transition: background 0.15s, color 0.15s;
+}
+
+.update-close:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+.update-content {
+    margin-bottom: 14px;
+}
+
+.update-version {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-bottom: 6px;
+}
+
+.update-description {
+    font-size: 12px;
+    color: var(--text-tertiary);
+    line-height: 1.5;
+    max-height: 100px;
+    overflow-y: auto;
+}
+
+.update-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.update-btn {
+    flex: 1;
+    padding: 8px 16px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.update-btn-primary {
+    background: #0066ff;
+    color: white;
+    border-color: #0066ff;
+}
+
+.update-btn-primary:hover {
+    background: #0052cc;
+    border-color: #0052cc;
+}
+
+.update-btn-primary:active {
+    background: #004099;
+}
+
+.update-btn-secondary {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+}
+
+.update-btn-secondary:hover {
+    background: var(--bg-hover);
+    border-color: var(--border-color-hover);
+}
+
+.update-progress {
+    margin-top: 12px;
+}
+
+.update-progress-bar {
+    height: 6px;
+    background: var(--bg-tertiary);
+    border-radius: 3px;
+    overflow: hidden;
+    margin-bottom: 6px;
+}
+
+.update-progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #0066ff, #0088ff);
+    border-radius: 3px;
+    transition: width 0.3s ease;
+}
+
+.update-progress-text {
+    font-size: 11px;
+    color: var(--text-tertiary);
+    text-align: center;
+}
+
+.update-installing {
+    text-align: center;
+    padding: 20px;
+}
+
+.update-spinner {
+    width: 32px;
+    height: 32px;
+    border: 3px solid var(--bg-tertiary);
+    border-top-color: #0066ff;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin: 0 auto 12px;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.update-installing-text {
+    font-size: 13px;
+    color: var(--text-secondary);
+}

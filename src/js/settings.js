@@ -1,3 +1,6 @@
+import { checkForUpdates } from './updater.js';
+import { showUpdateNotification } from './update-ui.js';
+
 const THEME_KEY = 'app_theme';
 const SETTINGS_KEY = 'canvas_settings';
 
@@ -126,6 +129,19 @@ function setupNavigation() {
     if (importBoardBtn) {
         importBoardBtn.addEventListener('click', () => {
             window.location.href = 'index.html';
+        });
+    }
+
+    // Check for updates button
+    const checkUpdatesBtn = document.getElementById('check-updates-btn');
+    if (checkUpdatesBtn) {
+        checkUpdatesBtn.addEventListener('click', async () => {
+            const update = await checkForUpdates();
+            if (update.available) {
+                showUpdateNotification(update);
+            } else {
+                alert('You are on the latest version');
+            }
         });
     }
 

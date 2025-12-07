@@ -73,7 +73,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     await initFloatingWindow();
     setupTitlebarControls();
-    setupDrawingToolbar();
     setupToolbarToggle();
     setupContextMenu();
     setupDragAndDrop();
@@ -215,24 +214,24 @@ function loadLayers(layers) {
 
 async function setupTitlebarControls() {
     if (!window.__TAURI__) return;
-    
+
     try {
-        const { getCurrentWindow } = window.__TAURI__.window;
-        const currentWindow = getCurrentWindow();
-        
+        const { Window } = window.__TAURI__.window;
+        const currentWindow = Window.getCurrent();
+
         await currentWindow.setAlwaysOnTop(false);
         isPinned = false;
-        
+
         document.getElementById('pin-btn').addEventListener('click', async () => {
             isPinned = !isPinned;
             await currentWindow.setAlwaysOnTop(isPinned);
             document.getElementById('pin-btn').classList.toggle('pinned', isPinned);
         });
-        
+
         document.getElementById('minimize-btn').addEventListener('click', async () => {
             await currentWindow.minimize();
         });
-        
+
         document.getElementById('close-btn').addEventListener('click', async () => {
             saveNow();
             await currentWindow.close();
@@ -483,129 +482,4 @@ function setupToolbarToggle() {
     });
 }
 
-function setupDrawingToolbar() {
-    const penBtn = document.getElementById('draw-pen-btn');
-    const highlighterBtn = document.getElementById('draw-highlighter-btn');
-    const eraserBtn = document.getElementById('draw-eraser-btn');
-    const colorPicker = document.getElementById('draw-color-picker');
-    const sizeSlider = document.getElementById('draw-size-slider');
-    const sizeInput = document.getElementById('draw-size-input');
-    const clearBtn = document.getElementById('draw-clear-btn');
-    const eraserModeToggle = document.getElementById('eraser-mode-toggle');
-
-    let currentTool = null;
-
-    function updateSizeControls(size) {
-        sizeInput.value = size;
-        sizeSlider.value = Math.min(size, 100);
-        sizeSlider.max = size > 100 ? size : 100;
-    }
-
-    // Size input handler
-    sizeInput.addEventListener('input', (e) => {
-        let size = parseInt(e.target.value) || 1;
-        size = Math.max(1, Math.min(500, size));
-
-        sizeSlider.value = Math.min(size, 100);
-        if (size > 100) {
-            sizeSlider.max = size;
-        }
-
-        if (currentTool === 'pen') {
-            canvas.setPenSize(size);
-        } else if (currentTool === 'highlighter') {
-            canvas.setHighlighterSize(size);
-        } else if (currentTool === 'eraser') {
-            canvas.setEraserSize(size);
-        }
-    });
-
-    // Size slider handler
-    sizeSlider.addEventListener('input', (e) => {
-        const size = parseInt(e.target.value);
-        sizeInput.value = size;
-
-        if (currentTool === 'pen') {
-            canvas.setPenSize(size);
-        } else if (currentTool === 'highlighter') {
-            canvas.setHighlighterSize(size);
-        } else if (currentTool === 'eraser') {
-            canvas.setEraserSize(size);
-        }
-    });
-
-    // Eraser mode toggle
-    eraserModeToggle.querySelectorAll('.toggle-option').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const mode = btn.dataset.mode;
-
-            // Update active state
-            eraserModeToggle.querySelectorAll('.toggle-option').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-
-            // Set eraser mode
-            canvas.setEraserMode(mode);
-        });
-    });
-
-    function deactivateAllTools() {
-        penBtn.classList.remove('active');
-        highlighterBtn.classList.remove('active');
-        eraserBtn.classList.remove('active');
-        eraserModeToggle.style.display = 'none';
-        document.getElementById('clear-separator').style.display = 'block';
-        canvas.setDrawingMode(null);
-        currentTool = null;
-    }
-
-    penBtn.addEventListener('click', () => {
-        if (currentTool === 'pen') {
-            deactivateAllTools();
-        } else {
-            deactivateAllTools();
-            penBtn.classList.add('active');
-            canvas.setDrawingMode('pen');
-            currentTool = 'pen';
-            updateSizeControls(canvas.penSize);
-        }
-    });
-
-    highlighterBtn.addEventListener('click', () => {
-        if (currentTool === 'highlighter') {
-            deactivateAllTools();
-        } else {
-            deactivateAllTools();
-            highlighterBtn.classList.add('active');
-            canvas.setDrawingMode('highlighter');
-            currentTool = 'highlighter';
-            updateSizeControls(canvas.highlighterSize);
-        }
-    });
-
-    eraserBtn.addEventListener('click', () => {
-        if (currentTool === 'eraser') {
-            deactivateAllTools();
-        } else {
-            deactivateAllTools();
-            eraserBtn.classList.add('active');
-            eraserModeToggle.style.display = 'flex';
-            document.getElementById('clear-separator').style.display = 'none';
-            canvas.setDrawingMode('eraser');
-            currentTool = 'eraser';
-            updateSizeControls(canvas.eraserSize);
-        }
-    });
-
-    colorPicker.addEventListener('input', (e) => {
-        canvas.setPenColor(e.target.value);
-        canvas.setHighlighterColor(e.target.value);
-    });
-
-    clearBtn.addEventListener('click', () => {
-        if (confirm('Clear all strokes? This cannot be undone.')) {
-            canvas.clearStrokes();
-            scheduleSave();
-        }
-    });
-}
 

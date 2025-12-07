@@ -3,6 +3,7 @@ import { boardManager } from './board-manager.js';
 import { showDeleteConfirm } from './modal.js';
 import { HistoryManager } from './history-manager.js';
 import { showInputModal, showChoiceModal, showToast, showConfirmModal } from './modal-utils.js';
+import { updateTitlebarTitle } from './titlebar.js';
 
 let canvas;
 let historyManager;
@@ -147,6 +148,7 @@ async function initEditor() {
     window.renderAssetsCallback = renderAssets;
 
     document.getElementById('board-name').textContent = board.name;
+    updateTitlebarTitle(`EyeDea - ${board.name}`);
     
     const canvasElement = document.getElementById('main-canvas');
     canvas = new Canvas(canvasElement);
@@ -549,6 +551,41 @@ function setupDrawingToolbar() {
             originalSetActiveTool(tool);
             syncDrawingModeBtn();
         };
+
+        // Make toolbar draggable
+        let isDragging = false;
+        let currentX = 0;
+        let currentY = 0;
+        let initialX;
+        let initialY;
+
+        drawingToolbar.addEventListener('mousedown', (e) => {
+            // Only drag if clicking on the toolbar background, not buttons/inputs
+            if (e.target === drawingToolbar || e.target.classList.contains('toolbar-separator')) {
+                const rect = drawingToolbar.getBoundingClientRect();
+                initialX = e.clientX - rect.left;
+                initialY = e.clientY - rect.top;
+                isDragging = true;
+            }
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (isDragging) {
+                e.preventDefault();
+                currentX = e.clientX - initialX;
+                currentY = e.clientY - initialY;
+
+                // Remove centering and position absolutely
+                drawingToolbar.style.left = currentX + 'px';
+                drawingToolbar.style.top = currentY + 'px';
+                drawingToolbar.style.bottom = 'auto';
+                drawingToolbar.style.transform = 'none';
+            }
+        });
+
+        document.addEventListener('mouseup', () => {
+            isDragging = false;
+        });
     }
 
 
@@ -1277,7 +1314,7 @@ async function exportBoard() {
     console.log('JSON contains strokes:', json.includes('"strokes"'));
     console.log('JSON contains objects:', json.includes('"objects"'));
 
-    const filename = `${board.name.replace(/[^a-z0-9]/gi, '_')}.aref`;
+    const filename = `${board.name.replace(/[^a-z0-9]/gi, '_')}.eyed`;
 
     // Try to use File System Access API (modern browsers)
     if (window.showSaveFilePicker) {
@@ -1286,7 +1323,7 @@ async function exportBoard() {
                 suggestedName: filename,
                 types: [{
                     description: 'AniRef Board',
-                    accept: { 'application/json': ['.aref'] }
+                    accept: { 'application/json': ['.eyed'] }
                 }]
             });
 
@@ -1318,7 +1355,7 @@ async function exportBoard() {
 function importBoard() {
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = '.aref,application/json';
+    input.accept = '.eyed,application/json';
 
     input.onchange = async (e) => {
         const file = e.target.files[0];
@@ -1336,7 +1373,7 @@ function importBoard() {
                 });
 
                 if (!importData.version || !importData.layers) {
-                    showToast('Invalid .aref file format', 'error');
+                    showToast('Invalid .eyed file format', 'error');
                     return;
                 }
 
@@ -1482,6 +1519,7 @@ async function openFloatingWindow() {
         });
     } catch (err) {
         console.error('Error opening floating window:', err);
+        console.error('Tauri object structure:', window.__TAURI__);
     }
 }
 
@@ -1629,6 +1667,13 @@ function setupTextTool() {
             canvas.objectsManager.setTool(null);
             textToolBtn.classList.remove('active');
         } else {
+            // Deactivate other tools first
+            const shapeToolBtn = document.getElementById('shape-tool-btn');
+            if (shapeToolBtn) {
+                shapeToolBtn.classList.remove('active');
+            }
+            hidePropertiesPanel();
+
             canvas.objectsManager.setTool('text');
             textToolBtn.classList.add('active');
         }
@@ -1703,6 +1748,12 @@ function setupShapeTool() {
             shapeToolBtn.classList.remove('active');
             hidePropertiesPanel();
         } else {
+            // Deactivate other tools first
+            const textToolBtn = document.getElementById('text-tool-btn');
+            if (textToolBtn) {
+                textToolBtn.classList.remove('active');
+            }
+
             canvas.objectsManager.setTool('shape');
             shapeToolBtn.classList.add('active');
             // Show shape properties panel

@@ -73,7 +73,7 @@ export class Canvas {
             gridSize: 50,
             enableSnapping: true,
             snapThreshold: 3,
-            thumbnailQuality: 0.6
+            thumbnailQuality: 1.0
         };
         
         let settings = defaults;
@@ -409,6 +409,7 @@ export class Canvas {
             // Start box selection
             if (!e.ctrlKey && !e.metaKey && !e.shiftKey) {
                 this.selectImage(null);
+                this.objectsManager.deselectAll();
                 this.isBoxSelecting = true;
                 this.selectionBox = { startX: x, startY: y, endX: x, endY: y };
                 this.needsRender = true;

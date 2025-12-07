@@ -113,7 +113,7 @@ body {
 /* Drawing Toolbar */
 .drawing-toolbar {
     position: absolute;
-    top: 48px;
+    bottom: 20px;
     left: 50%;
     transform: translateX(-50%);
     display: flex;
@@ -125,6 +125,12 @@ body {
     padding: 8px 12px;
     box-shadow: 0 4px 12px var(--shadow);
     z-index: 10;
+    cursor: move;
+    user-select: none;
+}
+
+.drawing-toolbar:active {
+    cursor: grabbing;
 }
 
 .toolbar-group {

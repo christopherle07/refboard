@@ -4,6 +4,7 @@ export class CanvasObjectsManager {
         this.canvas = canvas;
         this.objects = [];
         this.selectedObject = null;
+        this.selectedObjects = [];
         this.currentTool = null;
         this.isDrawing = false;
         this.startPoint = null;
@@ -12,7 +13,10 @@ export class CanvasObjectsManager {
         this.isResizing = false;
         this.resizeHandle = null;
         this.dragOffset = { x: 0, y: 0 };
+        this.dragOffsets = [];
         this.resizeStart = { x: 0, y: 0, width: 0, height: 0 };
+        this.isBoxSelecting = false;
+        this.selectionBox = null;
     }
 
     setTool(tool) {
@@ -24,7 +28,7 @@ export class CanvasObjectsManager {
 
     handleMouseDown(e, worldPos) {
         // Check if clicking on a resize handle of selected object
-        if (this.selectedObject && !this.currentTool) {
+        if (this.selectedObject && this.selectedObjects.length === 1 && !this.currentTool) {
             const handle = this.getResizeHandleAtPoint(this.selectedObject, worldPos.x, worldPos.y);
             if (handle) {
                 this.isResizing = true;
@@ -48,19 +52,36 @@ export class CanvasObjectsManager {
                 return false;
             }
 
-            this.selectObject(clickedObject);
+            const multiSelect = e.shiftKey;
+            this.selectObject(clickedObject, multiSelect);
             this.isDragging = true;
-            this.dragOffset = {
-                x: worldPos.x - clickedObject.x,
-                y: worldPos.y - clickedObject.y
-            };
+
+            // Calculate drag offsets for all selected objects
+            this.dragOffsets = this.selectedObjects.map(obj => ({
+                x: worldPos.x - obj.x,
+                y: worldPos.y - obj.y
+            }));
+
             return true;
         }
 
-        // No object clicked - deselect if no tool active
+        // No object clicked - deselect and potentially start box selection if no tool active
         if (!this.currentTool) {
-            this.deselectAll();
-            return false;
+            // Deselect all if not holding shift
+            if (!e.shiftKey) {
+                this.deselectAll();
+            }
+
+            // Start box selection
+            this.isBoxSelecting = true;
+            this.selectionBox = {
+                startX: worldPos.x,
+                startY: worldPos.y,
+                endX: worldPos.x,
+                endY: worldPos.y
+            };
+
+            return true;
         }
 
         // Start drawing text or shape if tool is active
@@ -74,35 +95,43 @@ export class CanvasObjectsManager {
     }
 
     handleMouseMove(e, worldPos) {
-        if (this.isResizing && this.selectedObject && this.resizeHandle) {
+        if (this.isBoxSelecting && this.selectionBox) {
+            // Update selection box
+            this.selectionBox.endX = worldPos.x;
+            this.selectionBox.endY = worldPos.y;
+            this.canvas.needsRender = true;
+        } else if (this.isResizing && this.selectedObject && this.resizeHandle) {
             // Resize the selected object
             this.resizeObject(this.selectedObject, this.resizeHandle, worldPos.x, worldPos.y);
             this.canvas.needsRender = true;
             this.dispatchObjectsChanged();
-        } else if (this.isDragging && this.selectedObject) {
-            // Drag the selected object
-            const newX = worldPos.x - this.dragOffset.x;
-            const newY = worldPos.y - this.dragOffset.y;
+        } else if (this.isDragging && this.selectedObjects.length > 0) {
+            // Drag all selected objects
+            this.selectedObjects.forEach((obj, index) => {
+                const offset = this.dragOffsets[index];
+                const newX = worldPos.x - offset.x;
+                const newY = worldPos.y - offset.y;
 
-            // For lines/arrows, move both start and end points
-            if (this.selectedObject.type === 'shape' &&
-                (this.selectedObject.shapeType === 'line' || this.selectedObject.shapeType === 'arrow')) {
-                const deltaX = newX - this.selectedObject.x;
-                const deltaY = newY - this.selectedObject.y;
+                // For lines/arrows, move both start and end points
+                if (obj.type === 'shape' &&
+                    (obj.shapeType === 'line' || obj.shapeType === 'arrow')) {
+                    const deltaX = newX - obj.x;
+                    const deltaY = newY - obj.y;
 
-                this.selectedObject.x = newX;
-                this.selectedObject.y = newY;
-                if (this.selectedObject.x2 !== undefined) {
-                    this.selectedObject.x2 += deltaX;
+                    obj.x = newX;
+                    obj.y = newY;
+                    if (obj.x2 !== undefined) {
+                        obj.x2 += deltaX;
+                    }
+                    if (obj.y2 !== undefined) {
+                        obj.y2 += deltaY;
+                    }
+                } else {
+                    // Normal objects just move x and y
+                    obj.x = newX;
+                    obj.y = newY;
                 }
-                if (this.selectedObject.y2 !== undefined) {
-                    this.selectedObject.y2 += deltaY;
-                }
-            } else {
-                // Normal objects just move x and y
-                this.selectedObject.x = newX;
-                this.selectedObject.y = newY;
-            }
+            });
 
             this.canvas.needsRender = true;
             this.dispatchObjectsChanged();
@@ -166,6 +195,45 @@ export class CanvasObjectsManager {
     }
 
     handleMouseUp(e, worldPos) {
+        if (this.isBoxSelecting && this.selectionBox) {
+            const box = this.selectionBox;
+            const width = Math.abs(box.endX - box.startX);
+            const height = Math.abs(box.endY - box.startY);
+
+            // Only select if box was actually dragged (not just a click)
+            if (width > 5 || height > 5) {
+                // Select all objects within the box
+                const minX = Math.min(box.startX, box.endX);
+                const maxX = Math.max(box.startX, box.endX);
+                const minY = Math.min(box.startY, box.endY);
+                const maxY = Math.max(box.startY, box.endY);
+
+                for (const obj of this.objects) {
+                    const objMinX = obj.x;
+                    const objMaxX = obj.x + (obj.width || 0);
+                    const objMinY = obj.y;
+                    const objMaxY = obj.y + (obj.height || 0);
+
+                    // Check if object intersects with selection box
+                    if (objMaxX >= minX && objMinX <= maxX &&
+                        objMaxY >= minY && objMinY <= maxY) {
+                        if (!this.selectedObjects.includes(obj)) {
+                            this.selectedObjects.push(obj);
+                        }
+                    }
+                }
+
+                this.selectedObject = this.selectedObjects.length > 0
+                    ? this.selectedObjects[this.selectedObjects.length - 1]
+                    : null;
+            }
+
+            this.isBoxSelecting = false;
+            this.selectionBox = null;
+            this.canvas.needsRender = true;
+            return true;
+        }
+
         if (this.isResizing) {
             this.isResizing = false;
             this.resizeHandle = null;
@@ -471,10 +539,26 @@ export class CanvasObjectsManager {
         }
     }
 
-    selectObject(obj, isDoubleClick = false) {
+    selectObject(obj, multiSelect = false, isDoubleClick = false) {
         const wasAlreadySelected = this.selectedObject === obj;
 
-        this.selectedObject = obj;
+        if (multiSelect) {
+            // Toggle selection in multi-select mode
+            const index = this.selectedObjects.findIndex(o => o.id === obj.id);
+            if (index >= 0) {
+                this.selectedObjects.splice(index, 1);
+            } else {
+                this.selectedObjects.push(obj);
+            }
+            this.selectedObject = this.selectedObjects.length > 0
+                ? this.selectedObjects[this.selectedObjects.length - 1]
+                : null;
+        } else {
+            // Single select mode - clear other selections
+            this.selectedObjects = [obj];
+            this.selectedObject = obj;
+        }
+
         this.canvas.needsRender = true;
 
         // Dispatch event for UI to update
@@ -489,14 +573,16 @@ export class CanvasObjectsManager {
     }
 
     deselectAll() {
-        if (this.selectedObject) {
-            this.selectedObject = null;
-            this.canvas.needsRender = true;
+        console.log('Deselecting all objects. Was selected:', this.selectedObjects.length);
+        this.selectedObject = null;
+        this.selectedObjects = [];
+        this.canvas.needsRender = true;
 
-            // Dispatch event for UI
-            const event = new CustomEvent('objectDeselected');
-            this.canvas.canvas.dispatchEvent(event);
-        }
+        // Dispatch event for UI
+        const event = new CustomEvent('objectDeselected');
+        this.canvas.canvas.dispatchEvent(event);
+
+        console.log('After deselect - selectedObjects:', this.selectedObjects.length, 'needsRender:', this.canvas.needsRender);
     }
 
     updateSelectedObject(properties) {
@@ -509,13 +595,12 @@ export class CanvasObjectsManager {
     }
 
     deleteSelectedObject() {
-        if (this.selectedObject) {
-            const index = this.objects.indexOf(this.selectedObject);
-            if (index > -1) {
-                this.objects.splice(index, 1);
-                this.deselectAll();
-                this.dispatchObjectsChanged();
-            }
+        if (this.selectedObjects.length > 0) {
+            // Delete all selected objects
+            const idsToDelete = this.selectedObjects.map(obj => obj.id);
+            this.objects = this.objects.filter(obj => !idsToDelete.includes(obj.id));
+            this.deselectAll();
+            this.dispatchObjectsChanged();
         }
     }
 
@@ -553,10 +638,7 @@ export class CanvasObjectsManager {
             this.renderObject(ctx, this.previewObject, true);
         }
 
-        // Render selection
-        if (this.selectedObject && this.selectedObject.visible !== false) {
-            this.renderSelection(ctx, this.selectedObject);
-        }
+        // Selection rendering is now handled by renderPreviewAndSelection()
     }
 
     renderSingle(ctx, obj) {
@@ -570,9 +652,30 @@ export class CanvasObjectsManager {
             this.renderObject(ctx, this.previewObject, true);
         }
 
-        // Render selection
-        if (this.selectedObject && this.selectedObject.visible !== false) {
-            this.renderSelection(ctx, this.selectedObject);
+        // Render selection box if box selecting
+        if (this.isBoxSelecting && this.selectionBox) {
+            const box = this.selectionBox;
+            const minX = Math.min(box.startX, box.endX);
+            const maxX = Math.max(box.startX, box.endX);
+            const minY = Math.min(box.startY, box.endY);
+            const maxY = Math.max(box.startY, box.endY);
+
+            ctx.save();
+            ctx.strokeStyle = '#0066ff';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([5, 5]);
+            ctx.strokeRect(minX, minY, maxX - minX, maxY - minY);
+            ctx.fillStyle = 'rgba(0, 102, 255, 0.1)';
+            ctx.fillRect(minX, minY, maxX - minX, maxY - minY);
+            ctx.restore();
+        }
+
+        // Render selection for all selected objects
+        console.log('renderPreviewAndSelection - selectedObjects count:', this.selectedObjects.length);
+        for (const obj of this.selectedObjects) {
+            if (obj.visible !== false) {
+                this.renderSelection(ctx, obj);
+            }
         }
     }
 

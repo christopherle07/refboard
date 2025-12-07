@@ -758,7 +758,7 @@
 /* Drawing Toolbar */
 .drawing-toolbar {
     position: absolute;
-    top: 16px;
+    bottom: 20px;
     left: 50%;
     transform: translateX(-50%);
     display: flex;
@@ -770,6 +770,12 @@
     padding: 8px 12px;
     box-shadow: 0 4px 12px var(--shadow);
     z-index: 10;
+    cursor: move;
+    user-select: none;
+}
+
+.drawing-toolbar:active {
+    cursor: grabbing;
 }
 
 .toolbar-group {
@@ -1104,11 +1110,32 @@
     color: var(--text-primary);
     font-size: 11px;
     cursor: pointer;
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+    background-size: 16px;
+    padding-right: 32px;
+}
+
+.property-select:hover {
+    border-color: var(--border-color-hover);
+    background-color: var(--bg-hover);
 }
 
 .property-select:focus {
     outline: none;
     border-color: #0d6efd;
+    background-color: var(--bg-secondary);
+}
+
+/* Style select dropdown options to match theme */
+.property-select option {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    padding: 8px;
 }
 
 .property-input {
@@ -1192,4 +1219,64 @@
 /* Midnight theme - light gray icons */
 [data-theme="midnight"] .theme-icon {
     filter: brightness(0) saturate(100%) invert(85%);
+}
+
+/* Custom scrollbar for property inputs and selects */
+.property-select,
+.property-textarea,
+.text-content-input {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-color-hover) var(--bg-secondary);
+}
+
+.property-select::-webkit-scrollbar,
+.property-textarea::-webkit-scrollbar,
+.text-content-input::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+.property-select::-webkit-scrollbar-track,
+.property-textarea::-webkit-scrollbar-track,
+.text-content-input::-webkit-scrollbar-track {
+    background: var(--bg-secondary);
+    border-radius: 4px;
+}
+
+.property-select::-webkit-scrollbar-thumb,
+.property-textarea::-webkit-scrollbar-thumb,
+.text-content-input::-webkit-scrollbar-thumb {
+    background: var(--border-color-hover);
+    border-radius: 4px;
+    transition: background 0.15s;
+}
+
+.property-select::-webkit-scrollbar-thumb:hover,
+.property-textarea::-webkit-scrollbar-thumb:hover,
+.text-content-input::-webkit-scrollbar-thumb:hover {
+    background: var(--text-tertiary);
+}
+
+/* Style the text content input */
+.text-content-input {
+    width: 100%;
+    padding: 8px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    color: var(--text-primary);
+    font-size: 11px;
+    font-family: inherit;
+    resize: vertical;
+    min-height: 60px;
+}
+
+.text-content-input:hover {
+    border-color: var(--border-color-hover);
+}
+
+.text-content-input:focus {
+    outline: none;
+    border-color: #0d6efd;
+    background-color: var(--bg-secondary);
 }
