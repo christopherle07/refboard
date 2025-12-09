@@ -70,6 +70,16 @@
     flex: 1;
     cursor: pointer;
     user-select: none;
+    padding: 4px 8px;
+    margin: -4px -8px;
+    border-radius: 4px;
+    transition: all 0.15s ease;
+}
+
+.board-name:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+    transform: translateX(2px);
 }
 
 .board-dropdown-btn {
@@ -271,31 +281,38 @@
 .layers-list {
     display: flex;
     flex-direction: column;
+    padding: 4px;
 }
 
 .layer-item {
     display: flex;
     align-items: center;
-    height: 32px;
-    background: var(--bg-primary);
-    border-bottom: 1px solid var(--border-color);
-    cursor: default;
-    transition: background 0.1s;
+    height: 28px;
+    background: transparent;
+    cursor: pointer;
+    transition: transform 0.15s cubic-bezier(0.25, 0.46, 0.45, 0.94), opacity 0.15s ease, background 0.15s ease, box-shadow 0.15s ease, border 0.15s ease;
     user-select: none;
     position: relative;
+    padding: 2px 8px;
+    margin: 1px 0;
+    border-radius: 4px;
+    border: 1px solid transparent;
+    will-change: transform;
 }
 
 .layer-item:hover {
-    background: var(--bg-tertiary);
+    background: var(--bg-hover);
+    border-color: var(--border-color);
 }
 
 .layer-item.selected {
-    background: var(--bg-active);
-    border-left: 3px solid #0066ff;
+    background: rgba(13, 110, 253, 0.15);
+    border-color: rgba(13, 110, 253, 0.3);
 }
 
 .layer-item.selected:hover {
-    background: var(--bg-active);
+    background: rgba(13, 110, 253, 0.2);
+    border-color: rgba(13, 110, 253, 0.5);
 }
 
 .layer-item.layer-hidden {
@@ -303,52 +320,91 @@
 }
 
 .layer-item.dragging {
-    opacity: 0.4;
+    opacity: 0.5;
     background: var(--bg-hover);
+    border: 1px solid var(--border-color);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    transform: scale(1.02);
 }
 
 .layer-item.drag-over-above::before {
     content: '';
     position: absolute;
-    top: -1px;
-    left: 0;
-    right: 0;
+    top: -2px;
+    left: 8px;
+    right: 8px;
     height: 2px;
     background: #0d6efd;
     z-index: 10;
+    border-radius: 1px;
 }
 
 .layer-item.drag-over-below::after {
     content: '';
     position: absolute;
-    bottom: -1px;
-    left: 0;
-    right: 0;
+    bottom: -2px;
+    left: 8px;
+    right: 8px;
     height: 2px;
     background: #0d6efd;
     z-index: 10;
+    border-radius: 1px;
+}
+
+.layer-icon {
+    width: 16px;
+    height: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-tertiary);
+    flex-shrink: 0;
+    margin-right: 6px;
+    font-size: 14px;
 }
 
 .layer-drag-handle {
-    width: 20px;
+    width: 16px;
     height: 100%;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 2px;
-    cursor: grab;
+    gap: 1px;
+    cursor: grab !important;
     color: var(--text-disabled);
     flex-shrink: 0;
     transition: color 0.1s;
+    margin-right: 4px;
+    opacity: 0;
+}
+
+.layer-item:hover .layer-drag-handle {
+    opacity: 1;
 }
 
 .layer-drag-handle:hover {
-    color: var(--text-tertiary);
+    color: var(--text-secondary);
 }
 
 .layer-drag-handle:active {
-    cursor: grabbing;
+    cursor: grabbing !important;
+}
+
+.layer-item[draggable="true"] {
+    cursor: move !important;
+}
+
+.layer-item.dragging {
+    cursor: grabbing !important;
+}
+
+.group-header[draggable="true"] {
+    cursor: move !important;
+}
+
+.group-header.dragging {
+    cursor: grabbing !important;
 }
 
 .layer-drag-handle[draggable="true"] {
@@ -358,44 +414,54 @@
 
 .drag-row {
     display: flex;
-    gap: 2px;
+    gap: 1px;
     pointer-events: none;
 }
 
 .drag-row span {
-    width: 3px;
-    height: 3px;
+    width: 2px;
+    height: 2px;
     background: currentColor;
     border-radius: 50%;
     pointer-events: none;
 }
 
 .layer-visibility-btn {
-    width: 24px;
-    height: 100%;
+    width: 20px;
+    height: 20px;
     display: flex;
     align-items: center;
     justify-content: center;
     background: none;
     border: none;
     cursor: pointer;
-    color: var(--text-secondary);
-    font-size: 12px;
+    color: var(--text-tertiary);
+    font-size: 11px;
     flex-shrink: 0;
-    transition: color 0.1s;
+    transition: all 0.1s;
     padding: 0;
+    margin-left: auto;
+    border-radius: 3px;
+    opacity: 0;
+}
+
+.layer-item:hover .layer-visibility-btn {
+    opacity: 1;
 }
 
 .layer-visibility-btn:hover {
     color: var(--text-primary);
+    background: var(--bg-hover);
 }
 
 .layer-visibility-btn.hidden {
     color: var(--text-disabled);
+    opacity: 1;
 }
 
 .layer-visibility-btn.hidden:hover {
-    color: var(--text-disabled);
+    color: var(--text-secondary);
+    background: var(--bg-hover);
 }
 
 .layer-content {
@@ -404,38 +470,46 @@
     display: flex;
     align-items: center;
     height: 100%;
-    padding-right: 4px;
+    overflow: hidden;
+}
+
+.layer-name {
+    font-size: 12px;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    -webkit-user-drag: none;
+    user-drag: none;
+    pointer-events: none;
+}
+
+.layer-item.selected .layer-name {
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+.layer-item.layer-hidden .layer-name {
+    color: var(--text-disabled);
 }
 
 .layer-name-input {
     width: 100%;
-    height: 100%;
-    border: none;
-    background: transparent;
-    font-size: 11px;
-    padding: 0 6px;
+    border: 1px solid #0d6efd;
+    background: var(--bg-secondary);
+    font-size: 12px;
+    padding: 2px 6px;
     outline: none;
     font-family: inherit;
     color: var(--text-primary);
+    border-radius: 3px;
     -webkit-user-drag: none;
     user-drag: none;
 }
 
-.layer-item.selected .layer-name-input {
-    color: var(--text-primary);
-}
-
-.layer-name-input:focus {
-    background: var(--bg-hover);
-}
-
-.layer-item.layer-hidden .layer-name-input {
-    color: var(--text-disabled);
-}
-
 .layer-controls {
     display: flex;
-    padding-right: 8px;
+    gap: 2px;
     opacity: 0;
     transition: opacity 0.1s;
 }
@@ -453,39 +527,103 @@
     cursor: pointer;
     font-size: 14px;
     line-height: 1;
-    color: var(--text-disabled);
+    color: var(--text-tertiary);
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: color 0.1s;
+    transition: all 0.1s;
+    border-radius: 3px;
 }
 
 .layer-btn-delete:hover {
-    color: #f44;
+    color: #dc3545;
+    background: var(--bg-hover);
+}
+
+/* Layer context menu */
+.layer-context-menu {
+    position: fixed;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 4px 0;
+    min-width: 160px;
+    box-shadow: 0 4px 12px var(--shadow);
+    z-index: 10000;
+    display: none;
+}
+
+.layer-context-menu.show {
+    display: block;
+}
+
+.layer-context-menu-item {
+    padding: 6px 12px;
+    cursor: pointer;
+    font-size: 12px;
+    color: var(--text-primary);
+    transition: background 0.1s;
+}
+
+.layer-context-menu-item:hover {
+    background: var(--bg-hover);
+}
+
+.layer-context-menu-separator {
+    height: 1px;
+    background: var(--border-color);
+    margin: 4px 0;
 }
 
 .group-item {
     display: flex;
     flex-direction: column;
-    background: var(--bg-secondary);
-    border-bottom: 1px solid var(--border-color);
+    transition: transform 0.15s cubic-bezier(0.25, 0.46, 0.45, 0.94), opacity 0.15s ease;
+    will-change: transform;
 }
 
 .group-header {
     display: flex;
     align-items: center;
-    height: 32px;
+    height: 28px;
     cursor: pointer;
-    transition: background 0.1s;
+    transition: background 0.15s ease, transform 0.15s cubic-bezier(0.25, 0.46, 0.45, 0.94), opacity 0.15s ease, box-shadow 0.15s ease, border 0.15s ease;
     user-select: none;
+    background: transparent;
+    padding: 2px 8px;
+    margin: 1px 0;
+    border-radius: 4px;
+    border: 1px solid transparent;
+    will-change: transform;
+}
+
+.group-header .layer-drag-handle {
+    cursor: grab;
+}
+
+.group-header .layer-drag-handle:active {
+    cursor: grabbing;
 }
 
 .group-header:hover {
-    background: var(--bg-tertiary);
+    background: var(--bg-hover);
+    border-color: var(--border-color);
+}
+
+.group-header:hover .layer-drag-handle {
+    opacity: 1;
+}
+
+.group-header:hover .layer-controls {
+    opacity: 1;
 }
 
 .group-header.dragging {
-    opacity: 0.4;
+    opacity: 0.5;
+    background: var(--bg-hover);
+    border: 1px solid var(--border-color);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    transform: scale(1.02);
 }
 
 .group-header.drag-over {
@@ -577,8 +715,10 @@
 .group-children {
     display: flex;
     flex-direction: column;
-    padding-left: 24px;
+    padding-left: 16px;
     background: var(--bg-primary);
+    border-left: 2px solid var(--border-color);
+    margin-left: 24px;
 }
 
 .group-children.collapsed {
@@ -1279,4 +1419,77 @@
     outline: none;
     border-color: #0d6efd;
     background-color: var(--bg-secondary);
+}
+
+/* Color Palette Properties */
+.palette-properties {
+    padding: 12px 0;
+}
+
+.palette-actions {
+    padding: 0 12px 12px 12px;
+    display: flex;
+    justify-content: center;
+}
+
+.palette-actions button {
+    width: 100%;
+}
+
+.palette-colors-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.palette-color-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    transition: all 0.15s;
+}
+
+.palette-color-item:hover {
+    border-color: var(--border-color-hover);
+    background: var(--bg-tertiary);
+}
+
+.palette-color-preview {
+    width: 32px;
+    height: 32px;
+    border-radius: 4px;
+    border: 1px solid var(--border-color);
+    flex-shrink: 0;
+}
+
+.palette-color-values {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 1;
+    min-width: 0;
+}
+
+.palette-color-value {
+    font-size: 11px;
+    font-family: 'Courier New', monospace;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 2px 4px;
+    border-radius: 3px;
+    transition: all 0.15s;
+    user-select: all;
+}
+
+.palette-color-value:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+.palette-color-value:active {
+    background: var(--bg-active);
 }

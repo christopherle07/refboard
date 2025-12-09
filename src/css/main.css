@@ -444,6 +444,17 @@ body {
     margin: 4px 0;
 }
 
+.image-context-menu {
+    position: fixed;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 4px 0;
+    min-width: 180px;
+    box-shadow: 0 4px 12px var(--shadow);
+    z-index: 10000;
+}
+
 .canvas-container {
     flex: 1;
     position: relative;
@@ -498,19 +509,19 @@ body {
     background: #4752C4 !important;
 }
 
-.update-btn {
+.website-btn {
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 8px;
-    background: #FF1493 !important;
-    color: white !important;
+    background: var(--bg-secondary) !important;
+    color: var(--text-primary) !important;
+    border: 1px solid var(--border-color);
     border-radius: 4px;
     margin: 0 12px 8px 12px;
     padding: 10px 12px;
-    border: none;
     width: calc(100% - 24px);
-    transition: background 0.15s;
+    transition: all 0.15s;
     cursor: pointer;
     text-decoration: none;
     font-size: 13px;
@@ -519,8 +530,9 @@ body {
     height: 40px;
 }
 
-.update-btn:hover {
-    background: #DC1278 !important;
+.website-btn:hover {
+    background: var(--bg-hover) !important;
+    border-color: var(--border-color-hover);
 }
 
 /* Collections Section */

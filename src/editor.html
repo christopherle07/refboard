@@ -87,6 +87,9 @@
                             <button class="tool-btn" id="text-tool-btn" title="Text Tool">
                                 <img src="assets/TextIcon.svg" alt="Text Tool" class="tool-icon theme-icon">
                             </button>
+                            <button class="tool-btn" id="color-extractor-btn" title="Color Extractor">
+                                CE
+                            </button>
                         </div>
                     </div>
 
@@ -226,6 +229,16 @@
                                 </div>
                             </div>
 
+                            <!-- Color Palette properties -->
+                            <div class="palette-properties" id="palette-properties" style="display: none;">
+                                <div class="palette-actions">
+                                    <button class="modal-btn modal-btn-secondary" id="palette-regenerate-btn">Regenerate Colors</button>
+                                </div>
+                                <div class="palette-colors-list" id="palette-colors-list">
+                                    <!-- Dynamically generated color items -->
+                                </div>
+                            </div>
+
                         </div>
                     </div>
                 </div>
@@ -306,11 +319,89 @@
             <div class="canvas-context-menu" id="canvas-context-menu">
                 <div class="context-menu-item" id="context-delete-selected" style="display: none;">Delete Selected</div>
                 <div class="context-menu-item" id="context-deselect-all" style="display: none;">Deselect All</div>
+                <div class="context-menu-item" id="context-enable-rotate" style="display: none;">Enable Rotate</div>
                 <div class="context-menu-separator" id="context-separator" style="display: none;"></div>
                 <div class="context-menu-item" id="context-recenter">Recenter View</div>
                 <div class="context-menu-item" id="context-reset-zoom">Reset Zoom</div>
+                <div class="context-menu-separator"></div>
+                <div class="context-menu-item" id="context-shortcuts">Keyboard Shortcuts</div>
             </div>
         </main>
+    </div>
+
+    <!-- Layer context menu -->
+    <div class="layer-context-menu" id="layer-context-menu">
+        <div class="layer-context-menu-item" id="layer-context-rename">Rename</div>
+        <div class="layer-context-menu-separator"></div>
+        <div class="layer-context-menu-item" id="layer-context-duplicate">Duplicate</div>
+        <div class="layer-context-menu-item" id="layer-context-delete">Delete</div>
+    </div>
+
+    <!-- Keyboard Shortcuts Modal -->
+    <div class="modal-overlay" id="shortcuts-modal-overlay">
+        <div class="modal shortcuts-modal">
+            <div class="modal-header">
+                <h2>Keyboard Shortcuts</h2>
+                <button class="modal-close-btn" id="shortcuts-modal-close">×</button>
+            </div>
+            <div class="modal-body shortcuts-modal-body">
+                <div class="shortcuts-section">
+                    <h3>General</h3>
+                    <div class="shortcut-item">
+                        <span class="shortcut-keys"><kbd>Ctrl</kbd> + <kbd>Z</kbd></span>
+                        <span class="shortcut-desc">Undo</span>
+                    </div>
+                    <div class="shortcut-item">
+                        <span class="shortcut-keys"><kbd>Ctrl</kbd> + <kbd>Y</kbd></span>
+                        <span class="shortcut-desc">Redo</span>
+                    </div>
+                    <div class="shortcut-item">
+                        <span class="shortcut-keys"><kbd>Delete</kbd></span>
+                        <span class="shortcut-desc">Delete selected layer(s)</span>
+                    </div>
+                </div>
+
+                <div class="shortcuts-section">
+                    <h3>Canvas Navigation</h3>
+                    <div class="shortcut-item">
+                        <span class="shortcut-keys"><kbd>Mouse Wheel</kbd></span>
+                        <span class="shortcut-desc">Zoom in/out</span>
+                    </div>
+                    <div class="shortcut-item">
+                        <span class="shortcut-keys"><kbd>Middle Mouse</kbd> + Drag</span>
+                        <span class="shortcut-desc">Pan canvas</span>
+                    </div>
+                    <div class="shortcut-item">
+                        <span class="shortcut-keys"><kbd>Space</kbd> + Drag</span>
+                        <span class="shortcut-desc">Pan canvas</span>
+                    </div>
+                </div>
+
+                <div class="shortcuts-section">
+                    <h3>Layer Manipulation</h3>
+                    <div class="shortcut-item">
+                        <span class="shortcut-keys"><kbd>Alt</kbd> + Hold Mouse</span>
+                        <span class="shortcut-desc">Rotate selected layer</span>
+                    </div>
+                    <div class="shortcut-item">
+                        <span class="shortcut-keys"><kbd>Ctrl</kbd> + Click</span>
+                        <span class="shortcut-desc">Multi-select layers</span>
+                    </div>
+                    <div class="shortcut-item">
+                        <span class="shortcut-keys"><kbd>Shift</kbd> + Click</kbd></span>
+                        <span class="shortcut-desc">Select range of layers</span>
+                    </div>
+                    <div class="shortcut-item">
+                        <span class="shortcut-keys"><kbd>Ctrl</kbd> + <kbd>G</kbd></span>
+                        <span class="shortcut-desc">Group selected layers</span>
+                    </div>
+                    <div class="shortcut-item">
+                        <span class="shortcut-keys">Right Click Layer</span>
+                        <span class="shortcut-desc">Layer context menu</span>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script type="module" src="js/titlebar.js"></script>

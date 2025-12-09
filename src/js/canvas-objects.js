@@ -491,6 +491,67 @@ export class CanvasObjectsManager {
             return;
         }
 
+        // Special handling for color palettes - scale cellSize proportionally
+        if (obj.type === 'colorPalette') {
+            const originalWidth = obj.width;
+            const originalHeight = obj.height;
+            let newWidth = obj.width;
+            let newHeight = obj.height;
+
+            const minSize = 60; // Minimum cell size
+
+            switch (handle) {
+                case 'se': // Bottom-right
+                    newWidth = Math.max(minSize, mouseX - obj.x);
+                    newHeight = Math.max(minSize, mouseY - obj.y);
+                    break;
+                case 'sw': // Bottom-left
+                    newWidth = Math.max(minSize, (obj.x + obj.width) - mouseX);
+                    newHeight = Math.max(minSize, mouseY - obj.y);
+                    obj.x = (obj.x + obj.width) - newWidth;
+                    break;
+                case 'ne': // Top-right
+                    newWidth = Math.max(minSize, mouseX - obj.x);
+                    newHeight = Math.max(minSize, (obj.y + obj.height) - mouseY);
+                    obj.y = (obj.y + obj.height) - newHeight;
+                    break;
+                case 'nw': // Top-left
+                    newWidth = Math.max(minSize, (obj.x + obj.width) - mouseX);
+                    newHeight = Math.max(minSize, (obj.y + obj.height) - mouseY);
+                    obj.x = (obj.x + obj.width) - newWidth;
+                    obj.y = (obj.y + obj.height) - newHeight;
+                    break;
+                case 'e': // Right edge
+                    newWidth = Math.max(minSize, mouseX - obj.x);
+                    newHeight = obj.height; // Keep height
+                    break;
+                case 'w': // Left edge
+                    newWidth = Math.max(minSize, (obj.x + obj.width) - mouseX);
+                    newHeight = obj.height; // Keep height
+                    obj.x = (obj.x + obj.width) - newWidth;
+                    break;
+                case 's': // Bottom edge
+                    newWidth = obj.width; // Keep width
+                    newHeight = Math.max(minSize, mouseY - obj.y);
+                    break;
+                case 'n': // Top edge
+                    newWidth = obj.width; // Keep width
+                    newHeight = Math.max(minSize, (obj.y + obj.height) - mouseY);
+                    obj.y = (obj.y + obj.height) - newHeight;
+                    break;
+            }
+
+            // Calculate scale factor based on width (maintain aspect ratio based on original grid)
+            const scaleFactor = newWidth / originalWidth;
+
+            // Update cellSize and dimensions
+            obj.cellSize = Math.max(20, obj.cellSize * scaleFactor);
+            obj.width = obj.gridCols * obj.cellSize;
+            obj.height = obj.hasWideCell ? (obj.gridRows + 1) * obj.cellSize : obj.gridRows * obj.cellSize;
+
+            return;
+        }
+
         // Normal shapes - minimum size constraint
         const minSize = 50;
 
@@ -686,6 +747,8 @@ export class CanvasObjectsManager {
             this.renderShape(ctx, obj, isPreview);
         } else if (obj.type === 'text') {
             this.renderText(ctx, obj, isPreview);
+        } else if (obj.type === 'colorPalette') {
+            this.renderColorPalette(ctx, obj, isPreview);
         }
 
         ctx.restore();
@@ -861,6 +924,54 @@ export class CanvasObjectsManager {
         });
 
         ctx.restore();
+    }
+
+    renderColorPalette(ctx, palette, isPreview) {
+        if (isPreview) {
+            ctx.globalAlpha = 0.7;
+        }
+
+        const cellSize = palette.cellSize || 60;
+        const gridCols = palette.gridCols || 1;
+        const gridRows = palette.gridRows || 1;
+        const hasWideCell = palette.hasWideCell || false;
+        const colors = palette.colors || [];
+
+        let colorIndex = 0;
+
+        // Draw regular grid cells (all colors except the last one if hasWideCell)
+        const regularCellCount = hasWideCell ? colors.length - 1 : colors.length;
+
+        for (let row = 0; row < gridRows; row++) {
+            for (let col = 0; col < gridCols; col++) {
+                if (colorIndex >= regularCellCount) break;
+
+                const x = palette.x + col * cellSize;
+                const y = palette.y + row * cellSize;
+                const color = colors[colorIndex];
+
+                ctx.fillStyle = color.hex;
+                ctx.fillRect(x, y, cellSize, cellSize);
+
+                colorIndex++;
+            }
+        }
+
+        // Draw wide cell at the bottom if needed
+        if (hasWideCell && colorIndex < colors.length) {
+            const wideX = palette.x;
+            const wideY = palette.y + gridRows * cellSize;
+            const wideWidth = gridCols * cellSize;
+            const color = colors[colorIndex];
+
+            ctx.fillStyle = color.hex;
+            ctx.fillRect(wideX, wideY, wideWidth, cellSize);
+        }
+
+        // Draw border around entire palette
+        ctx.strokeStyle = '#999999';
+        ctx.lineWidth = 1 / this.canvas.zoom;
+        ctx.strokeRect(palette.x, palette.y, palette.width, palette.height);
     }
 
 

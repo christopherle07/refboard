@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="view-transition" content="same-origin">
     <title>EyeDea</title>
     <script>
         
@@ -22,7 +23,7 @@
     <link rel="stylesheet" href="css/main.css">
     <link rel="stylesheet" href="css/modal.css">
     <link rel="stylesheet" href="css/titlebar.css">
-    <link rel="stylesheet" href="css/updater.css">
+    <link rel="stylesheet" href="css/transitions.css">
 </head>
 <body>
     <div class="custom-titlebar" data-tauri-drag-region>
@@ -50,6 +51,7 @@
                 <h3>Navigate</h3>
                 <button class="sidebar-btn active" id="all-boards-btn">All Boards</button>
                 <button class="sidebar-btn" id="settings-btn">Settings</button>
+                <button class="sidebar-btn" id="shortcuts-btn">Keyboard Shortcuts</button>
             </div>
 
             <div class="sidebar-section">
@@ -71,8 +73,8 @@
                 <a href="https://discord.gg/6EcTTFDDA3" target="_blank" class="discord-btn" title="Join Discord">
                     <span>Discord</span>
                 </a>
-                <button class="update-btn" id="check-updates-btn" title="Check for Updates">
-                    <span>Check for Updates</span>
+                <button class="website-btn" id="website-btn" title="Visit Website">
+                    <span>Website</span>
                 </button>
                 <div class="version-info" id="version-info">
                     <span class="version-text">Loading version...</span>
@@ -110,6 +112,69 @@
                     </button>
                 </div>
             </main>
+        </div>
+    </div>
+
+    <!-- Keyboard Shortcuts Modal -->
+    <div class="modal-overlay" id="shortcuts-modal-overlay">
+        <div class="modal shortcuts-modal">
+            <div class="modal-header">
+                <h2>Keyboard Shortcuts</h2>
+                <button class="modal-close-btn" id="shortcuts-modal-close">×</button>
+            </div>
+            <div class="modal-body shortcuts-modal-body">
+                <div class="shortcuts-section">
+                    <h3>General</h3>
+                    <div class="shortcut-item">
+                        <span class="shortcut-keys"><kbd>Ctrl</kbd> + <kbd>Z</kbd></span>
+                        <span class="shortcut-desc">Undo</span>
+                    </div>
+                    <div class="shortcut-item">
+                        <span class="shortcut-keys"><kbd>Ctrl</kbd> + <kbd>Y</kbd></span>
+                        <span class="shortcut-desc">Redo</span>
+                    </div>
+                    <div class="shortcut-item">
+                        <span class="shortcut-keys"><kbd>Delete</kbd></span>
+                        <span class="shortcut-desc">Delete selected layer(s)</span>
+                    </div>
+                </div>
+
+                <div class="shortcuts-section">
+                    <h3>Canvas Navigation</h3>
+                    <div class="shortcut-item">
+                        <span class="shortcut-keys"><kbd>Mouse Wheel</kbd></span>
+                        <span class="shortcut-desc">Zoom in/out</span>
+                    </div>
+                    <div class="shortcut-item">
+                        <span class="shortcut-keys"><kbd>Middle Mouse</kbd> + Drag</span>
+                        <span class="shortcut-desc">Pan canvas</span>
+                    </div>
+                    <div class="shortcut-item">
+                        <span class="shortcut-keys"><kbd>Space</kbd> + Drag</span>
+                        <span class="shortcut-desc">Pan canvas</span>
+                    </div>
+                </div>
+
+                <div class="shortcuts-section">
+                    <h3>Layer Manipulation</h3>
+                    <div class="shortcut-item">
+                        <span class="shortcut-keys"><kbd>Alt</kbd> + Hold Mouse</span>
+                        <span class="shortcut-desc">Rotate selected layer</span>
+                    </div>
+                    <div class="shortcut-item">
+                        <span class="shortcut-keys"><kbd>Ctrl</kbd> + Click</span>
+                        <span class="shortcut-desc">Multi-select layers</span>
+                    </div>
+                    <div class="shortcut-item">
+                        <span class="shortcut-keys"><kbd>Shift</kbd> + Click</span>
+                        <span class="shortcut-desc">Select range of layers</span>
+                    </div>
+                    <div class="shortcut-item">
+                        <span class="shortcut-keys">Right Click Layer</span>
+                        <span class="shortcut-desc">Layer context menu</span>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 

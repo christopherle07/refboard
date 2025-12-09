@@ -1,6 +1,3 @@
-import { checkForUpdates } from './updater.js';
-import { showUpdateNotification } from './update-ui.js';
-
 const THEME_KEY = 'app_theme';
 const SETTINGS_KEY = 'canvas_settings';
 
@@ -115,36 +112,42 @@ function setupNavigation() {
     const importBoardBtn = document.getElementById('import-board-btn');
 
     if (homeBtn) {
-        homeBtn.addEventListener('click', () => {
-            window.location.href = 'index.html';
+        homeBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            document.querySelector('.settings-page').classList.add('page-exit');
+            setTimeout(() => {
+                window.location.href = 'index.html';
+            }, 100);
         });
     }
 
     if (newBoardBtn) {
-        newBoardBtn.addEventListener('click', () => {
-            window.location.href = 'index.html';
+        newBoardBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            document.querySelector('.settings-page').classList.add('page-exit');
+            setTimeout(() => {
+                window.location.href = 'index.html';
+            }, 100);
         });
     }
 
     if (importBoardBtn) {
-        importBoardBtn.addEventListener('click', () => {
-            window.location.href = 'index.html';
+        importBoardBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            document.querySelector('.settings-page').classList.add('page-exit');
+            setTimeout(() => {
+                window.location.href = 'index.html';
+            }, 100);
         });
     }
 
-    // Check for updates button
-    const checkUpdatesBtn = document.getElementById('check-updates-btn');
-    if (checkUpdatesBtn) {
-        checkUpdatesBtn.addEventListener('click', async () => {
-            const update = await checkForUpdates();
-            if (update.available) {
-                showUpdateNotification(update);
-            } else {
-                alert('You are on the latest version');
-            }
+    // Website link button
+    const websiteBtn = document.getElementById('website-btn');
+    if (websiteBtn) {
+        websiteBtn.addEventListener('click', () => {
+            window.__TAURI__.opener.openUrl('https://anihaven.site/');
         });
     }
-
 }
 
 function setupSettingsControls() {
@@ -231,4 +234,5 @@ document.addEventListener('DOMContentLoaded', () => {
     setupThemeOptions();
     setupNavigation();
     setupSettingsControls();
+
 });

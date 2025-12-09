@@ -26,6 +26,7 @@ pub fn create_board(app: AppHandle, name: String, bg_color: String) -> Result<Bo
         view_state: None,
         strokes: None,
         objects: None,
+        groups: None,
     };
     database::save_board(&app, &board)?;
     Ok(board)
@@ -34,7 +35,7 @@ pub fn create_board(app: AppHandle, name: String, bg_color: String) -> Result<Bo
 #[tauri::command]
 pub fn update_board(app: AppHandle, id: u64, updates: BoardUpdate) -> Result<Board, String> {
     let mut board = database::load_board(&app, id)?;
-    
+
     if let Some(name) = updates.name {
         board.name = name;
     }
@@ -58,6 +59,9 @@ pub fn update_board(app: AppHandle, id: u64, updates: BoardUpdate) -> Result<Boa
     }
     if let Some(objects) = updates.objects {
         board.objects = Some(objects);
+    }
+    if let Some(groups) = updates.groups {
+        board.groups = Some(groups);
     }
 
     board.updated_at = database::now_millis();

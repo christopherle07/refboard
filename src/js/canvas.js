@@ -13,8 +13,11 @@ export class Canvas {
         this.selectedImages = [];
         this.isDragging = false;
         this.isResizing = false;
+        this.isRotating = false;
         this.isPanning = false;
         this.isBoxSelecting = false;
+        this.rotationStartAngle = 0;
+        this.rotationStartRotation = 0;
         this.selectionBox = null;
         this.dragOffset = { x: 0, y: 0 };
         this.dragOffsets = new Map();
@@ -209,20 +212,20 @@ export class Canvas {
             e.preventDefault();
             e.dataTransfer.dropEffect = 'copy';
         });
-        
+
         this.canvas.addEventListener('dragenter', (e) => {
             e.preventDefault();
             if (e.dataTransfer.types.includes('Files')) {
                 this.showDragOverlay();
             }
         });
-        
+
         this.canvas.addEventListener('dragleave', (e) => {
             if (e.target === this.canvas) {
                 this.hideDragOverlay();
             }
         });
-        
+
         this.canvas.addEventListener('drop', this.onDrop.bind(this));
         
         document.addEventListener('keydown', (e) => {
@@ -380,6 +383,12 @@ export class Canvas {
 
         // clickedImage already declared above, reuse it
         if (clickedImage) {
+            // Handle rotation with Alt key
+            if (e.altKey && e.button === 0) {
+                this.enableRotationMode(clickedImage, x, y);
+                return;
+            }
+
             // Handle multi-select with Ctrl/Cmd
             if (e.ctrlKey || e.metaKey) {
                 this.selectImage(clickedImage, true);
@@ -437,6 +446,10 @@ export class Canvas {
         if (this.isBoxSelecting) {
             this.selectionBox.endX = x;
             this.selectionBox.endY = y;
+            this.needsRender = true;
+        } else if (this.isRotating && this.rotatingImage) {
+            this.rotateImage(x, y);
+            this.canvas.style.cursor = 'grabbing';
             this.needsRender = true;
         } else if (this.isResizing && this.selectedImage) {
             this.resizeImage(x, y);
@@ -496,9 +509,10 @@ export class Canvas {
             return;
         }
 
-        const wasModifying = this.isDragging || this.isResizing;
+        const wasModifying = this.isDragging || this.isResizing || this.isRotating;
         const wasDragging = this.isDragging;
         const wasResizing = this.isResizing;
+        const wasRotating = this.isRotating;
 
         if (wasDragging && this.selectedImage && this.dragStartPosition && this.historyManager) {
             if (this.dragStartPosition.x !== this.selectedImage.x || this.dragStartPosition.y !== this.selectedImage.y) {
@@ -546,6 +560,8 @@ export class Canvas {
 
         this.isDragging = false;
         this.isResizing = false;
+        this.isRotating = false;
+        this.rotatingImage = null;
         this.isPanning = false;
         this.isBoxSelecting = false;
         this.selectionBox = null;
@@ -571,21 +587,17 @@ export class Canvas {
     }
 
     onContextMenu(e) {
+        e.preventDefault();
         const rect = this.canvas.getBoundingClientRect();
         const { x, y } = this.screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
 
-        // If shift is held, add to selection
-        if (e.shiftKey) {
-            const clickedImage = this.getImageAtPoint(x, y);
-            if (clickedImage) {
-                this.selectImage(clickedImage, true);
-                e.preventDefault();
-                this.needsRender = true;
-                if (this.onSelectionChange) {
-                    this.onSelectionChange();
-                }
-            }
-        }
+        // Check if right-clicking on an image
+        const clickedImage = this.getImageAtPoint(x, y);
+
+        // Store the clicked image for the context menu to use
+        this.contextMenuImage = clickedImage;
+
+        // Let the regular context menu handler in editor.js handle this
     }
 
     onWheel(e) {
@@ -613,13 +625,13 @@ export class Canvas {
     onDrop(e) {
         e.preventDefault();
         this.hideDragOverlay();
-        
+
         const files = Array.from(e.dataTransfer.files);
         const imageFiles = files.filter(f => f.type.startsWith('image/'));
-        
+
         const rect = this.canvas.getBoundingClientRect();
         const { x, y } = this.screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
-        
+
         imageFiles.forEach(file => {
             const reader = new FileReader();
             reader.onload = (event) => {
@@ -1065,11 +1077,11 @@ export class Canvas {
     resizeImage(x, y) {
         const img = this.selectedImage;
         if (!img || !this.resizeStartData) return;
-        
+
         const start = this.resizeStartData;
         const minSize = 20;
         const isCorner = ['nw', 'ne', 'sw', 'se'].includes(this.resizeHandle);
-        
+
         if (isCorner) {
             if (this.resizeHandle === 'se') {
                 const newWidth = Math.max(minSize, x - start.x);
@@ -1111,6 +1123,37 @@ export class Canvas {
                 img.height = newHeight;
             }
         }
+    }
+
+    enableRotationMode(image, startMouseX, startMouseY) {
+        this.isRotating = true;
+        this.rotatingImage = image;
+        this.selectImage(image);
+        this.canvas.style.cursor = 'grab';
+
+        // Store the starting rotation and starting mouse angle
+        const centerX = image.x + image.width / 2;
+        const centerY = image.y + image.height / 2;
+        this.rotationStartAngle = Math.atan2(startMouseY - centerY, startMouseX - centerX);
+        this.rotationStartRotation = image.rotation || 0;
+    }
+
+    rotateImage(mouseX, mouseY) {
+        if (!this.rotatingImage) return;
+
+        const img = this.rotatingImage;
+        const centerX = img.x + img.width / 2;
+        const centerY = img.y + img.height / 2;
+
+        // Calculate current angle
+        const currentAngle = Math.atan2(mouseY - centerY, mouseX - centerX);
+
+        // Calculate the delta from the starting angle
+        const angleDelta = currentAngle - this.rotationStartAngle;
+        const deltaDegrees = angleDelta * (180 / Math.PI);
+
+        // Apply delta to the starting rotation
+        img.rotation = this.rotationStartRotation + deltaDegrees;
     }
 
     getImageAtPoint(x, y) {
@@ -1198,7 +1241,26 @@ export class Canvas {
             if (item.type === 'image') {
                 const img = item.data;
                 try {
-                    this.ctx.drawImage(img.img, img.x, img.y, img.width, img.height);
+                    if (img.rotation && img.rotation !== 0) {
+                        // Save context state
+                        this.ctx.save();
+
+                        // Move to image center
+                        const centerX = img.x + img.width / 2;
+                        const centerY = img.y + img.height / 2;
+                        this.ctx.translate(centerX, centerY);
+
+                        // Rotate
+                        this.ctx.rotate(img.rotation * Math.PI / 180);
+
+                        // Draw image centered at origin
+                        this.ctx.drawImage(img.img, -img.width / 2, -img.height / 2, img.width, img.height);
+
+                        // Restore context state
+                        this.ctx.restore();
+                    } else {
+                        this.ctx.drawImage(img.img, img.x, img.y, img.width, img.height);
+                    }
                 } catch (e) {
                 }
             } else if (item.type === 'object') {
@@ -1236,11 +1298,23 @@ export class Canvas {
 
             for (const img of this.selectedImages) {
                 if (img.visible === false) continue;
-                this.ctx.strokeRect(img.x, img.y, img.width, img.height);
+
+                if (img.rotation && img.rotation !== 0) {
+                    // Draw rotated selection box
+                    this.ctx.save();
+                    const centerX = img.x + img.width / 2;
+                    const centerY = img.y + img.height / 2;
+                    this.ctx.translate(centerX, centerY);
+                    this.ctx.rotate(img.rotation * Math.PI / 180);
+                    this.ctx.strokeRect(-img.width / 2, -img.height / 2, img.width, img.height);
+                    this.ctx.restore();
+                } else {
+                    this.ctx.strokeRect(img.x, img.y, img.width, img.height);
+                }
             }
 
-            // Only draw resize handles for single selection
-            if (this.selectedImages.length === 1 && this.selectedImage) {
+            // Only draw resize handles for single selection (skip if rotating)
+            if (this.selectedImages.length === 1 && this.selectedImage && !this.isRotating) {
                 const img = this.selectedImage;
                 const handleRadius = 4 / this.zoom;
                 const midX = img.x + img.width / 2;
@@ -1250,23 +1324,53 @@ export class Canvas {
                 this.ctx.strokeStyle = '#0066ff';
                 this.ctx.lineWidth = 1.5 / this.zoom;
 
-                const handles = [
-                    [img.x, img.y],
-                    [midX, img.y],
-                    [img.x + img.width, img.y],
-                    [img.x + img.width, midY],
-                    [img.x + img.width, img.y + img.height],
-                    [midX, img.y + img.height],
-                    [img.x, img.y + img.height],
-                    [img.x, midY]
-                ];
+                if (img.rotation && img.rotation !== 0) {
+                    // Draw rotated handles
+                    this.ctx.save();
+                    const centerX = img.x + img.width / 2;
+                    const centerY = img.y + img.height / 2;
+                    this.ctx.translate(centerX, centerY);
+                    this.ctx.rotate(img.rotation * Math.PI / 180);
 
-                for (let i = 0; i < handles.length; i++) {
-                    const [hx, hy] = handles[i];
-                    this.ctx.beginPath();
-                    this.ctx.arc(hx, hy, handleRadius, 0, Math.PI * 2);
-                    this.ctx.fill();
-                    this.ctx.stroke();
+                    const handles = [
+                        [-img.width / 2, -img.height / 2],
+                        [0, -img.height / 2],
+                        [img.width / 2, -img.height / 2],
+                        [img.width / 2, 0],
+                        [img.width / 2, img.height / 2],
+                        [0, img.height / 2],
+                        [-img.width / 2, img.height / 2],
+                        [-img.width / 2, 0]
+                    ];
+
+                    for (let i = 0; i < handles.length; i++) {
+                        const [hx, hy] = handles[i];
+                        this.ctx.beginPath();
+                        this.ctx.arc(hx, hy, handleRadius, 0, Math.PI * 2);
+                        this.ctx.fill();
+                        this.ctx.stroke();
+                    }
+
+                    this.ctx.restore();
+                } else {
+                    const handles = [
+                        [img.x, img.y],
+                        [midX, img.y],
+                        [img.x + img.width, img.y],
+                        [img.x + img.width, midY],
+                        [img.x + img.width, img.y + img.height],
+                        [midX, img.y + img.height],
+                        [img.x, img.y + img.height],
+                        [img.x, midY]
+                    ];
+
+                    for (let i = 0; i < handles.length; i++) {
+                        const [hx, hy] = handles[i];
+                        this.ctx.beginPath();
+                        this.ctx.arc(hx, hy, handleRadius, 0, Math.PI * 2);
+                        this.ctx.fill();
+                        this.ctx.stroke();
+                    }
                 }
             }
         }

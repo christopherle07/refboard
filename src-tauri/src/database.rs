@@ -49,6 +49,8 @@ pub struct Board {
     pub strokes: Option<serde_json::Value>,
     #[serde(default)]
     pub objects: Option<serde_json::Value>,
+    #[serde(default)]
+    pub groups: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -74,6 +76,7 @@ pub struct BoardUpdate {
     pub view_state: Option<serde_json::Value>,
     pub strokes: Option<serde_json::Value>,
     pub objects: Option<serde_json::Value>,
+    pub groups: Option<serde_json::Value>,
 }
 
 fn get_boards_dir(app: &AppHandle) -> PathBuf {

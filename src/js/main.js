@@ -1,8 +1,6 @@
 import { boardManager } from './board-manager.js';
 import { showCreateBoardModal, showDeleteConfirm } from './modal.js';
 import { showToast } from './modal-utils.js';
-import { initAutoUpdateCheck, checkForUpdates } from './updater.js';
-import { showUpdateNotification } from './update-ui.js';
 import CollectionManager from './collection-manager.js';
 
 let currentPage = 1;
@@ -78,8 +76,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     setupEventListeners();
     loadVersionInfo();
 
-    // Check for updates 5 seconds after app loads
-    initAutoUpdateCheck(showUpdateNotification);
 });
 
 function setupEventListeners() {
@@ -114,30 +110,31 @@ function setupEventListeners() {
 
     document.getElementById('import-board-btn').addEventListener('click', importBoardAsNew);
 
-    // Settings button with debugging
+    // Settings button
     const settingsBtn = document.getElementById('settings-btn');
-    console.log('Settings button found:', settingsBtn);
     if (settingsBtn) {
         settingsBtn.addEventListener('click', (e) => {
-            console.log('Settings button clicked!');
             e.preventDefault();
-            window.location.href = 'settings.html';
+            document.querySelector('.homepage').classList.add('page-exit');
+            setTimeout(() => {
+                window.location.href = 'settings.html';
+            }, 100);
         });
-        console.log('Settings button event listener attached');
-    } else {
-        console.error('Settings button not found in DOM!');
     }
 
-    // Check for updates button
-    const checkUpdatesBtn = document.getElementById('check-updates-btn');
-    if (checkUpdatesBtn) {
-        checkUpdatesBtn.addEventListener('click', async () => {
-            const update = await checkForUpdates();
-            if (update.available) {
-                showUpdateNotification(update);
-            } else {
-                showToast('You are on the latest version', 'success');
-            }
+    // Keyboard Shortcuts button
+    const shortcutsBtn = document.getElementById('shortcuts-btn');
+    if (shortcutsBtn) {
+        shortcutsBtn.addEventListener('click', () => {
+            showKeyboardShortcutsModal();
+        });
+    }
+
+    // Website link button
+    const websiteBtn = document.getElementById('website-btn');
+    if (websiteBtn) {
+        websiteBtn.addEventListener('click', () => {
+            window.__TAURI__.opener.openUrl('https://anihaven.site/');
         });
     }
 
@@ -753,4 +750,38 @@ function showAddBoardsModal(collectionId) {
             }
         });
     });
+}
+
+// Keyboard Shortcuts Modal
+function showKeyboardShortcutsModal() {
+    const overlay = document.getElementById('shortcuts-modal-overlay');
+    if (!overlay) return;
+
+    overlay.style.display = 'flex';
+
+    // Close button
+    const closeBtn = document.getElementById('shortcuts-modal-close');
+    closeBtn.onclick = () => closeShortcutsModal();
+
+    // Close on overlay click
+    overlay.onclick = (e) => {
+        if (e.target === overlay) {
+            closeShortcutsModal();
+        }
+    };
+
+    // Close on Escape key
+    const escapeHandler = (e) => {
+        if (e.key === 'Escape') {
+            closeShortcutsModal();
+            document.removeEventListener('keydown', escapeHandler);
+        }
+    };
+    document.addEventListener('keydown', escapeHandler);
+}
+
+function closeShortcutsModal() {
+    const overlay = document.getElementById('shortcuts-modal-overlay');
+    if (!overlay) return;
+    overlay.style.display = 'none';
 }
