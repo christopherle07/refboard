@@ -146,6 +146,25 @@ export class HistoryManager {
                     this.canvas.needsRender = true;
                 }
                 break;
+
+            case 'move_multiple':
+                // Undo multiple moves (images and objects)
+                if (action.data && Array.isArray(action.data)) {
+                    for (const item of action.data) {
+                        if (item.type === 'image') {
+                            this.canvas.updateImagePosition(item.id, item.oldX, item.oldY, true);
+                        } else if (item.type === 'object') {
+                            const obj = this.canvas.objectsManager.objects.find(o => o.id === item.id);
+                            if (obj) {
+                                obj.x = item.oldX;
+                                obj.y = item.oldY;
+                                if (item.oldX2 !== undefined) obj.x2 = item.oldX2;
+                                if (item.oldY2 !== undefined) obj.y2 = item.oldY2;
+                            }
+                        }
+                    }
+                }
+                break;
         }
 
         this.canvas.needsRender = true;
@@ -211,6 +230,25 @@ export class HistoryManager {
                 this.canvas.strokes = [];
                 this.canvas.redrawDrawingLayer();
                 this.canvas.needsRender = true;
+                break;
+
+            case 'move_multiple':
+                // Redo multiple moves (images and objects)
+                if (action.data && Array.isArray(action.data)) {
+                    for (const item of action.data) {
+                        if (item.type === 'image') {
+                            this.canvas.updateImagePosition(item.id, item.newX, item.newY, true);
+                        } else if (item.type === 'object') {
+                            const obj = this.canvas.objectsManager.objects.find(o => o.id === item.id);
+                            if (obj) {
+                                obj.x = item.newX;
+                                obj.y = item.newY;
+                                if (item.newX2 !== undefined) obj.x2 = item.newX2;
+                                if (item.newY2 !== undefined) obj.y2 = item.newY2;
+                            }
+                        }
+                    }
+                }
                 break;
         }
 

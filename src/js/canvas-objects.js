@@ -27,7 +27,18 @@ export class CanvasObjectsManager {
     }
 
     handleMouseDown(e, worldPos) {
-        // Check if clicking on a resize handle of selected object
+        // Check if clicking on rotation handle of ANY selected object (even in multi-select)
+        if (!this.currentTool) {
+            for (const obj of this.selectedObjects) {
+                if (this.isPointOnObjectRotationHandle(obj, worldPos.x, worldPos.y)) {
+                    // Trigger rotation mode on canvas
+                    this.canvas.enableRotationMode(obj, worldPos.x, worldPos.y);
+                    return true;
+                }
+            }
+        }
+
+        // Check if clicking on a resize handle of selected object (single selection only)
         if (this.selectedObject && this.selectedObjects.length === 1 && !this.currentTool) {
             const handle = this.getResizeHandleAtPoint(this.selectedObject, worldPos.x, worldPos.y);
             if (handle) {
@@ -52,8 +63,45 @@ export class CanvasObjectsManager {
                 return false;
             }
 
-            const multiSelect = e.shiftKey;
-            this.selectObject(clickedObject, multiSelect);
+            // Support both Shift and Ctrl/Cmd for multi-select
+            const multiSelect = e.shiftKey || e.ctrlKey || e.metaKey;
+
+            // Check if clicking an already selected object
+            const isAlreadySelected = this.selectedObjects.some(obj => obj.id === clickedObject.id);
+
+            // If a group is selected and clicking on a member of that group, keep group intact
+            if (this.canvas.selectedGroup && isAlreadySelected) {
+                // Just start dragging, don't change selection
+                this.isDragging = true;
+
+                // Calculate drag offsets for all selected objects
+                this.dragOffsets = this.selectedObjects.map(obj => ({
+                    x: worldPos.x - obj.x,
+                    y: worldPos.y - obj.y
+                }));
+
+                // Also setup drag offsets for all selected images in the group
+                this.canvas.dragOffsets.clear();
+                for (const img of this.canvas.selectedImages) {
+                    this.canvas.dragOffsets.set(img.id, {
+                        x: worldPos.x - img.x,
+                        y: worldPos.y - img.y
+                    });
+                }
+
+                return true;
+            }
+
+            // If clicking an already selected object without modifier keys, keep all selections
+            if (!isAlreadySelected || multiSelect) {
+                this.selectObject(clickedObject, multiSelect);
+            }
+
+            // Clear image selection when selecting objects (but not if group is selected)
+            if (this.canvas.selectedImages.length > 0 && !this.canvas.selectedGroup) {
+                this.canvas.selectImage(null);
+            }
+
             this.isDragging = true;
 
             // Calculate drag offsets for all selected objects
@@ -67,21 +115,14 @@ export class CanvasObjectsManager {
 
         // No object clicked - deselect and potentially start box selection if no tool active
         if (!this.currentTool) {
-            // Deselect all if not holding shift
-            if (!e.shiftKey) {
+            // Deselect all objects if not holding shift/ctrl
+            if (!e.shiftKey && !e.ctrlKey && !e.metaKey) {
                 this.deselectAll();
             }
 
-            // Start box selection
-            this.isBoxSelecting = true;
-            this.selectionBox = {
-                startX: worldPos.x,
-                startY: worldPos.y,
-                endX: worldPos.x,
-                endY: worldPos.y
-            };
-
-            return true;
+            // Don't start box selection here - let canvas.js handle it
+            // to allow unified box selection of both images and objects
+            return false;
         }
 
         // Start drawing text or shape if tool is active
@@ -95,12 +136,7 @@ export class CanvasObjectsManager {
     }
 
     handleMouseMove(e, worldPos) {
-        if (this.isBoxSelecting && this.selectionBox) {
-            // Update selection box
-            this.selectionBox.endX = worldPos.x;
-            this.selectionBox.endY = worldPos.y;
-            this.canvas.needsRender = true;
-        } else if (this.isResizing && this.selectedObject && this.resizeHandle) {
+        if (this.isResizing && this.selectedObject && this.resizeHandle) {
             // Resize the selected object
             this.resizeObject(this.selectedObject, this.resizeHandle, worldPos.x, worldPos.y);
             this.canvas.needsRender = true;
@@ -132,6 +168,23 @@ export class CanvasObjectsManager {
                     obj.y = newY;
                 }
             });
+
+            // If a group is selected, also move all selected images
+            if (this.canvas.selectedGroup && this.canvas.selectedImages.length > 0) {
+                // Move all images using their drag offsets
+                this.canvas.selectedImages.forEach(img => {
+                    if (!this.canvas.dragOffsets.has(img.id)) {
+                        // Initialize drag offset if not already set
+                        this.canvas.dragOffsets.set(img.id, {
+                            x: worldPos.x - img.x,
+                            y: worldPos.y - img.y
+                        });
+                    }
+                    const imgOffset = this.canvas.dragOffsets.get(img.id);
+                    img.x = worldPos.x - imgOffset.x;
+                    img.y = worldPos.y - imgOffset.y;
+                });
+            }
 
             this.canvas.needsRender = true;
             this.dispatchObjectsChanged();
@@ -195,45 +248,6 @@ export class CanvasObjectsManager {
     }
 
     handleMouseUp(e, worldPos) {
-        if (this.isBoxSelecting && this.selectionBox) {
-            const box = this.selectionBox;
-            const width = Math.abs(box.endX - box.startX);
-            const height = Math.abs(box.endY - box.startY);
-
-            // Only select if box was actually dragged (not just a click)
-            if (width > 5 || height > 5) {
-                // Select all objects within the box
-                const minX = Math.min(box.startX, box.endX);
-                const maxX = Math.max(box.startX, box.endX);
-                const minY = Math.min(box.startY, box.endY);
-                const maxY = Math.max(box.startY, box.endY);
-
-                for (const obj of this.objects) {
-                    const objMinX = obj.x;
-                    const objMaxX = obj.x + (obj.width || 0);
-                    const objMinY = obj.y;
-                    const objMaxY = obj.y + (obj.height || 0);
-
-                    // Check if object intersects with selection box
-                    if (objMaxX >= minX && objMinX <= maxX &&
-                        objMaxY >= minY && objMinY <= maxY) {
-                        if (!this.selectedObjects.includes(obj)) {
-                            this.selectedObjects.push(obj);
-                        }
-                    }
-                }
-
-                this.selectedObject = this.selectedObjects.length > 0
-                    ? this.selectedObjects[this.selectedObjects.length - 1]
-                    : null;
-            }
-
-            this.isBoxSelecting = false;
-            this.selectionBox = null;
-            this.canvas.needsRender = true;
-            return true;
-        }
-
         if (this.isResizing) {
             this.isResizing = false;
             this.resizeHandle = null;
@@ -476,6 +490,41 @@ export class CanvasObjectsManager {
         return null;
     }
 
+    isPointOnObjectRotationHandle(obj, x, y) {
+        // Check if point is on the rotation handle for an object
+        const handleSize = 10 / this.canvas.zoom;
+        const midX = obj.x + obj.width / 2;
+        const midY = obj.y + obj.height / 2;
+        const rotationHandleOffset = 30 / this.canvas.zoom;
+
+        // The rotation handle is at the top center in unrotated space
+        let handleX = midX;
+        let handleY = obj.y - rotationHandleOffset;
+
+        // If object is rotated, rotate the handle position around the object center
+        if (obj.rotation && obj.rotation !== 0) {
+            const angleRad = (obj.rotation * Math.PI) / 180;
+
+            // Vector from center to handle
+            const dx = handleX - midX;
+            const dy = handleY - midY;
+
+            // Rotate the vector
+            const rotatedDx = dx * Math.cos(angleRad) - dy * Math.sin(angleRad);
+            const rotatedDy = dx * Math.sin(angleRad) + dy * Math.cos(angleRad);
+
+            // New handle position
+            handleX = midX + rotatedDx;
+            handleY = midY + rotatedDy;
+        }
+
+        const dx = x - handleX;
+        const dy = y - handleY;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+
+        return distance < handleSize;
+    }
+
     resizeObject(obj, handle, mouseX, mouseY) {
         // Special handling for lines and arrows
         if (obj.type === 'shape' && (obj.shapeType === 'line' || obj.shapeType === 'arrow')) {
@@ -713,25 +762,8 @@ export class CanvasObjectsManager {
             this.renderObject(ctx, this.previewObject, true);
         }
 
-        // Render selection box if box selecting
-        if (this.isBoxSelecting && this.selectionBox) {
-            const box = this.selectionBox;
-            const minX = Math.min(box.startX, box.endX);
-            const maxX = Math.max(box.startX, box.endX);
-            const minY = Math.min(box.startY, box.endY);
-            const maxY = Math.max(box.startY, box.endY);
-
-            ctx.save();
-            ctx.strokeStyle = '#0066ff';
-            ctx.lineWidth = 2;
-            ctx.setLineDash([5, 5]);
-            ctx.strokeRect(minX, minY, maxX - minX, maxY - minY);
-            ctx.fillStyle = 'rgba(0, 102, 255, 0.1)';
-            ctx.fillRect(minX, minY, maxX - minX, maxY - minY);
-            ctx.restore();
-        }
-
-        // Render selection for all selected objects
+        // Always render selection for selected objects (even in groups)
+        // Group bounding box is rendered separately in canvas.js
         console.log('renderPreviewAndSelection - selectedObjects count:', this.selectedObjects.length);
         for (const obj of this.selectedObjects) {
             if (obj.visible !== false) {
@@ -742,6 +774,32 @@ export class CanvasObjectsManager {
 
     renderObject(ctx, obj, isPreview = false) {
         ctx.save();
+
+        // Apply rotation if present
+        if (obj.rotation && obj.rotation !== 0) {
+            const centerX = obj.x + (obj.width || 0) / 2;
+            const centerY = obj.y + (obj.height || 0) / 2;
+
+            // For lines/arrows, use midpoint
+            if (obj.type === 'shape' && (obj.shapeType === 'line' || obj.shapeType === 'arrow')) {
+                const midX = (obj.x + obj.x2) / 2;
+                const midY = (obj.y + obj.y2) / 2;
+                ctx.translate(midX, midY);
+            } else {
+                ctx.translate(centerX, centerY);
+            }
+
+            ctx.rotate((obj.rotation * Math.PI) / 180);
+
+            // Translate back
+            if (obj.type === 'shape' && (obj.shapeType === 'line' || obj.shapeType === 'arrow')) {
+                const midX = (obj.x + obj.x2) / 2;
+                const midY = (obj.y + obj.y2) / 2;
+                ctx.translate(-midX, -midY);
+            } else {
+                ctx.translate(-centerX, -centerY);
+            }
+        }
 
         if (obj.type === 'shape') {
             this.renderShape(ctx, obj, isPreview);
@@ -978,6 +1036,34 @@ export class CanvasObjectsManager {
     renderSelection(ctx, obj) {
         const zoom = this.canvas.zoom;
 
+        ctx.save();
+
+        // Apply rotation if present
+        if (obj.rotation && obj.rotation !== 0) {
+            const centerX = obj.x + (obj.width || 0) / 2;
+            const centerY = obj.y + (obj.height || 0) / 2;
+
+            // For lines/arrows, use midpoint
+            if (obj.type === 'shape' && (obj.shapeType === 'line' || obj.shapeType === 'arrow')) {
+                const midX = (obj.x + obj.x2) / 2;
+                const midY = (obj.y + obj.y2) / 2;
+                ctx.translate(midX, midY);
+            } else {
+                ctx.translate(centerX, centerY);
+            }
+
+            ctx.rotate((obj.rotation * Math.PI) / 180);
+
+            // Translate back
+            if (obj.type === 'shape' && (obj.shapeType === 'line' || obj.shapeType === 'arrow')) {
+                const midX = (obj.x + obj.x2) / 2;
+                const midY = (obj.y + obj.y2) / 2;
+                ctx.translate(-midX, -midY);
+            } else {
+                ctx.translate(-centerX, -centerY);
+            }
+        }
+
         // Special handling for lines and arrows
         if (obj.type === 'shape' && (obj.shapeType === 'line' || obj.shapeType === 'arrow')) {
             const x1 = obj.x;
@@ -1056,7 +1142,48 @@ export class CanvasObjectsManager {
                 ctx.fill();
                 ctx.stroke();
             }
+
+            // Draw rotation handle extending upward from top center
+            const rotationHandleOffset = 30 / zoom;
+            const rotationHandleY = obj.y - rotationHandleOffset;
+
+            // Draw connecting line
+            ctx.beginPath();
+            ctx.moveTo(midX, obj.y);
+            ctx.lineTo(midX, rotationHandleY);
+            ctx.strokeStyle = '#0066ff';
+            ctx.lineWidth = 2 / zoom;
+            ctx.stroke();
+
+            // Draw rotation handle circle
+            ctx.beginPath();
+            ctx.arc(midX, rotationHandleY, handleRadius * 1.2, 0, Math.PI * 2);
+            ctx.fillStyle = '#ffffff';
+            ctx.fill();
+            ctx.strokeStyle = '#0066ff';
+            ctx.lineWidth = 1.5 / zoom;
+            ctx.stroke();
+
+            // Draw rotation icon (circular arrow)
+            ctx.save();
+            ctx.translate(midX, rotationHandleY);
+            ctx.strokeStyle = '#0066ff';
+            ctx.lineWidth = 1 / zoom;
+            ctx.beginPath();
+            ctx.arc(0, 0, handleRadius * 0.6, -Math.PI * 0.3, Math.PI * 1.5);
+            ctx.stroke();
+            // Arrow head
+            ctx.beginPath();
+            ctx.moveTo(handleRadius * 0.6 * Math.cos(Math.PI * 1.5), handleRadius * 0.6 * Math.sin(Math.PI * 1.5));
+            ctx.lineTo(handleRadius * 0.6 * Math.cos(Math.PI * 1.5) - 2 / zoom, handleRadius * 0.6 * Math.sin(Math.PI * 1.5) - 2 / zoom);
+            ctx.lineTo(handleRadius * 0.6 * Math.cos(Math.PI * 1.5) + 2 / zoom, handleRadius * 0.6 * Math.sin(Math.PI * 1.5) - 2 / zoom);
+            ctx.closePath();
+            ctx.fillStyle = '#0066ff';
+            ctx.fill();
+            ctx.restore();
         }
+
+        ctx.restore();
     }
 
     generateId() {

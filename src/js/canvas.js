@@ -21,8 +21,10 @@ export class Canvas {
         this.selectionBox = null;
         this.dragOffset = { x: 0, y: 0 };
         this.dragOffsets = new Map();
+        this.objectDragOffsets = [];
         this.resizeHandle = null;
         this.resizeStartData = null;
+        this.selectedGroup = null; // Track when a group is selected
         this.zoom = 1;
         this.pan = { x: 0, y: 0 };
         this.lastPanPoint = { x: 0, y: 0 };
@@ -233,8 +235,40 @@ export class Canvas {
                 e.preventDefault();
                 this.canvas.style.cursor = 'grab';
             }
-            if (e.key === 'Delete' && this.selectedImage) {
-                this.deleteImage(this.selectedImage.id);
+            if (e.key === 'Delete') {
+                // Delete selected images
+                if (this.selectedImages.length > 0) {
+                    this.deleteSelectedImages();
+                }
+                // Delete selected objects
+                if (this.objectsManager.selectedObjects.length > 0) {
+                    this.objectsManager.deleteSelectedObject();
+                }
+            }
+            // Reset rotation with 'R' key
+            if (e.key === 'r' || e.key === 'R') {
+                let hasRotation = false;
+
+                // Reset rotation for all selected images
+                for (const img of this.selectedImages) {
+                    if (img.rotation && img.rotation !== 0) {
+                        img.rotation = 0;
+                        hasRotation = true;
+                    }
+                }
+
+                // Reset rotation for all selected objects
+                for (const obj of this.objectsManager.selectedObjects) {
+                    if (obj.rotation && obj.rotation !== 0) {
+                        obj.rotation = 0;
+                        hasRotation = true;
+                    }
+                }
+
+                if (hasRotation) {
+                    this.needsRender = true;
+                    this.notifyChange();
+                }
             }
         });
         
@@ -363,7 +397,95 @@ export class Canvas {
             }
         }
         
-        if (this.selectedImage && this.selectedImage.visible !== false) {
+        // Check for group rotation handle first
+        if (this.selectedGroup) {
+            const bounds = this.getGroupBounds();
+            if (bounds) {
+                // Check rotation handle
+                if (this.isPointOnRotationHandle(x, y, bounds)) {
+                    this.enableRotationMode(this.selectedImages[0] || this.objectsManager.selectedObjects[0], x, y);
+                    return;
+                }
+
+                // Check resize handles
+                const handle = this.getResizeHandleForBounds(x, y, bounds);
+                if (handle) {
+                    this.isResizing = true;
+                    this.resizeHandle = handle;
+                    this.resizeStartData = {
+                        ...bounds,
+                        mouseX: x,
+                        mouseY: y,
+                        aspectRatio: bounds.width / bounds.height,
+                        // Store initial positions of all items for scaling
+                        itemStates: [
+                            ...this.selectedImages.map(img => ({
+                                type: 'image',
+                                item: img,
+                                x: img.x,
+                                y: img.y,
+                                width: img.width,
+                                height: img.height
+                            })),
+                            ...this.objectsManager.selectedObjects.map(obj => ({
+                                type: 'object',
+                                item: obj,
+                                x: obj.x,
+                                y: obj.y,
+                                x2: obj.x2,
+                                y2: obj.y2,
+                                width: obj.width,
+                                height: obj.height
+                            }))
+                        ]
+                    };
+                    return;
+                }
+
+                // Check if clicking anywhere within bounds to drag
+                if (this.isPointInBounds(x, y, bounds)) {
+                    // Start dragging all selected items
+                    this.isDragging = true;
+                    this.dragOffsets.clear();
+                    this.dragStartPositions = new Map();
+                    for (const img of this.selectedImages) {
+                        this.dragOffsets.set(img.id, { x: x - img.x, y: y - img.y });
+                        this.dragStartPositions.set(img.id, { x: img.x, y: img.y });
+                    }
+
+                    this.objectDragOffsets = [];
+                    this.objectDragStartPositions = [];
+                    for (const obj of this.objectsManager.selectedObjects) {
+                        this.objectDragOffsets.push({ x: x - obj.x, y: y - obj.y });
+                        this.objectDragStartPositions.push({
+                            id: obj.id,
+                            x: obj.x,
+                            y: obj.y,
+                            x2: obj.x2,
+                            y2: obj.y2
+                        });
+                    }
+
+                    this.canvas.style.cursor = 'grabbing';
+                    return;
+                }
+            }
+        }
+
+        if (this.selectedImage && this.selectedImage.visible !== false && !this.selectedGroup) {
+            // Check rotation handle for single image
+            const imgBounds = {
+                x: this.selectedImage.x,
+                y: this.selectedImage.y,
+                width: this.selectedImage.width,
+                height: this.selectedImage.height
+            };
+            if (this.isPointOnRotationHandle(x, y, imgBounds)) {
+                this.enableRotationMode(this.selectedImage, x, y);
+                return;
+            }
+
+            // Check resize handles
             const handle = this.getResizeHandle(x, y, this.selectedImage);
             if (handle) {
                 this.isResizing = true;
@@ -392,6 +514,10 @@ export class Canvas {
             // Handle multi-select with Ctrl/Cmd
             if (e.ctrlKey || e.metaKey) {
                 this.selectImage(clickedImage, true);
+                // Also clear object selection when multi-selecting images
+                if (!clickedObject) {
+                    this.objectsManager.deselectAll();
+                }
                 return;
             }
 
@@ -401,17 +527,67 @@ export class Canvas {
                 return;
             }
 
+            // If a group is selected and clicking on a member of that group, keep group intact
+            if (this.selectedGroup && this.isImageSelected(clickedImage)) {
+                // Just start dragging, don't change selection
+                this.isDragging = true;
+                this.dragOffsets.clear();
+                this.dragStartPositions = new Map();
+                for (const img of this.selectedImages) {
+                    this.dragOffsets.set(img.id, { x: x - img.x, y: y - img.y });
+                    this.dragStartPositions.set(img.id, { x: img.x, y: img.y });
+                }
+
+                this.objectDragOffsets = [];
+                this.objectDragStartPositions = [];
+                for (const obj of this.objectsManager.selectedObjects) {
+                    this.objectDragOffsets.push({ x: x - obj.x, y: y - obj.y });
+                    this.objectDragStartPositions.push({
+                        id: obj.id,
+                        x: obj.x,
+                        y: obj.y,
+                        x2: obj.x2,
+                        y2: obj.y2
+                    });
+                }
+
+                this.canvas.style.cursor = 'grabbing';
+                return;
+            }
+
             // If clicking an already selected image in multi-select, don't deselect
             if (!this.isImageSelected(clickedImage)) {
                 this.selectImage(clickedImage);
+                // Clear object selection when selecting a single image
+                this.objectsManager.deselectAll();
             }
+
+            // Clear group selection when clicking individual items
+            this.selectedGroup = null;
 
             // Setup dragging for all selected images
             this.isDragging = true;
             this.dragOffsets.clear();
+            this.dragStartPositions = new Map();
             for (const img of this.selectedImages) {
                 this.dragOffsets.set(img.id, { x: x - img.x, y: y - img.y });
+                this.dragStartPositions.set(img.id, { x: img.x, y: img.y });
             }
+
+            // Also setup drag offsets for any selected objects
+            this.objectDragOffsets = [];
+            this.objectDragStartPositions = [];
+            for (const obj of this.objectsManager.selectedObjects) {
+                this.objectDragOffsets.push({ x: x - obj.x, y: y - obj.y });
+                this.objectDragStartPositions.push({
+                    id: obj.id,
+                    x: obj.x,
+                    y: obj.y,
+                    x2: obj.x2,
+                    y2: obj.y2
+                });
+            }
+
             this.dragStartPosition = { x: clickedImage.x, y: clickedImage.y };
             this.canvas.style.cursor = 'grabbing';
         } else {
@@ -451,8 +627,12 @@ export class Canvas {
             this.rotateImage(x, y);
             this.canvas.style.cursor = 'grabbing';
             this.needsRender = true;
-        } else if (this.isResizing && this.selectedImage) {
-            this.resizeImage(x, y);
+        } else if (this.isResizing) {
+            if (this.selectedGroup) {
+                this.resizeGroup(x, y);
+            } else if (this.selectedImage) {
+                this.resizeImage(x, y);
+            }
             this.needsRender = true;
         } else if (this.isDragging && this.selectedImages.length > 0) {
             // Move all selected images
@@ -483,6 +663,36 @@ export class Canvas {
                     img.y = finalY - offset.y;
                 }
             }
+
+            // Also move all selected objects
+            this.objectsManager.selectedObjects.forEach((obj, index) => {
+                const offset = this.objectDragOffsets[index];
+                if (offset) {
+                    const newX = finalX - offset.x;
+                    const newY = finalY - offset.y;
+
+                    // For lines/arrows, move both start and end points
+                    if (obj.type === 'shape' &&
+                        (obj.shapeType === 'line' || obj.shapeType === 'arrow')) {
+                        const deltaX = newX - obj.x;
+                        const deltaY = newY - obj.y;
+
+                        if (obj.x2 !== undefined) {
+                            obj.x2 += deltaX;
+                        }
+                        if (obj.y2 !== undefined) {
+                            obj.y2 += deltaY;
+                        }
+                        obj.x = newX;
+                        obj.y = newY;
+                    } else {
+                        // Normal objects just move x and y
+                        obj.x = newX;
+                        obj.y = newY;
+                    }
+                }
+            });
+
             this.needsRender = true;
         } else if (this.isPanning) {
             const dx = e.clientX - this.lastPanPoint.x;
@@ -491,6 +701,12 @@ export class Canvas {
             this.pan.y += dy;
             this.lastPanPoint = { x: e.clientX, y: e.clientY };
             this.needsRender = true;
+        } else if (this.selectedGroup) {
+            const bounds = this.getGroupBounds();
+            if (bounds) {
+                const handle = this.getResizeHandleForBounds(x, y, bounds);
+                this.canvas.style.cursor = handle ? this.getResizeCursor(handle) : 'default';
+            }
         } else if (this.selectedImage && this.selectedImage.visible !== false) {
             const handle = this.getResizeHandle(x, y, this.selectedImage);
             this.canvas.style.cursor = handle ? this.getResizeCursor(handle) : 'default';
@@ -514,17 +730,56 @@ export class Canvas {
         const wasResizing = this.isResizing;
         const wasRotating = this.isRotating;
 
-        if (wasDragging && this.selectedImage && this.dragStartPosition && this.historyManager) {
-            if (this.dragStartPosition.x !== this.selectedImage.x || this.dragStartPosition.y !== this.selectedImage.y) {
-                this.historyManager.pushAction({
-                    type: 'move',
-                    data: {
-                        id: this.selectedImage.id,
-                        oldX: this.dragStartPosition.x,
-                        oldY: this.dragStartPosition.y,
-                        newX: this.selectedImage.x,
-                        newY: this.selectedImage.y
+        if (wasDragging && this.historyManager) {
+            const moveActions = [];
+
+            // Save history for all moved images using tracked start positions
+            if (this.dragStartPositions && this.dragStartPositions.size > 0) {
+                for (const img of this.selectedImages) {
+                    const startPos = this.dragStartPositions.get(img.id);
+                    if (startPos && (startPos.x !== img.x || startPos.y !== img.y)) {
+                        moveActions.push({
+                            type: 'image',
+                            id: img.id,
+                            oldX: startPos.x,
+                            oldY: startPos.y,
+                            newX: img.x,
+                            newY: img.y
+                        });
                     }
+                }
+            }
+
+            // Save history for all moved objects using tracked start positions
+            if (this.objectDragStartPositions && this.objectDragStartPositions.length > 0) {
+                for (const objStart of this.objectDragStartPositions) {
+                    const obj = this.objectsManager.objects.find(o => o.id === objStart.id);
+                    if (obj) {
+                        const hasChanged = objStart.x !== obj.x || objStart.y !== obj.y ||
+                                         objStart.x2 !== obj.x2 || objStart.y2 !== obj.y2;
+
+                        if (hasChanged) {
+                            moveActions.push({
+                                type: 'object',
+                                id: obj.id,
+                                oldX: objStart.x,
+                                oldY: objStart.y,
+                                oldX2: objStart.x2,
+                                oldY2: objStart.y2,
+                                newX: obj.x,
+                                newY: obj.y,
+                                newX2: obj.x2,
+                                newY2: obj.y2
+                            });
+                        }
+                    }
+                }
+            }
+
+            if (moveActions.length > 0) {
+                this.historyManager.pushAction({
+                    type: 'move_multiple',
+                    data: moveActions
                 });
             }
         }
@@ -568,6 +823,7 @@ export class Canvas {
         this.resizeHandle = null;
         this.resizeStartData = null;
         this.dragStartPosition = null;
+        this.objectDragOffsets = [];
         this.snapLines = [];
         this.canvas.style.cursor = 'default';
 
@@ -605,10 +861,7 @@ export class Canvas {
         const delta = e.deltaY > 0 ? 0.9 : 1.1;
         const newZoom = this.zoom * delta;
         
-        if (!this.hasShownZoomWarning && newZoom < this.zoomWarningThreshold) {
-            this.showToast('⚠️ Disclaimer: Extreme zoom levels may cause performance issues');
-            this.hasShownZoomWarning = true;
-        }
+        
         
         const rect = this.canvas.getBoundingClientRect();
         const mouseX = e.clientX - rect.left;
@@ -826,18 +1079,43 @@ export class Canvas {
 
     selectImagesInBox(boxX, boxY, boxWidth, boxHeight) {
         this.selectedImages = [];
+        const boxRight = boxX + boxWidth;
+        const boxBottom = boxY + boxHeight;
+
+        // Select images in box
         for (const img of this.images) {
             if (img.visible === false) continue;
 
             const imgRight = img.x + img.width;
             const imgBottom = img.y + img.height;
-            const boxRight = boxX + boxWidth;
-            const boxBottom = boxY + boxHeight;
 
             if (img.x < boxRight && imgRight > boxX && img.y < boxBottom && imgBottom > boxY) {
                 this.selectedImages.push(img);
             }
         }
+
+        // Also select objects in box
+        const objectsInBox = [];
+        for (const obj of this.objectsManager.objects) {
+            if (obj.visible === false) continue;
+
+            const objRight = obj.x + (obj.width || 0);
+            const objBottom = obj.y + (obj.height || 0);
+
+            if (obj.x < boxRight && objRight > boxX && obj.y < boxBottom && objBottom > boxY) {
+                objectsInBox.push(obj);
+            }
+        }
+
+        // Update objects manager selection
+        if (objectsInBox.length > 0) {
+            this.objectsManager.selectedObjects = objectsInBox;
+            this.objectsManager.selectedObject = objectsInBox[objectsInBox.length - 1];
+        } else {
+            this.objectsManager.selectedObjects = [];
+            this.objectsManager.selectedObject = null;
+        }
+
         this.selectedImage = this.selectedImages.length > 0 ? this.selectedImages[this.selectedImages.length - 1] : null;
         this.needsRender = true;
     }
@@ -1065,6 +1343,32 @@ export class Canvas {
         return null;
     }
 
+    getResizeHandleForBounds(x, y, bounds) {
+        if (!bounds) return null;
+
+        const handleSize = 10 / this.zoom;
+        const midX = bounds.x + bounds.width / 2;
+        const midY = bounds.y + bounds.height / 2;
+
+        const handles = [
+            { name: 'nw', x: bounds.x, y: bounds.y },
+            { name: 'n', x: midX, y: bounds.y },
+            { name: 'ne', x: bounds.x + bounds.width, y: bounds.y },
+            { name: 'e', x: bounds.x + bounds.width, y: midY },
+            { name: 'se', x: bounds.x + bounds.width, y: bounds.y + bounds.height },
+            { name: 's', x: midX, y: bounds.y + bounds.height },
+            { name: 'sw', x: bounds.x, y: bounds.y + bounds.height },
+            { name: 'w', x: bounds.x, y: midY }
+        ];
+
+        for (const handle of handles) {
+            if (Math.abs(x - handle.x) < handleSize && Math.abs(y - handle.y) < handleSize) {
+                return handle.name;
+            }
+        }
+        return null;
+    }
+
     getResizeCursor(handle) {
         const cursors = {
             'nw': 'nw-resize', 'n': 'n-resize', 'ne': 'ne-resize',
@@ -1072,6 +1376,27 @@ export class Canvas {
             'sw': 'sw-resize', 'w': 'w-resize'
         };
         return cursors[handle] || 'default';
+    }
+
+    isPointOnRotationHandle(x, y, bounds) {
+        if (!bounds) return false;
+
+        const handleSize = 10 / this.zoom;
+        const midX = bounds.x + bounds.width / 2;
+        const rotationHandleOffset = 30 / this.zoom;
+        const rotationHandleY = bounds.y - rotationHandleOffset;
+
+        const dx = x - midX;
+        const dy = y - rotationHandleY;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+
+        return distance < handleSize;
+    }
+
+    isPointInBounds(x, y, bounds) {
+        if (!bounds) return false;
+        return x >= bounds.x && x <= bounds.x + bounds.width &&
+               y >= bounds.y && y <= bounds.y + bounds.height;
     }
 
     resizeImage(x, y) {
@@ -1125,35 +1450,212 @@ export class Canvas {
         }
     }
 
+    resizeGroup(x, y) {
+        if (!this.resizeStartData || !this.resizeStartData.itemStates) return;
+
+        const start = this.resizeStartData;
+        const handle = this.resizeHandle;
+
+        // Calculate new bounds based on handle
+        let newBounds = { ...start };
+
+        // Use corner resize for proportional scaling
+        const isCorner = ['nw', 'ne', 'sw', 'se'].includes(handle);
+
+        if (isCorner) {
+            // Proportional resize maintaining aspect ratio
+            if (handle === 'se') {
+                const newWidth = Math.max(20, x - start.x);
+                const newHeight = newWidth / start.aspectRatio;
+                newBounds.width = newWidth;
+                newBounds.height = newHeight;
+            } else if (handle === 'sw') {
+                const newWidth = Math.max(20, start.x + start.width - x);
+                const newHeight = newWidth / start.aspectRatio;
+                newBounds.x = start.x + start.width - newWidth;
+                newBounds.width = newWidth;
+                newBounds.height = newHeight;
+            } else if (handle === 'ne') {
+                const newWidth = Math.max(20, x - start.x);
+                const newHeight = newWidth / start.aspectRatio;
+                newBounds.y = start.y + start.height - newHeight;
+                newBounds.width = newWidth;
+                newBounds.height = newHeight;
+            } else if (handle === 'nw') {
+                const newWidth = Math.max(20, start.x + start.width - x);
+                const newHeight = newWidth / start.aspectRatio;
+                newBounds.x = start.x + start.width - newWidth;
+                newBounds.y = start.y + start.height - newHeight;
+                newBounds.width = newWidth;
+                newBounds.height = newHeight;
+            }
+        } else {
+            // Edge resize (non-proportional)
+            if (handle === 'e') {
+                newBounds.width = Math.max(20, x - start.x);
+            } else if (handle === 'w') {
+                const newWidth = Math.max(20, start.x + start.width - x);
+                newBounds.x = start.x + start.width - newWidth;
+                newBounds.width = newWidth;
+            } else if (handle === 's') {
+                newBounds.height = Math.max(20, y - start.y);
+            } else if (handle === 'n') {
+                const newHeight = Math.max(20, start.y + start.height - y);
+                newBounds.y = start.y + start.height - newHeight;
+                newBounds.height = newHeight;
+            }
+        }
+
+        // Calculate scale factors
+        const scaleX = newBounds.width / start.width;
+        const scaleY = newBounds.height / start.height;
+
+        // Apply scaling to all items
+        for (const state of start.itemStates) {
+            const item = state.item;
+
+            // Calculate relative position within original bounds
+            const relX = (state.x - start.x) / start.width;
+            const relY = (state.y - start.y) / start.height;
+            const relWidth = state.width / start.width;
+            const relHeight = state.height / start.height;
+
+            // Apply to new bounds
+            item.x = newBounds.x + relX * newBounds.width;
+            item.y = newBounds.y + relY * newBounds.height;
+            item.width = relWidth * newBounds.width;
+            item.height = relHeight * newBounds.height;
+
+            // For lines/arrows, also scale x2/y2
+            if (state.type === 'object' && state.item.type === 'shape' &&
+                (state.item.shapeType === 'line' || state.item.shapeType === 'arrow')) {
+                if (state.x2 !== undefined) {
+                    const relX2 = (state.x2 - start.x) / start.width;
+                    item.x2 = newBounds.x + relX2 * newBounds.width;
+                }
+                if (state.y2 !== undefined) {
+                    const relY2 = (state.y2 - start.y) / start.height;
+                    item.y2 = newBounds.y + relY2 * newBounds.height;
+                }
+            }
+        }
+    }
+
     enableRotationMode(image, startMouseX, startMouseY) {
         this.isRotating = true;
         this.rotatingImage = image;
-        this.selectImage(image);
         this.canvas.style.cursor = 'grab';
 
+        // Get all items to rotate (images and objects)
+        const allItems = [...this.selectedImages, ...this.objectsManager.selectedObjects];
+
+        // Calculate center of all selected items (or single item)
+        let centerX, centerY;
+        if (allItems.length > 1 || this.selectedGroup) {
+            // Calculate center of bounding box for group/multi-select
+            const bounds = this.getGroupBounds();
+            if (bounds) {
+                centerX = bounds.x + bounds.width / 2;
+                centerY = bounds.y + bounds.height / 2;
+            } else {
+                centerX = image.x + image.width / 2;
+                centerY = image.y + image.height / 2;
+            }
+        } else {
+            // Single item rotation
+            centerX = image.x + image.width / 2;
+            centerY = image.y + image.height / 2;
+        }
+
         // Store the starting rotation and starting mouse angle
-        const centerX = image.x + image.width / 2;
-        const centerY = image.y + image.height / 2;
+        this.rotationCenter = { x: centerX, y: centerY };
         this.rotationStartAngle = Math.atan2(startMouseY - centerY, startMouseX - centerX);
-        this.rotationStartRotation = image.rotation || 0;
+
+        // Store initial rotation for all items
+        this.rotationStartStates = [];
+        for (const img of this.selectedImages) {
+            this.rotationStartStates.push({
+                item: img,
+                type: 'image',
+                rotation: img.rotation || 0,
+                x: img.x,
+                y: img.y,
+                centerX: img.x + img.width / 2,
+                centerY: img.y + img.height / 2
+            });
+        }
+        for (const obj of this.objectsManager.selectedObjects) {
+            this.rotationStartStates.push({
+                item: obj,
+                type: 'object',
+                rotation: obj.rotation || 0,
+                x: obj.x,
+                y: obj.y,
+                x2: obj.x2,
+                y2: obj.y2,
+                centerX: obj.x + (obj.width || 0) / 2,
+                centerY: obj.y + (obj.height || 0) / 2
+            });
+        }
     }
 
     rotateImage(mouseX, mouseY) {
-        if (!this.rotatingImage) return;
+        if (!this.rotatingImage || !this.rotationStartStates) return;
 
-        const img = this.rotatingImage;
-        const centerX = img.x + img.width / 2;
-        const centerY = img.y + img.height / 2;
-
-        // Calculate current angle
-        const currentAngle = Math.atan2(mouseY - centerY, mouseX - centerX);
+        // Calculate current angle from rotation center
+        const currentAngle = Math.atan2(mouseY - this.rotationCenter.y, mouseX - this.rotationCenter.x);
 
         // Calculate the delta from the starting angle
         const angleDelta = currentAngle - this.rotationStartAngle;
         const deltaDegrees = angleDelta * (180 / Math.PI);
+        const angleRad = angleDelta;
 
-        // Apply delta to the starting rotation
-        img.rotation = this.rotationStartRotation + deltaDegrees;
+        // Apply rotation to all items
+        for (const state of this.rotationStartStates) {
+            const item = state.item;
+
+            // Update item rotation
+            item.rotation = state.rotation + deltaDegrees;
+
+            // If multiple items, rotate positions around common center
+            if (this.rotationStartStates.length > 1 || this.selectedGroup) {
+                // Calculate original offset from rotation center
+                const dx = state.centerX - this.rotationCenter.x;
+                const dy = state.centerY - this.rotationCenter.y;
+
+                // Rotate the offset
+                const rotatedDx = dx * Math.cos(angleRad) - dy * Math.sin(angleRad);
+                const rotatedDy = dx * Math.sin(angleRad) + dy * Math.cos(angleRad);
+
+                // Update position based on rotated offset
+                if (state.type === 'image') {
+                    item.x = this.rotationCenter.x + rotatedDx - item.width / 2;
+                    item.y = this.rotationCenter.y + rotatedDy - item.height / 2;
+                } else if (state.type === 'object') {
+                    const newCenterX = this.rotationCenter.x + rotatedDx;
+                    const newCenterY = this.rotationCenter.y + rotatedDy;
+
+                    // Update position for shapes
+                    if (item.type === 'shape' && (item.shapeType === 'line' || item.shapeType === 'arrow')) {
+                        // For lines/arrows, rotate both endpoints around the rotation center
+                        const dx1 = state.x - this.rotationCenter.x;
+                        const dy1 = state.y - this.rotationCenter.y;
+                        const dx2 = state.x2 - this.rotationCenter.x;
+                        const dy2 = state.y2 - this.rotationCenter.y;
+
+                        item.x = this.rotationCenter.x + dx1 * Math.cos(angleRad) - dy1 * Math.sin(angleRad);
+                        item.y = this.rotationCenter.y + dx1 * Math.sin(angleRad) + dy1 * Math.cos(angleRad);
+                        item.x2 = this.rotationCenter.x + dx2 * Math.cos(angleRad) - dy2 * Math.sin(angleRad);
+                        item.y2 = this.rotationCenter.y + dx2 * Math.sin(angleRad) + dy2 * Math.cos(angleRad);
+                    } else {
+                        item.x = newCenterX - (item.width || 0) / 2;
+                        item.y = newCenterY - (item.height || 0) / 2;
+                    }
+                }
+            }
+        }
+
+        this.needsRender = true;
     }
 
     getImageAtPoint(x, y) {
@@ -1292,29 +1794,111 @@ export class Canvas {
         }
         
         // Draw selection boxes for all selected images
-        if (this.selectedImages.length > 0) {
-            this.ctx.strokeStyle = '#0066ff';
-            this.ctx.lineWidth = 2 / this.zoom;
+        if (this.selectedImages.length > 0 || this.objectsManager.selectedObjects.length > 0) {
+            // If a group is selected, draw unified bounding box
+            if (this.selectedGroup) {
+                const bounds = this.getGroupBounds();
+                if (bounds) {
+                    this.ctx.strokeStyle = '#0066ff';
+                    this.ctx.lineWidth = 2 / this.zoom;
+                    this.ctx.strokeRect(bounds.x, bounds.y, bounds.width, bounds.height);
+                }
+            } else {
+                // Draw individual selection boxes
+                this.ctx.strokeStyle = '#0066ff';
+                this.ctx.lineWidth = 2 / this.zoom;
 
-            for (const img of this.selectedImages) {
-                if (img.visible === false) continue;
+                for (const img of this.selectedImages) {
+                    if (img.visible === false) continue;
 
-                if (img.rotation && img.rotation !== 0) {
-                    // Draw rotated selection box
-                    this.ctx.save();
-                    const centerX = img.x + img.width / 2;
-                    const centerY = img.y + img.height / 2;
-                    this.ctx.translate(centerX, centerY);
-                    this.ctx.rotate(img.rotation * Math.PI / 180);
-                    this.ctx.strokeRect(-img.width / 2, -img.height / 2, img.width, img.height);
-                    this.ctx.restore();
-                } else {
-                    this.ctx.strokeRect(img.x, img.y, img.width, img.height);
+                    if (img.rotation && img.rotation !== 0) {
+                        // Draw rotated selection box
+                        this.ctx.save();
+                        const centerX = img.x + img.width / 2;
+                        const centerY = img.y + img.height / 2;
+                        this.ctx.translate(centerX, centerY);
+                        this.ctx.rotate(img.rotation * Math.PI / 180);
+                        this.ctx.strokeRect(-img.width / 2, -img.height / 2, img.width, img.height);
+                        this.ctx.restore();
+                    } else {
+                        this.ctx.strokeRect(img.x, img.y, img.width, img.height);
+                    }
                 }
             }
 
-            // Only draw resize handles for single selection (skip if rotating)
-            if (this.selectedImages.length === 1 && this.selectedImage && !this.isRotating) {
+            // Draw resize handles for group or single selection (skip if rotating)
+            if (this.selectedGroup && !this.isRotating) {
+                // Draw resize handles on the group bounding box
+                const bounds = this.getGroupBounds();
+                if (bounds) {
+                    const handleRadius = 4 / this.zoom;
+                    const midX = bounds.x + bounds.width / 2;
+                    const midY = bounds.y + bounds.height / 2;
+
+                    this.ctx.fillStyle = '#ffffff';
+                    this.ctx.strokeStyle = '#0066ff';
+                    this.ctx.lineWidth = 1.5 / this.zoom;
+
+                    const handles = [
+                        [bounds.x, bounds.y],
+                        [midX, bounds.y],
+                        [bounds.x + bounds.width, bounds.y],
+                        [bounds.x + bounds.width, midY],
+                        [bounds.x + bounds.width, bounds.y + bounds.height],
+                        [midX, bounds.y + bounds.height],
+                        [bounds.x, bounds.y + bounds.height],
+                        [bounds.x, midY]
+                    ];
+
+                    for (let i = 0; i < handles.length; i++) {
+                        const [hx, hy] = handles[i];
+                        this.ctx.beginPath();
+                        this.ctx.arc(hx, hy, handleRadius, 0, Math.PI * 2);
+                        this.ctx.fill();
+                        this.ctx.stroke();
+                    }
+
+                    // Draw rotation handle extending upward from top center
+                    const rotationHandleOffset = 30 / this.zoom;
+                    const rotationHandleY = bounds.y - rotationHandleOffset;
+
+                    // Draw connecting line
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(midX, bounds.y);
+                    this.ctx.lineTo(midX, rotationHandleY);
+                    this.ctx.strokeStyle = '#0066ff';
+                    this.ctx.lineWidth = 2 / this.zoom;
+                    this.ctx.stroke();
+
+                    // Draw rotation handle circle
+                    this.ctx.beginPath();
+                    this.ctx.arc(midX, rotationHandleY, handleRadius * 1.2, 0, Math.PI * 2);
+                    this.ctx.fillStyle = '#ffffff';
+                    this.ctx.fill();
+                    this.ctx.strokeStyle = '#0066ff';
+                    this.ctx.lineWidth = 1.5 / this.zoom;
+                    this.ctx.stroke();
+
+                    // Draw rotation icon (circular arrow)
+                    this.ctx.save();
+                    this.ctx.translate(midX, rotationHandleY);
+                    this.ctx.strokeStyle = '#0066ff';
+                    this.ctx.lineWidth = 1 / this.zoom;
+                    this.ctx.beginPath();
+                    this.ctx.arc(0, 0, handleRadius * 0.6, -Math.PI * 0.3, Math.PI * 1.5);
+                    this.ctx.stroke();
+                    // Arrow head
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(handleRadius * 0.6 * Math.cos(Math.PI * 1.5), handleRadius * 0.6 * Math.sin(Math.PI * 1.5));
+                    this.ctx.lineTo(handleRadius * 0.6 * Math.cos(Math.PI * 1.5) - 2 / this.zoom, handleRadius * 0.6 * Math.sin(Math.PI * 1.5) - 2 / this.zoom);
+                    this.ctx.lineTo(handleRadius * 0.6 * Math.cos(Math.PI * 1.5) + 2 / this.zoom, handleRadius * 0.6 * Math.sin(Math.PI * 1.5) - 2 / this.zoom);
+                    this.ctx.closePath();
+                    this.ctx.fillStyle = '#0066ff';
+                    this.ctx.fill();
+                    this.ctx.restore();
+                }
+            } else if (this.selectedImages.length === 1 && this.selectedImage) {
+                // Draw resize handles for single image selection
                 const img = this.selectedImage;
                 const handleRadius = 4 / this.zoom;
                 const midX = img.x + img.width / 2;
@@ -1351,6 +1935,45 @@ export class Canvas {
                         this.ctx.stroke();
                     }
 
+                    // Draw rotation handle (in rotated coordinate space)
+                    const rotationHandleOffset = 30 / this.zoom;
+                    const rotationHandleY = -img.height / 2 - rotationHandleOffset;
+
+                    // Draw connecting line
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(0, -img.height / 2);
+                    this.ctx.lineTo(0, rotationHandleY);
+                    this.ctx.strokeStyle = '#0066ff';
+                    this.ctx.lineWidth = 2 / this.zoom;
+                    this.ctx.stroke();
+
+                    // Draw rotation handle circle
+                    this.ctx.beginPath();
+                    this.ctx.arc(0, rotationHandleY, handleRadius * 1.2, 0, Math.PI * 2);
+                    this.ctx.fillStyle = '#ffffff';
+                    this.ctx.fill();
+                    this.ctx.strokeStyle = '#0066ff';
+                    this.ctx.lineWidth = 1.5 / this.zoom;
+                    this.ctx.stroke();
+
+                    // Draw rotation icon (circular arrow)
+                    this.ctx.save();
+                    this.ctx.translate(0, rotationHandleY);
+                    this.ctx.strokeStyle = '#0066ff';
+                    this.ctx.lineWidth = 1 / this.zoom;
+                    this.ctx.beginPath();
+                    this.ctx.arc(0, 0, handleRadius * 0.6, -Math.PI * 0.3, Math.PI * 1.5);
+                    this.ctx.stroke();
+                    // Arrow head
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(handleRadius * 0.6 * Math.cos(Math.PI * 1.5), handleRadius * 0.6 * Math.sin(Math.PI * 1.5));
+                    this.ctx.lineTo(handleRadius * 0.6 * Math.cos(Math.PI * 1.5) - 2 / this.zoom, handleRadius * 0.6 * Math.sin(Math.PI * 1.5) - 2 / this.zoom);
+                    this.ctx.lineTo(handleRadius * 0.6 * Math.cos(Math.PI * 1.5) + 2 / this.zoom, handleRadius * 0.6 * Math.sin(Math.PI * 1.5) - 2 / this.zoom);
+                    this.ctx.closePath();
+                    this.ctx.fillStyle = '#0066ff';
+                    this.ctx.fill();
+                    this.ctx.restore();
+
                     this.ctx.restore();
                 } else {
                     const handles = [
@@ -1371,6 +1994,45 @@ export class Canvas {
                         this.ctx.fill();
                         this.ctx.stroke();
                     }
+
+                    // Draw rotation handle for single image
+                    const rotationHandleOffset = 30 / this.zoom;
+                    const rotationHandleY = img.y - rotationHandleOffset;
+
+                    // Draw connecting line
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(midX, img.y);
+                    this.ctx.lineTo(midX, rotationHandleY);
+                    this.ctx.strokeStyle = '#0066ff';
+                    this.ctx.lineWidth = 2 / this.zoom;
+                    this.ctx.stroke();
+
+                    // Draw rotation handle circle
+                    this.ctx.beginPath();
+                    this.ctx.arc(midX, rotationHandleY, handleRadius * 1.2, 0, Math.PI * 2);
+                    this.ctx.fillStyle = '#ffffff';
+                    this.ctx.fill();
+                    this.ctx.strokeStyle = '#0066ff';
+                    this.ctx.lineWidth = 1.5 / this.zoom;
+                    this.ctx.stroke();
+
+                    // Draw rotation icon (circular arrow)
+                    this.ctx.save();
+                    this.ctx.translate(midX, rotationHandleY);
+                    this.ctx.strokeStyle = '#0066ff';
+                    this.ctx.lineWidth = 1 / this.zoom;
+                    this.ctx.beginPath();
+                    this.ctx.arc(0, 0, handleRadius * 0.6, -Math.PI * 0.3, Math.PI * 1.5);
+                    this.ctx.stroke();
+                    // Arrow head
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(handleRadius * 0.6 * Math.cos(Math.PI * 1.5), handleRadius * 0.6 * Math.sin(Math.PI * 1.5));
+                    this.ctx.lineTo(handleRadius * 0.6 * Math.cos(Math.PI * 1.5) - 2 / this.zoom, handleRadius * 0.6 * Math.sin(Math.PI * 1.5) - 2 / this.zoom);
+                    this.ctx.lineTo(handleRadius * 0.6 * Math.cos(Math.PI * 1.5) + 2 / this.zoom, handleRadius * 0.6 * Math.sin(Math.PI * 1.5) - 2 / this.zoom);
+                    this.ctx.closePath();
+                    this.ctx.fillStyle = '#0066ff';
+                    this.ctx.fill();
+                    this.ctx.restore();
                 }
             }
         }
@@ -1473,6 +2135,55 @@ export class Canvas {
                 this.notifyChange();
             }
         }
+    }
+
+    getGroupBounds() {
+        if (!this.selectedGroup) return null;
+
+        const allItems = [
+            ...this.selectedImages,
+            ...this.objectsManager.selectedObjects
+        ];
+
+        if (allItems.length === 0) return null;
+
+        let minX = Infinity, minY = Infinity;
+        let maxX = -Infinity, maxY = -Infinity;
+
+        for (const item of allItems) {
+            if (item.visible === false) continue;
+
+            const itemMinX = item.x;
+            const itemMinY = item.y;
+            const itemMaxX = item.x + (item.width || 0);
+            const itemMaxY = item.y + (item.height || 0);
+
+            // For lines/arrows, also check x2/y2
+            if (item.type === 'shape' && (item.shapeType === 'line' || item.shapeType === 'arrow')) {
+                if (item.x2 !== undefined) {
+                    minX = Math.min(minX, item.x, item.x2);
+                    maxX = Math.max(maxX, item.x, item.x2);
+                }
+                if (item.y2 !== undefined) {
+                    minY = Math.min(minY, item.y, item.y2);
+                    maxY = Math.max(maxY, item.y, item.y2);
+                }
+            } else {
+                minX = Math.min(minX, itemMinX);
+                minY = Math.min(minY, itemMinY);
+                maxX = Math.max(maxX, itemMaxX);
+                maxY = Math.max(maxY, itemMaxY);
+            }
+        }
+
+        if (minX === Infinity) return null;
+
+        return {
+            x: minX,
+            y: minY,
+            width: maxX - minX,
+            height: maxY - minY
+        };
     }
 
     notifyChange() {

@@ -285,6 +285,7 @@ function loadLayers(layers, viewState = null) {
                 const added = canvas.addImageSilent(img, layer.x, layer.y, layer.name, layer.width, layer.height, visible);
                 added.id = layer.id;
                 added.zIndex = layer.zIndex || 0;
+                added.rotation = layer.rotation || 0;
                 loaded++;
                 if (loaded >= total) {
                     canvas.selectImage(null);
@@ -663,7 +664,8 @@ function saveNow() {
         width: img.width,
         height: img.height,
         visible: img.visible !== false,
-        zIndex: img.zIndex || 0
+        zIndex: img.zIndex || 0,
+        rotation: img.rotation || 0
     }));
     const bgColor = canvas.bgColor;
     const viewState = {
@@ -973,7 +975,7 @@ function createObjectLayerItem(obj, objects) {
         layerItem.classList.add('layer-hidden');
     }
 
-    if (canvas.objectsManager.selectedObject === obj) {
+    if (canvas.objectsManager.selectedObjects.some(o => o.id === obj.id)) {
         layerItem.classList.add('selected');
     }
 
@@ -1277,10 +1279,10 @@ function applyLayerOrder() {
 async function groupSelectedLayers() {
     // Get all selected layers (both images and objects)
     const selectedImages = canvas.selectedImages || [];
-    const selectedObject = canvas.objectsManager.selectedObject;
+    const selectedObjects = canvas.objectsManager.selectedObjects || [];
 
     // Need at least 2 layers to create a group
-    const totalSelected = selectedImages.length + (selectedObject ? 1 : 0);
+    const totalSelected = selectedImages.length + selectedObjects.length;
 
     if (totalSelected < 2) {
         showToast('Select at least 2 layers to create a group');
@@ -1298,7 +1300,7 @@ async function groupSelectedLayers() {
         id: nextGroupId++,
         name: groupName.trim(),
         layerIds: selectedImages.map(img => img.id),
-        objectIds: selectedObject ? [selectedObject.id] : [],
+        objectIds: selectedObjects.map(obj => obj.id),
         collapsed: false
     };
 
@@ -1387,25 +1389,41 @@ function createGroupElement(group, allLayers, images, objects) {
 
         e.stopPropagation();
 
-        // Get fresh list of images from canvas
+        // Get fresh list of images and objects from canvas
         const currentImages = canvas.getImages();
+        const currentObjects = canvas.objectsManager.getObjects();
         const groupImageLayers = currentImages.filter(img => group.layerIds.includes(img.id));
+        const groupObjectLayers = currentObjects.filter(obj => group.objectIds && group.objectIds.includes(obj.id));
 
-        console.log('Group clicked:', group.name, 'Layer IDs:', group.layerIds, 'Found layers:', groupImageLayers.length);
+        console.log('Group clicked:', group.name, 'Image IDs:', group.layerIds, 'Object IDs:', group.objectIds, 'Found images:', groupImageLayers.length, 'Found objects:', groupObjectLayers.length);
 
         // Clear current selection first
         canvas.selectedImage = null;
         canvas.selectedImages = [];
-        canvas.objectsManager.deselectAll();
+        canvas.objectsManager.selectedObject = null;
+        canvas.objectsManager.selectedObjects = [];
 
+        // Select all image layers in the group
         if (groupImageLayers.length > 0) {
-            // Select all layers in the group
             groupImageLayers.forEach((img, index) => {
-                console.log('Selecting layer:', img.name, 'multi:', index > 0);
+                console.log('Selecting image layer:', img.name, 'multi:', index > 0);
                 canvas.selectImage(img, index > 0);
             });
         }
 
+        // Select all object layers in the group
+        if (groupObjectLayers.length > 0) {
+            groupObjectLayers.forEach((obj) => {
+                console.log('Selecting object layer:', obj.id);
+                canvas.objectsManager.selectedObjects.push(obj);
+            });
+            canvas.objectsManager.selectedObject = groupObjectLayers[groupObjectLayers.length - 1];
+        }
+
+        // Mark that a group is selected
+        canvas.selectedGroup = group;
+
+        canvas.needsRender = true;
         canvas.render();
         renderLayers();
     });
@@ -2337,7 +2355,8 @@ async function exportBoard() {
             width: img.width,
             height: img.height,
             visible: img.visible !== false,
-            zIndex: img.zIndex || 0
+            zIndex: img.zIndex || 0,
+            rotation: img.rotation || 0
         })),
         groups: canvas.groups || [],
         assets: board.assets || [],
@@ -2482,6 +2501,7 @@ function importBoard() {
                                 const added = canvas.addImageSilent(img, layer.x, layer.y, layer.name, layer.width, layer.height, layer.visible);
                                 added.id = layer.id;
                                 added.zIndex = layer.zIndex || 0;
+                                added.rotation = layer.rotation || 0;
                                 resolve();
                             };
                             img.onerror = resolve;
