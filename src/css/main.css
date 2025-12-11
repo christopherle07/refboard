@@ -34,6 +34,7 @@ body {
     flex: 1;
     display: flex;
     overflow: hidden;
+    position: relative;
 }
 
 .app-sidebar {
@@ -44,10 +45,71 @@ body {
     flex-direction: column;
     padding: 24px 0;
     gap: 8px;
+    transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    overflow-y: auto;
+}
+
+.app-sidebar.collapsed {
+    width: 64px;
+}
+
+.sidebar-collapse-btn {
+    position: absolute;
+    top: 50%;
+    left: 204px;
+    transform: translateY(-50%);
+    width: 32px;
+    height: 32px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    z-index: 100;
+    box-shadow: 0 2px 8px var(--shadow);
+}
+
+.sidebar-collapse-btn:hover {
+    background: var(--bg-secondary);
+    border-color: var(--border-color-hover);
+    box-shadow: 0 4px 12px var(--shadow);
+}
+
+.sidebar-collapse-icon {
+    width: 18px;
+    height: 18px;
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), filter 0.2s;
+    filter: invert(0);
+}
+
+/* Dark theme - invert collapse icon */
+[data-theme="dark"] .sidebar-collapse-icon {
+    filter: invert(1);
+}
+
+/* Midnight theme - invert collapse icon */
+[data-theme="midnight"] .sidebar-collapse-icon {
+    filter: invert(1);
+}
+
+.sidebar-collapse-btn.collapsed {
+    left: 48px;
+}
+
+.sidebar-collapse-btn.collapsed .sidebar-collapse-icon {
+    transform: rotate(180deg);
 }
 
 .sidebar-section {
     padding: 0 16px;
+}
+
+.app-sidebar.collapsed .sidebar-section {
+    padding: 0 8px;
 }
 
 .sidebar-section h3 {
@@ -57,6 +119,15 @@ body {
     color: var(--text-tertiary);
     padding: 8px 12px;
     letter-spacing: 0.8px;
+    white-space: nowrap;
+    overflow: hidden;
+    opacity: 1;
+    transition: opacity 0.2s;
+}
+
+.app-sidebar.collapsed .sidebar-section h3 {
+    opacity: 0;
+    pointer-events: none;
 }
 
 .sidebar-btn {
@@ -73,7 +144,58 @@ body {
     font-weight: 500;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
+    position: relative;
+    white-space: nowrap;
+}
+
+.sidebar-icon {
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+    transition: filter 0.2s;
+}
+
+/* Theme-aware icon colors - invert icons for dark themes */
+.sidebar-btn:not(.primary) .sidebar-icon,
+.discord-btn .sidebar-icon {
+    filter: invert(0);
+}
+
+/* Dark theme - invert black icons to white */
+[data-theme="dark"] .sidebar-btn:not(.primary) .sidebar-icon,
+[data-theme="dark"] .discord-btn .sidebar-icon {
+    filter: invert(1);
+}
+
+/* Midnight theme - invert black icons to white */
+[data-theme="midnight"] .sidebar-btn:not(.primary) .sidebar-icon,
+[data-theme="midnight"] .discord-btn .sidebar-icon {
+    filter: invert(1);
+}
+
+/* Primary button icon should stay visible on colored background */
+.sidebar-btn.primary .sidebar-icon {
+    filter: brightness(0) invert(1);
+}
+
+.sidebar-text {
+    opacity: 1;
+    transition: opacity 0.2s;
+    overflow: hidden;
+}
+
+.app-sidebar.collapsed .sidebar-text {
+    opacity: 0;
+    pointer-events: none;
+    position: absolute;
+    width: 0;
+}
+
+.app-sidebar.collapsed .sidebar-btn {
+    justify-content: center;
+    padding: 10px;
+    gap: 0;
 }
 
 .sidebar-btn:hover {
@@ -195,59 +317,111 @@ body {
 
 .boards-grid {
     display: grid;
-    grid-template-columns: repeat(5, 1fr);
-    grid-template-rows: repeat(3, 1fr);
-    gap: 20px;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 16px;
+    padding: 2px;
     margin-bottom: 32px;
     flex: 1;
+    align-content: start;
+    overflow-y: auto;
 }
 
+/* Board Card - Figma Style */
 .board-card {
-    border-radius: 12px;
+    display: flex;
+    flex-direction: column;
+    border-radius: 8px;
     border: 1px solid var(--border-color);
     cursor: pointer;
-    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     position: relative;
     overflow: hidden;
-    isolation: isolate;
-    background: var(--bg-secondary);
+    background: var(--bg-primary);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 }
 
 .board-card:hover {
     border-color: #5B8AC5;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
-    transform: translateY(-4px);
+    box-shadow: 0 0 0 2px #5B8AC5;
 }
 
+/* Thumbnail Section */
+.board-card-thumbnail {
+    width: 100%;
+    aspect-ratio: 16 / 10;
+    background: var(--bg-secondary);
+    background-size: cover;
+    background-position: center;
+    position: relative;
+    border-bottom: 1px solid var(--border-color);
+    image-rendering: -webkit-optimize-contrast;
+    image-rendering: crisp-edges;
+}
+
+/* Metadata Section */
+.board-card-metadata {
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    background: var(--bg-primary);
+}
+
+/* Board Name */
 .board-card-name {
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    padding: 16px;
-    background: linear-gradient(to top, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0.5) 50%, transparent 100%);
-    font-size: 14px;
-    font-weight: 500;
-    color: white;
-    z-index: 1;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    line-height: 1.3;
 }
 
+/* Metadata Info Row */
+.board-card-info {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: var(--text-tertiary);
+    line-height: 1.3;
+}
+
+.board-card-modified {
+    font-weight: 500;
+}
+
+.board-card-separator {
+    opacity: 0.5;
+    font-weight: 600;
+}
+
+.board-card-layers {
+    font-weight: 500;
+}
+
+/* Delete Button */
 .board-delete-btn {
     position: absolute;
     top: 8px;
     right: 8px;
-    width: 24px;
-    height: 24px;
+    width: 28px;
+    height: 28px;
     border: none;
-    background: rgba(0,0,0,0.5);
-    color: white;
-    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.95);
+    color: var(--text-secondary);
+    border-radius: 6px;
     cursor: pointer;
-    font-size: 16px;
+    font-size: 18px;
     line-height: 1;
     opacity: 0;
-    transition: opacity 0.15s, background 0.15s;
+    transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
     z-index: 2;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .board-card:hover .board-delete-btn {
@@ -255,7 +429,22 @@ body {
 }
 
 .board-delete-btn:hover {
-    background: #d32f2f;
+    background: #ef4444;
+    color: white;
+    transform: scale(1.05);
+}
+
+/* Dark theme adjustments */
+[data-theme="dark"] .board-delete-btn,
+[data-theme="midnight"] .board-delete-btn {
+    background: rgba(0, 0, 0, 0.85);
+    color: var(--text-primary);
+}
+
+[data-theme="dark"] .board-delete-btn:hover,
+[data-theme="midnight"] .board-delete-btn:hover {
+    background: #ef4444;
+    color: white;
 }
 
 .new-board-card {
@@ -371,6 +560,7 @@ body {
     flex: 1;
     display: flex;
     overflow: hidden;
+    gap: 0;
 }
 
 .canvas-area {
@@ -382,7 +572,7 @@ body {
 
 .floating-canvas-btn {
     position: absolute;
-    top: 20px;
+    bottom: 20px;
     right: 20px;
     width: 48px;
     height: 48px;
@@ -488,6 +678,13 @@ body {
     margin-top: 8px;
     text-align: center;
     padding: 4px 0;
+    opacity: 1;
+    transition: opacity 0.2s;
+}
+
+.app-sidebar.collapsed .version-info {
+    opacity: 0;
+    pointer-events: none;
 }
 
 .version-text {
@@ -500,50 +697,33 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 8px;
+    gap: 10px;
     background: #5865F2 !important;
     color: white !important;
-    border-radius: 4px;
+    border-radius: 8px;
     margin: 0 12px 8px 12px;
     padding: 10px 12px;
     border: none;
     width: calc(100% - 24px);
-    transition: background 0.15s;
+    transition: all 0.2s;
     text-decoration: none;
     font-size: 13px;
     font-weight: 500;
     box-sizing: border-box;
     height: 40px;
+    white-space: nowrap;
 }
 
 .discord-btn:hover {
     background: #4752C4 !important;
 }
 
-.website-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    background: var(--bg-secondary) !important;
-    color: var(--text-primary) !important;
-    border: 1px solid var(--border-color);
-    border-radius: 4px;
-    margin: 0 12px 8px 12px;
-    padding: 10px 12px;
-    width: calc(100% - 24px);
-    transition: all 0.15s;
-    cursor: pointer;
-    text-decoration: none;
-    font-size: 13px;
-    font-weight: 500;
-    box-sizing: border-box;
+.app-sidebar.collapsed .discord-btn {
+    width: 40px;
     height: 40px;
-}
-
-.website-btn:hover {
-    background: var(--bg-hover) !important;
-    border-color: var(--border-color-hover);
+    padding: 10px;
+    margin: 0 12px 8px 12px;
+    gap: 0;
 }
 
 /* Collections Section */
@@ -552,6 +732,13 @@ body {
     align-items: center;
     justify-content: space-between;
     padding: 8px 12px;
+    opacity: 1;
+    transition: opacity 0.2s;
+}
+
+.app-sidebar.collapsed .collections-header {
+    opacity: 0;
+    pointer-events: none;
 }
 
 .collections-header h3 {
@@ -583,6 +770,13 @@ body {
     display: flex;
     flex-direction: column;
     gap: 2px;
+    opacity: 1;
+    transition: opacity 0.2s;
+}
+
+.app-sidebar.collapsed .collections-list {
+    opacity: 0;
+    pointer-events: none;
 }
 
 .collection-item {

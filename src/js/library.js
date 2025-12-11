@@ -193,17 +193,16 @@ function showPhotoViewer(images, startIndex) {
 
 // Show library modal
 export async function showLibraryModal() {
-    const images = await getAllImages();
-
     const modal = document.createElement('div');
     modal.className = 'library-modal-overlay';
 
+    // Show modal immediately with loading skeleton
     modal.innerHTML = `
         <div class="library-modal">
             <div class="library-modal-header">
                 <div class="library-header-content">
                     <h2>Library</h2>
-                    <span class="library-count">${images.length} ${images.length === 1 ? 'image' : 'images'}</span>
+                    <span class="library-count">Loading...</span>
                 </div>
                 <button class="library-close-btn" data-action="close">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -213,45 +212,26 @@ export async function showLibraryModal() {
                 </button>
             </div>
 
-            <div class="library-modal-content">
-                ${images.length === 0 ? `
-                    <div class="library-empty">
-                        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-                            <circle cx="8.5" cy="8.5" r="1.5"></circle>
-                            <polyline points="21 15 16 10 5 21"></polyline>
-                        </svg>
-                        <p>No images in your library yet</p>
-                        <span>Images you add to boards will appear here</span>
-                    </div>
-                ` : `
-                    <div class="library-grid" id="library-grid">
-                        ${images.map((image, index) => `
-                            <div class="library-image-card" data-index="${index}">
-                                <div class="library-image-wrapper">
-                                    <img src="${image.src}" alt="Image" class="library-image">
-                                </div>
-                                <div class="library-image-info">
-                                    <span class="library-image-board">${image.name || 'Image'}</span>
-                                    <button class="library-download-btn" data-index="${index}" title="Download">
-                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                                            <polyline points="7 10 12 15 17 10"></polyline>
-                                            <line x1="12" y1="15" x2="12" y2="3"></line>
-                                        </svg>
-                                    </button>
+            <div class="library-modal-content" id="library-content">
+                <div class="library-loading">
+                    <div class="library-grid library-skeleton">
+                        ${Array(12).fill(0).map(() => `
+                            <div class="library-skeleton-card">
+                                <div class="library-skeleton-image"></div>
+                                <div class="library-skeleton-info">
+                                    <div class="library-skeleton-text"></div>
                                 </div>
                             </div>
                         `).join('')}
                     </div>
-                `}
+                </div>
             </div>
         </div>
     `;
 
     document.body.appendChild(modal);
 
-    // Make visible
+    // Make visible immediately
     setTimeout(() => {
         modal.style.display = 'flex';
     }, 10);
@@ -282,29 +262,74 @@ export async function showLibraryModal() {
         }
     });
 
-    // Image card click - open viewer
-    if (images.length > 0) {
-        modal.querySelectorAll('.library-image-card').forEach(card => {
-            card.addEventListener('click', (e) => {
-                // Don't open viewer if clicking download button
-                if (e.target.closest('.library-download-btn')) {
-                    return;
-                }
-                const index = parseInt(card.dataset.index);
-                showPhotoViewer(images, index);
-            });
-        });
+    // Load images asynchronously
+    const images = await getAllImages();
 
-        // Download buttons
-        modal.querySelectorAll('.library-download-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                const index = parseInt(btn.dataset.index);
-                const image = images[index];
-                const filename = `${(image.name || 'image').replace(/[^a-z0-9]/gi, '_')}-${Date.now()}.png`;
-                downloadImage(image.src, filename, btn);
+    // Update count
+    const countElement = modal.querySelector('.library-count');
+    if (countElement) {
+        countElement.textContent = `${images.length} ${images.length === 1 ? 'image' : 'images'}`;
+    }
+
+    // Update content
+    const contentElement = modal.querySelector('#library-content');
+    if (contentElement) {
+        contentElement.innerHTML = images.length === 0 ? `
+            <div class="library-empty">
+                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                    <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                    <polyline points="21 15 16 10 5 21"></polyline>
+                </svg>
+                <p>No images in your library yet</p>
+                <span>Images you add to boards will appear here</span>
+            </div>
+        ` : `
+            <div class="library-grid" id="library-grid">
+                ${images.map((image, index) => `
+                    <div class="library-image-card" data-index="${index}">
+                        <div class="library-image-wrapper">
+                            <img src="${image.src}" alt="Image" class="library-image" loading="lazy">
+                        </div>
+                        <div class="library-image-info">
+                            <span class="library-image-board">${image.name || 'Image'}</span>
+                            <button class="library-download-btn" data-index="${index}" title="Download">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                    <polyline points="7 10 12 15 17 10"></polyline>
+                                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+        `;
+
+        // Image card click - open viewer
+        if (images.length > 0) {
+            modal.querySelectorAll('.library-image-card').forEach(card => {
+                card.addEventListener('click', (e) => {
+                    // Don't open viewer if clicking download button
+                    if (e.target.closest('.library-download-btn')) {
+                        return;
+                    }
+                    const index = parseInt(card.dataset.index);
+                    showPhotoViewer(images, index);
+                });
             });
-        });
+
+            // Download buttons
+            modal.querySelectorAll('.library-download-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const index = parseInt(btn.dataset.index);
+                    const image = images[index];
+                    const filename = `${(image.name || 'image').replace(/[^a-z0-9]/gi, '_')}-${Date.now()}.png`;
+                    downloadImage(image.src, filename, btn);
+                });
+            });
+        }
     }
 
     return modal;

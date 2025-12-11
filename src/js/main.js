@@ -11,6 +11,31 @@ let currentSort = 'latest';
 let currentCollectionId = null; // null means "All Boards"
 const collectionManager = new CollectionManager();
 
+// Time formatting utility
+function formatTimeAgo(timestamp) {
+    const now = Date.now();
+    const diff = now - timestamp;
+
+    const seconds = Math.floor(diff / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const hours = Math.floor(minutes / 60);
+    const days = Math.floor(hours / 24);
+    const months = Math.floor(days / 30);
+    const years = Math.floor(days / 365);
+
+    if (seconds < 60) return 'Edited just now';
+    if (minutes < 60) return `Edited ${minutes} ${minutes === 1 ? 'minute' : 'minutes'} ago`;
+    if (hours < 24) return `Edited ${hours} ${hours === 1 ? 'hour' : 'hours'} ago`;
+    if (days < 30) return `Edited ${days} ${days === 1 ? 'day' : 'days'} ago`;
+    if (months < 12) return `Edited ${months} ${months === 1 ? 'month' : 'months'} ago`;
+    return `Edited ${years} ${years === 1 ? 'year' : 'years'} ago`;
+}
+
+// Layer count utility
+function getLayerCount(board) {
+    return board.layers?.length || 0;
+}
+
 // Initialize theme
 function initTheme() {
     const THEME_KEY = 'app_theme';
@@ -33,21 +58,6 @@ function initTheme() {
             '--modal-overlay': 'rgba(0, 0, 0, 0.5)'
         },
         dark: {
-            '--bg-primary': '#3d3d3d',
-            '--bg-secondary': '#2d2d2d',
-            '--bg-tertiary': '#333333',
-            '--bg-hover': 'rgba(255, 255, 255, 0.05)',
-            '--bg-active': 'rgba(255, 255, 255, 0.08)',
-            '--border-color': '#555555',
-            '--border-color-hover': '#777777',
-            '--text-primary': '#e8e8e8',
-            '--text-secondary': '#b8b8b8',
-            '--text-tertiary': '#999999',
-            '--text-disabled': '#666666',
-            '--shadow': 'rgba(0, 0, 0, 0.3)',
-            '--modal-overlay': 'rgba(0, 0, 0, 0.7)'
-        },
-        midnight: {
             '--bg-primary': '#1a1a1a',
             '--bg-secondary': '#0f0f0f',
             '--bg-tertiary': '#151515',
@@ -61,6 +71,21 @@ function initTheme() {
             '--text-disabled': '#505050',
             '--shadow': 'rgba(0, 0, 0, 0.5)',
             '--modal-overlay': 'rgba(0, 0, 0, 0.8)'
+        },
+        midnight: {
+            '--bg-primary': '#0a0a0a',
+            '--bg-secondary': '#050505',
+            '--bg-tertiary': '#0d0d0d',
+            '--bg-hover': 'rgba(255, 255, 255, 0.02)',
+            '--bg-active': 'rgba(255, 255, 255, 0.04)',
+            '--border-color': '#1a1a1a',
+            '--border-color-hover': '#333333',
+            '--text-primary': '#d0d0d0',
+            '--text-secondary': '#909090',
+            '--text-tertiary': '#606060',
+            '--text-disabled': '#404040',
+            '--shadow': 'rgba(0, 0, 0, 0.7)',
+            '--modal-overlay': 'rgba(0, 0, 0, 0.9)'
         }
     };
     
@@ -68,6 +93,9 @@ function initTheme() {
     Object.entries(theme).forEach(([property, value]) => {
         document.documentElement.style.setProperty(property, value);
     });
+
+    // Set data-theme attribute for CSS theme selectors
+    document.documentElement.setAttribute('data-theme', savedTheme);
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -81,6 +109,24 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 function setupEventListeners() {
+    // Sidebar collapse toggle
+    const sidebar = document.getElementById('app-sidebar');
+    const collapseBtn = document.getElementById('sidebar-collapse-btn');
+
+    // Load saved sidebar state
+    const sidebarCollapsed = localStorage.getItem('sidebar_collapsed') === 'true';
+    if (sidebarCollapsed) {
+        sidebar.classList.add('collapsed');
+        collapseBtn.classList.add('collapsed');
+    }
+
+    collapseBtn.addEventListener('click', () => {
+        sidebar.classList.toggle('collapsed');
+        collapseBtn.classList.toggle('collapsed');
+        const isCollapsed = sidebar.classList.contains('collapsed');
+        localStorage.setItem('sidebar_collapsed', isCollapsed);
+    });
+
     // Sidebar new board button
     document.getElementById('new-board-btn').addEventListener('click', () => {
         showCreateBoardModal((name, bgColor) => {
@@ -136,13 +182,6 @@ function setupEventListeners() {
         });
     }
 
-    // Website link button
-    const websiteBtn = document.getElementById('website-btn');
-    if (websiteBtn) {
-        websiteBtn.addEventListener('click', () => {
-            window.__TAURI__.opener.openUrl('https://anihaven.site/');
-        });
-    }
 
     // All Boards button - clear collection filter
     document.getElementById('all-boards-btn').addEventListener('click', () => {
@@ -201,19 +240,29 @@ function renderBoards() {
     paginatedBoards.forEach(board => {
         const card = document.createElement('div');
         card.className = 'board-card';
-        const bgColor = board.bgColor || board.bg_color;
-        card.style.backgroundColor = bgColor;
-        
-        if (board.thumbnail) {
-            card.style.backgroundImage = `url(${board.thumbnail})`;
-            card.style.backgroundSize = 'cover';
-            card.style.backgroundPosition = 'center';
-        }
-        
+
+        const timestamp = board.updatedAt || board.updated_at || board.createdAt || board.created_at || Date.now();
+        const lastModified = formatTimeAgo(timestamp);
+        const bgColor = board.bgColor || board.bg_color || '#f0f0f0';
+
         card.innerHTML = `
-            <button class="board-delete-btn" title="Delete Board">×</button>
-            <div class="board-card-name">${board.name}</div>
+            <div class="board-card-thumbnail">
+                <button class="board-delete-btn" title="Delete Board">×</button>
+            </div>
+            <div class="board-card-metadata">
+                <div class="board-card-name">${board.name}</div>
+                <div class="board-card-info">
+                    <span class="board-card-modified">${lastModified}</span>
+                </div>
+            </div>
         `;
+
+        const thumbnailDiv = card.querySelector('.board-card-thumbnail');
+        if (board.thumbnail) {
+            thumbnailDiv.style.backgroundImage = `url(${board.thumbnail})`;
+        } else {
+            thumbnailDiv.style.backgroundColor = bgColor;
+        }
         
         card.querySelector('.board-delete-btn').addEventListener('click', (e) => {
             e.stopPropagation();

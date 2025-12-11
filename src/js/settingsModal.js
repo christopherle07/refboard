@@ -4,12 +4,12 @@ const SETTINGS_KEY = 'canvas_settings';
 const themes = {
     light: {
         '--bg-primary': '#ffffff',
-        '--bg-secondary': '#f8f8f8',
-        '--bg-tertiary': '#fafafa',
-        '--bg-hover': 'rgba(0, 0, 0, 0.05)',
-        '--bg-active': 'rgba(0, 0, 0, 0.08)',
-        '--border-color': '#e0e0e0',
-        '--border-color-hover': '#999',
+        '--bg-secondary': '#f5f5f5',
+        '--bg-tertiary': '#e8e8e8',
+        '--bg-hover': '#ececec',
+        '--bg-active': '#d4d4d4',
+        '--border-color': '#d0d0d0',
+        '--border-color-hover': '#a0a0a0',
         '--text-primary': '#1a1a1a',
         '--text-secondary': '#666',
         '--text-tertiary': '#888',
@@ -18,21 +18,6 @@ const themes = {
         '--modal-overlay': 'rgba(0, 0, 0, 0.5)'
     },
     dark: {
-        '--bg-primary': '#3d3d3d',
-        '--bg-secondary': '#2d2d2d',
-        '--bg-tertiary': '#333333',
-        '--bg-hover': 'rgba(255, 255, 255, 0.05)',
-        '--bg-active': 'rgba(255, 255, 255, 0.08)',
-        '--border-color': '#555555',
-        '--border-color-hover': '#777777',
-        '--text-primary': '#e8e8e8',
-        '--text-secondary': '#b8b8b8',
-        '--text-tertiary': '#999999',
-        '--text-disabled': '#666666',
-        '--shadow': 'rgba(0, 0, 0, 0.3)',
-        '--modal-overlay': 'rgba(0, 0, 0, 0.7)'
-    },
-    midnight: {
         '--bg-primary': '#1a1a1a',
         '--bg-secondary': '#0f0f0f',
         '--bg-tertiary': '#151515',
@@ -46,6 +31,21 @@ const themes = {
         '--text-disabled': '#505050',
         '--shadow': 'rgba(0, 0, 0, 0.5)',
         '--modal-overlay': 'rgba(0, 0, 0, 0.8)'
+    },
+    midnight: {
+        '--bg-primary': '#0a0a0a',
+        '--bg-secondary': '#050505',
+        '--bg-tertiary': '#0d0d0d',
+        '--bg-hover': 'rgba(255, 255, 255, 0.02)',
+        '--bg-active': 'rgba(255, 255, 255, 0.04)',
+        '--border-color': '#1a1a1a',
+        '--border-color-hover': '#333333',
+        '--text-primary': '#d0d0d0',
+        '--text-secondary': '#909090',
+        '--text-tertiary': '#606060',
+        '--text-disabled': '#404040',
+        '--shadow': 'rgba(0, 0, 0, 0.7)',
+        '--modal-overlay': 'rgba(0, 0, 0, 0.9)'
     }
 };
 
@@ -65,6 +65,7 @@ function applyTheme(themeName) {
     Object.entries(theme).forEach(([property, value]) => {
         document.documentElement.style.setProperty(property, value);
     });
+    document.documentElement.setAttribute('data-theme', themeName);
     document.body.dataset.theme = themeName;
     localStorage.setItem(THEME_KEY, themeName);
 }
@@ -111,6 +112,7 @@ export function showSettingsModal() {
                 <nav class="settings-nav">
                     <button class="settings-nav-item active" data-section="appearance">Appearance</button>
                     <button class="settings-nav-item" data-section="canvas">Canvas</button>
+                    <button class="settings-nav-item" data-section="about">About</button>
                 </nav>
             </div>
 
@@ -200,6 +202,26 @@ export function showSettingsModal() {
                                 <option value="8" ${settings.snapThreshold === 8 ? 'selected' : ''}>8px (Relaxed)</option>
                                 <option value="12" ${settings.snapThreshold === 12 ? 'selected' : ''}>12px (Loose)</option>
                             </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="settings-section" data-section="about">
+                    <h3>About</h3>
+
+                    <div class="setting-group">
+                        <div class="about-content">
+                            <h4>EyeDea</h4>
+                            <p class="about-description">A visual reference board application for organizing and managing your creative references.</p>
+
+                            <div class="about-links">
+                                <a href="https://discord.gg/6EcTTFDDA3" target="_blank" class="about-link discord-link">
+                                    <svg width="20" height="20" viewBox="0 0 512 388" fill="currentColor">
+                                        <path d="M433.713 32.491A424.231 424.231 0 00328.061.005c-4.953 8.873-9.488 18.156-13.492 27.509a393.937 393.937 0 00-58.629-4.408c-19.594 0-39.284 1.489-58.637 4.37-3.952-9.33-8.543-18.581-13.525-27.476-36.435 6.212-72.045 17.196-105.676 32.555-66.867 98.92-84.988 195.368-75.928 290.446a425.967 425.967 0 00129.563 65.03c10.447-14.103 19.806-29.116 27.752-44.74a273.827 273.827 0 01-43.716-20.862c3.665-2.658 7.249-5.396 10.712-8.055 40.496 19.019 84.745 28.94 129.514 28.94 44.77 0 89.019-9.921 129.517-28.943 3.504 2.86 7.088 5.598 10.712 8.055a275.576 275.576 0 01-43.796 20.918 311.49 311.49 0 0027.752 44.705 424.235 424.235 0 00129.65-65.019l-.011.011c10.632-110.26-18.162-205.822-76.11-290.55zM170.948 264.529c-25.249 0-46.11-22.914-46.11-51.104 0-28.189 20.135-51.304 46.029-51.304 25.895 0 46.592 23.115 46.15 51.304-.443 28.19-20.336 51.104-46.069 51.104zm170.102 0c-25.29 0-46.069-22.914-46.069-51.104 0-28.189 20.135-51.304 46.069-51.304s46.472 23.115 46.029 51.304c-.443 28.19-20.296 51.104-46.029 51.104z"/>
+                                    </svg>
+                                    <span>Join Discord Community</span>
+                                </a>
+                            </div>
                         </div>
                     </div>
                 </div>

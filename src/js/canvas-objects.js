@@ -1085,6 +1085,65 @@ export class CanvasObjectsManager {
         ctx.strokeRect(palette.x, palette.y, palette.width, palette.height);
     }
 
+    renderPaletteSwatchBar(ctx, bar, isPreview) {
+        if (isPreview) {
+            ctx.globalAlpha = 0.7;
+        }
+
+        // Use stored sizes from the bar object
+        const swatchWidth = bar.swatchWidth || 40;
+        const swatchHeight = bar.swatchHeight || 40;
+        const gap = bar.gap || 8;
+        const padding = bar.padding || 12;
+        const borderRadius = 6 * (swatchWidth / 40); // Scale border radius
+
+        // Draw background
+        ctx.fillStyle = '#2a2a2a';
+        this.roundRect(ctx, bar.x, bar.y, bar.width, bar.height, 8 * (swatchWidth / 40));
+        ctx.fill();
+
+        // Draw border
+        ctx.strokeStyle = '#404040';
+        ctx.lineWidth = 1 / this.canvas.zoom;
+        this.roundRect(ctx, bar.x, bar.y, bar.width, bar.height, 8 * (swatchWidth / 40));
+        ctx.stroke();
+
+        // Draw color swatches
+        let xOffset = bar.x + padding;
+        const yOffset = bar.y + padding;
+
+        for (const color of bar.colors) {
+            const hexColor = typeof color === 'string' ? color : color.hex;
+
+            // Draw swatch background
+            ctx.fillStyle = hexColor;
+            this.roundRect(ctx, xOffset, yOffset, swatchWidth, swatchHeight, borderRadius);
+            ctx.fill();
+
+            // Draw swatch border
+            ctx.strokeStyle = '#606060';
+            ctx.lineWidth = 2 / this.canvas.zoom;
+            this.roundRect(ctx, xOffset, yOffset, swatchWidth, swatchHeight, borderRadius);
+            ctx.stroke();
+
+            xOffset += swatchWidth + gap;
+        }
+    }
+
+    roundRect(ctx, x, y, width, height, radius) {
+        ctx.beginPath();
+        ctx.moveTo(x + radius, y);
+        ctx.lineTo(x + width - radius, y);
+        ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+        ctx.lineTo(x + width, y + height - radius);
+        ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+        ctx.lineTo(x + radius, y + height);
+        ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+        ctx.lineTo(x, y + radius);
+        ctx.quadraticCurveTo(x, y, x + radius, y);
+        ctx.closePath();
+    }
+
 
     renderSelection(ctx, obj) {
         const zoom = this.canvas.zoom;
@@ -1384,4 +1443,5 @@ export class CanvasObjectsManager {
 
         return textObj;
     }
+
 }

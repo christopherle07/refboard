@@ -10,14 +10,15 @@
         (function() {
             const theme = localStorage.getItem('app_theme') || 'light';
             const themes = {
-                light: { '--bg-primary': '#ffffff', '--bg-secondary': '#f5f5f5', '--bg-tertiary': '#e8e8e8', '--bg-hover': '#ececec', '--bg-active': '#d4d4d4', '--border-color': '#d0d0d0', '--border-color-hover': '#a0a0a0', '--text-primary': '#1a1a1a', '--text-secondary': '#4a4a4a', '--text-tertiary': '#7a7a7a', '--text-disabled': '#b0b0b0', '--shadow': 'rgba(0, 0, 0, 0.1)', '--modal-overlay': 'rgba(0, 0, 0, 0.4)' },
-                dark: { '--bg-primary': '#1e1e1e', '--bg-secondary': '#2a2a2a', '--bg-tertiary': '#363636', '--bg-hover': '#323232', '--bg-active': '#3e3e3e', '--border-color': '#404040', '--border-color-hover': '#606060', '--text-primary': '#e0e0e0', '--text-secondary': '#b0b0b0', '--text-tertiary': '#808080', '--text-disabled': '#505050', '--shadow': 'rgba(0, 0, 0, 0.3)', '--modal-overlay': 'rgba(0, 0, 0, 0.6)' },
-                midnight: { '--bg-primary': '#0d1117', '--bg-secondary': '#161b22', '--bg-tertiary': '#21262d', '--bg-hover': '#1c2128', '--bg-active': '#292e36', '--border-color': '#30363d', '--border-color-hover': '#484f58', '--text-primary': '#c9d1d9', '--text-secondary': '#8b949e', '--text-tertiary': '#6e7681', '--text-disabled': '#484f58', '--shadow': 'rgba(0, 0, 0, 0.5)', '--modal-overlay': 'rgba(0, 0, 0, 0.7)' }
+                light: { '--bg-primary': '#ffffff', '--bg-secondary': '#f5f5f5', '--bg-tertiary': '#e8e8e8', '--bg-hover': '#ececec', '--bg-active': '#d4d4d4', '--border-color': '#d0d0d0', '--border-color-hover': '#a0a0a0', '--text-primary': '#1a1a1a', '--text-secondary': '#666', '--text-tertiary': '#888', '--text-disabled': '#999', '--shadow': 'rgba(0, 0, 0, 0.08)', '--modal-overlay': 'rgba(0, 0, 0, 0.5)' },
+                dark: { '--bg-primary': '#1a1a1a', '--bg-secondary': '#0f0f0f', '--bg-tertiary': '#151515', '--bg-hover': 'rgba(255, 255, 255, 0.03)', '--bg-active': 'rgba(255, 255, 255, 0.06)', '--border-color': '#2a2a2a', '--border-color-hover': '#444444', '--text-primary': '#e0e0e0', '--text-secondary': '#a0a0a0', '--text-tertiary': '#707070', '--text-disabled': '#505050', '--shadow': 'rgba(0, 0, 0, 0.5)', '--modal-overlay': 'rgba(0, 0, 0, 0.8)' },
+                midnight: { '--bg-primary': '#0a0a0a', '--bg-secondary': '#050505', '--bg-tertiary': '#0d0d0d', '--bg-hover': 'rgba(255, 255, 255, 0.02)', '--bg-active': 'rgba(255, 255, 255, 0.04)', '--border-color': '#1a1a1a', '--border-color-hover': '#333333', '--text-primary': '#d0d0d0', '--text-secondary': '#909090', '--text-tertiary': '#606060', '--text-disabled': '#404040', '--shadow': 'rgba(0, 0, 0, 0.7)', '--modal-overlay': 'rgba(0, 0, 0, 0.9)' }
             };
             const colors = themes[theme] || themes.light;
             for (const [key, value] of Object.entries(colors)) {
                 document.documentElement.style.setProperty(key, value);
             }
+            document.documentElement.setAttribute('data-theme', theme);
         })();
     </script>
     <link rel="stylesheet" href="css/main.css">
@@ -40,21 +41,43 @@
     </div>
 
     <div class="homepage">
-        <aside class="app-sidebar">
+        <button class="sidebar-collapse-btn" id="sidebar-collapse-btn" title="Collapse Sidebar">
+            <img src="assets/sidebar-col.svg" alt="Collapse" class="sidebar-collapse-icon">
+        </button>
+
+        <aside class="app-sidebar" id="app-sidebar">
             <div class="sidebar-section">
-                <button class="sidebar-btn primary" id="new-board-btn">+ New Board</button>
+                <button class="sidebar-btn primary" id="new-board-btn">
+                    <img src="assets/newboard.svg" alt="New Board" class="sidebar-icon">
+                    <span class="sidebar-text">New Board</span>
+                </button>
             </div>
-            
+
             <div class="sidebar-section">
-                <button class="sidebar-btn" id="import-board-btn">Import Board</button>
+                <button class="sidebar-btn" id="import-board-btn">
+                    <img src="assets/import.svg" alt="Import" class="sidebar-icon">
+                    <span class="sidebar-text">Import Board</span>
+                </button>
             </div>
-            
+
             <div class="sidebar-section">
                 <h3>Navigate</h3>
-                <button class="sidebar-btn active" id="all-boards-btn">All Boards</button>
-                <button class="sidebar-btn" id="library-btn">Library</button>
-                <button class="sidebar-btn" id="settings-btn">Settings</button>
-                <button class="sidebar-btn" id="shortcuts-btn">Keyboard Shortcuts</button>
+                <button class="sidebar-btn active" id="all-boards-btn">
+                    <img src="assets/all-boards.svg" alt="All Boards" class="sidebar-icon">
+                    <span class="sidebar-text">All Boards</span>
+                </button>
+                <button class="sidebar-btn" id="library-btn">
+                    <img src="assets/library.svg" alt="Library" class="sidebar-icon">
+                    <span class="sidebar-text">Library</span>
+                </button>
+                <button class="sidebar-btn" id="settings-btn">
+                    <img src="assets/settings.svg" alt="Settings" class="sidebar-icon">
+                    <span class="sidebar-text">Settings</span>
+                </button>
+                <button class="sidebar-btn" id="shortcuts-btn">
+                    <img src="assets/keyboardshort.svg" alt="Shortcuts" class="sidebar-icon">
+                    <span class="sidebar-text">Keyboard Shortcuts</span>
+                </button>
             </div>
 
             <div class="sidebar-section">
@@ -73,12 +96,6 @@
             </div>
 
             <div class="sidebar-section sidebar-footer">
-                <a href="https://discord.gg/6EcTTFDDA3" target="_blank" class="discord-btn" title="Join Discord">
-                    <span>Discord</span>
-                </a>
-                <button class="website-btn" id="website-btn" title="Visit Website">
-                    <span>Website</span>
-                </button>
                 <div class="version-info" id="version-info">
                     <span class="version-text">Loading version...</span>
                 </div>

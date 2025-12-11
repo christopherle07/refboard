@@ -50,21 +50,6 @@ function initTheme() {
             '--modal-overlay': 'rgba(0, 0, 0, 0.5)'
         },
         dark: {
-            '--bg-primary': '#3d3d3d',
-            '--bg-secondary': '#2d2d2d',
-            '--bg-tertiary': '#333333',
-            '--bg-hover': 'rgba(255, 255, 255, 0.05)',
-            '--bg-active': 'rgba(255, 255, 255, 0.08)',
-            '--border-color': '#555555',
-            '--border-color-hover': '#777777',
-            '--text-primary': '#e8e8e8',
-            '--text-secondary': '#b8b8b8',
-            '--text-tertiary': '#999999',
-            '--text-disabled': '#666666',
-            '--shadow': 'rgba(0, 0, 0, 0.3)',
-            '--modal-overlay': 'rgba(0, 0, 0, 0.7)'
-        },
-        midnight: {
             '--bg-primary': '#1a1a1a',
             '--bg-secondary': '#0f0f0f',
             '--bg-tertiary': '#151515',
@@ -78,6 +63,21 @@ function initTheme() {
             '--text-disabled': '#505050',
             '--shadow': 'rgba(0, 0, 0, 0.5)',
             '--modal-overlay': 'rgba(0, 0, 0, 0.8)'
+        },
+        midnight: {
+            '--bg-primary': '#0a0a0a',
+            '--bg-secondary': '#050505',
+            '--bg-tertiary': '#0d0d0d',
+            '--bg-hover': 'rgba(255, 255, 255, 0.02)',
+            '--bg-active': 'rgba(255, 255, 255, 0.04)',
+            '--border-color': '#1a1a1a',
+            '--border-color-hover': '#333333',
+            '--text-primary': '#d0d0d0',
+            '--text-secondary': '#909090',
+            '--text-tertiary': '#606060',
+            '--text-disabled': '#404040',
+            '--shadow': 'rgba(0, 0, 0, 0.7)',
+            '--modal-overlay': 'rgba(0, 0, 0, 0.9)'
         }
     };
     
@@ -218,6 +218,10 @@ async function initEditor() {
     canvasElement.addEventListener('objectDeselected', () => {
         hidePropertiesPanel();
         hideFloatingToolbars();
+    });
+    canvasElement.addEventListener('showColorCopyMenu', (e) => {
+        const { hex, rgb } = e.detail;
+        showColorCopyOptions(hex, rgb);
     });
     canvasElement.addEventListener('objectDoubleClicked', (e) => {
         const obj = e.detail;
@@ -913,6 +917,52 @@ function createLayerItem(img, images) {
         const targetId = img.id;
         if (targetId === draggedLayerId && draggedLayerType === 'image') return;
 
+        // Check if both dragged and target are in the same group
+        const draggedGroup = draggedFromGroup || layerGroups.find(g =>
+            (draggedLayerType === 'image' && g.layerIds.includes(draggedLayerId)) ||
+            (draggedLayerType === 'object' && g.objectIds && g.objectIds.includes(draggedLayerId))
+        );
+        const targetGroup = layerGroups.find(g => g.layerIds.includes(targetId));
+
+        // If dragging within the same group, check if we're trying to escape
+        if (draggedGroup && targetGroup && draggedGroup.id === targetGroup.id && draggedLayerType !== 'group') {
+            const draggedIdx = allLayersOrder.findIndex(l =>
+                (l.type === 'image' && l.data.id === draggedLayerId) ||
+                (l.type === 'object' && l.data.id === draggedLayerId)
+            );
+            const targetIdx = allLayersOrder.findIndex(l => l.type === 'image' && l.data.id === targetId);
+
+            // Find first and last indices of group members in allLayersOrder
+            const groupIndices = [];
+            allLayersOrder.forEach((layer, idx) => {
+                if ((layer.type === 'image' && draggedGroup.layerIds.includes(layer.data.id)) ||
+                    (layer.type === 'object' && draggedGroup.objectIds && draggedGroup.objectIds.includes(layer.data.id))) {
+                    groupIndices.push(idx);
+                }
+            });
+            groupIndices.sort((a, b) => a - b);
+
+            const isFirstInGroup = draggedIdx === groupIndices[0];
+            const isLastInGroup = draggedIdx === groupIndices[groupIndices.length - 1];
+            const isTargetFirst = targetIdx === groupIndices[0];
+            const isTargetLast = targetIdx === groupIndices[groupIndices.length - 1];
+
+            // Edge detection
+            const rect = layerItem.getBoundingClientRect();
+            const midpoint = rect.top + rect.height / 2;
+            const insertBefore = e.clientY < midpoint;
+
+            // If trying to move before the first item in group while being at top, allow escape upward
+            // If trying to move after the last item in group while being at bottom, allow escape downward
+            if ((isFirstInGroup && isTargetFirst && insertBefore) ||
+                (isLastInGroup && isTargetLast && !insertBefore)) {
+                // Don't handle this - let it potentially escape the group
+                // Stop propagation so group header can handle it
+                e.stopPropagation();
+                return;
+            }
+        }
+
         // Clear all drag-over indicators first
         document.querySelectorAll('.drag-over-above, .drag-over-below').forEach(el => {
             el.classList.remove('drag-over-above', 'drag-over-below');
@@ -1198,6 +1248,52 @@ function createObjectLayerItem(obj, objects) {
 
         const targetId = obj.id;
         if (targetId === draggedLayerId && draggedLayerType === 'object') return;
+
+        // Check if both dragged and target are in the same group
+        const draggedGroup = draggedFromGroup || layerGroups.find(g =>
+            (draggedLayerType === 'image' && g.layerIds.includes(draggedLayerId)) ||
+            (draggedLayerType === 'object' && g.objectIds && g.objectIds.includes(draggedLayerId))
+        );
+        const targetGroup = layerGroups.find(g => g.objectIds && g.objectIds.includes(targetId));
+
+        // If dragging within the same group, check if we're trying to escape
+        if (draggedGroup && targetGroup && draggedGroup.id === targetGroup.id && draggedLayerType !== 'group') {
+            const draggedIdx = allLayersOrder.findIndex(l =>
+                (l.type === 'image' && l.data.id === draggedLayerId) ||
+                (l.type === 'object' && l.data.id === draggedLayerId)
+            );
+            const targetIdx = allLayersOrder.findIndex(l => l.type === 'object' && l.data.id === targetId);
+
+            // Find first and last indices of group members in allLayersOrder
+            const groupIndices = [];
+            allLayersOrder.forEach((layer, idx) => {
+                if ((layer.type === 'image' && draggedGroup.layerIds.includes(layer.data.id)) ||
+                    (layer.type === 'object' && draggedGroup.objectIds && draggedGroup.objectIds.includes(layer.data.id))) {
+                    groupIndices.push(idx);
+                }
+            });
+            groupIndices.sort((a, b) => a - b);
+
+            const isFirstInGroup = draggedIdx === groupIndices[0];
+            const isLastInGroup = draggedIdx === groupIndices[groupIndices.length - 1];
+            const isTargetFirst = targetIdx === groupIndices[0];
+            const isTargetLast = targetIdx === groupIndices[groupIndices.length - 1];
+
+            // Edge detection
+            const rect = layerItem.getBoundingClientRect();
+            const midpoint = rect.top + rect.height / 2;
+            const insertBefore = e.clientY < midpoint;
+
+            // If trying to move before the first item in group while being at top, allow escape upward
+            // If trying to move after the last item in group while being at bottom, allow escape downward
+            if ((isFirstInGroup && isTargetFirst && insertBefore) ||
+                (isLastInGroup && isTargetLast && !insertBefore)) {
+                // Don't handle this - let it potentially escape the group
+                // Stop propagation so group header can handle it
+                e.stopPropagation();
+                return;
+            }
+        }
 
         // Clear all drag-over indicators first
         document.querySelectorAll('.drag-over-above, .drag-over-below').forEach(el => {
@@ -1584,13 +1680,79 @@ function createGroupElement(group, allLayers, images, objects) {
 
         if (!draggedLayerId) return;
 
+        // Clear all drag-over indicators first
+        document.querySelectorAll('.drag-over-above, .drag-over-below, .drag-over').forEach(el => {
+            el.classList.remove('drag-over-above', 'drag-over-below', 'drag-over');
+        });
+
         // Edge detection: determine if hovering over top or bottom half
         const rect = groupHeader.getBoundingClientRect();
         const midpoint = rect.top + rect.height / 2;
         const insertBefore = e.clientY < midpoint;
 
-        // If dragging a layer, show drop zone to add to group
-        if (draggedLayerType !== 'group') {
+        // If dragging a layer and group is collapsed, allow inserting before/after
+        if (draggedLayerType !== 'group' && group.collapsed) {
+            // Show visual indicator for inserting before or after the group
+            if (insertBefore) {
+                groupHeader.classList.add('drag-over-above');
+            } else {
+                groupHeader.classList.add('drag-over-below');
+            }
+
+            // Handle reordering - insert before/after entire group
+            if (allLayersOrder.length > 0) {
+                // Find the first layer of this group
+                const firstGroupLayerIdx = allLayersOrder.findIndex(layer => {
+                    if (layer.type === 'image' && group.layerIds.includes(layer.data.id)) return true;
+                    if (layer.type === 'object' && group.objectIds && group.objectIds.includes(layer.data.id)) return true;
+                    return false;
+                });
+
+                if (firstGroupLayerIdx !== -1) {
+                    const fromIdx = allLayersOrder.findIndex(l => {
+                        if (draggedLayerType === 'image') {
+                            return l.type === 'image' && l.data.id === draggedLayerId;
+                        } else {
+                            return l.type === 'object' && l.data.id === draggedLayerId;
+                        }
+                    });
+
+                    if (fromIdx !== -1) {
+                        const newOrder = [...allLayersOrder];
+                        const [moved] = newOrder.splice(fromIdx, 1);
+
+                        // Find new target position after removal
+                        let newTargetIdx = newOrder.findIndex(layer => {
+                            if (layer.type === 'image' && group.layerIds.includes(layer.data.id)) return true;
+                            if (layer.type === 'object' && group.objectIds && group.objectIds.includes(layer.data.id)) return true;
+                            return false;
+                        });
+
+                        if (newTargetIdx !== -1) {
+                            // If inserting after (bottom half), move to after the last layer in the group
+                            if (!insertBefore) {
+                                let lastIdx = newTargetIdx;
+                                for (let i = newTargetIdx + 1; i < newOrder.length; i++) {
+                                    const layer = newOrder[i];
+                                    if ((layer.type === 'image' && group.layerIds.includes(layer.data.id)) ||
+                                        (layer.type === 'object' && group.objectIds && group.objectIds.includes(layer.data.id))) {
+                                        lastIdx = i;
+                                    } else {
+                                        break;
+                                    }
+                                }
+                                newTargetIdx = lastIdx + 1;
+                            }
+
+                            newOrder.splice(newTargetIdx, 0, moved);
+                            allLayersOrder = newOrder;
+                            renderLayersThrottled();
+                        }
+                    }
+                }
+            }
+        } else if (draggedLayerType !== 'group' && !group.collapsed) {
+            // If group is expanded, show drop zone to add to group
             groupHeader.classList.add('drag-over');
         } else if (draggedLayerType === 'group' && draggedLayerId !== group.id && allLayersOrder.length > 0) {
             // If dragging a group onto another group, reorder by moving all group layers together
@@ -1658,16 +1820,28 @@ function createGroupElement(group, allLayers, images, objects) {
     });
 
     groupHeader.addEventListener('dragleave', () => {
-        groupHeader.classList.remove('drag-over');
+        groupHeader.classList.remove('drag-over', 'drag-over-above', 'drag-over-below');
     });
 
     groupHeader.addEventListener('drop', (e) => {
         e.preventDefault();
         e.stopPropagation();
-        groupHeader.classList.remove('drag-over');
 
-        // If dropping a layer onto a group, add it to the group
-        if (draggedLayerType === 'image') {
+        // Check if we were hovering to insert before/after (collapsed group)
+        const wasInsertingBeforeAfter = group.collapsed && draggedLayerType !== 'group' &&
+            (groupHeader.classList.contains('drag-over-above') || groupHeader.classList.contains('drag-over-below'));
+
+        groupHeader.classList.remove('drag-over', 'drag-over-above', 'drag-over-below');
+
+        // If group is collapsed and we're dropping before/after (not into), don't add to group
+        if (wasInsertingBeforeAfter) {
+            // The reordering was already handled in dragover
+            // Just don't add to the group
+            return;
+        }
+
+        // If dropping a layer onto an expanded group, add it to the group
+        if (draggedLayerType === 'image' && !group.collapsed) {
             // Remove from other groups first
             layerGroups.forEach(g => {
                 const index = g.layerIds.indexOf(draggedLayerId);
@@ -1681,7 +1855,7 @@ function createGroupElement(group, allLayers, images, objects) {
             }
             renderLayers();
             scheduleSave();
-        } else if (draggedLayerType === 'object') {
+        } else if (draggedLayerType === 'object' && !group.collapsed) {
             // Remove from other groups first
             layerGroups.forEach(g => {
                 if (g.objectIds) {
@@ -2329,16 +2503,6 @@ function setupContextMenu() {
     const enableRotateItem = document.getElementById('context-enable-rotate');
     const separator = document.getElementById('context-separator');
 
-    // Add Extract Palette option to the context menu HTML
-    const extractPaletteItem = document.createElement('div');
-    extractPaletteItem.className = 'context-menu-item';
-    extractPaletteItem.id = 'context-extract-palette';
-    extractPaletteItem.textContent = 'Extract Palette';
-    extractPaletteItem.style.display = 'none';
-
-    // Insert after deselect all, before separator
-    separator.parentNode.insertBefore(extractPaletteItem, separator);
-
     let contextMenuMousePos = { x: 0, y: 0 };
 
     canvasContainer.addEventListener('contextmenu', (e) => {
@@ -2349,6 +2513,15 @@ function setupContextMenu() {
         const worldPos = canvas.screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
         contextMenuMousePos = worldPos;
 
+        // Check if right-clicking on a color palette object
+        const clickedObject = canvas.objectsManager.getObjectAtPoint(worldPos.x, worldPos.y);
+        console.log('Right-clicked object:', clickedObject);
+        if (clickedObject && clickedObject.type === 'colorPalette') {
+            console.log('Opening palette modal for:', clickedObject);
+            showPaletteModal(clickedObject);
+            return;
+        }
+
         // Show/hide multi-select options based on selection state
         const hasSelection = canvas.selectedImages.length > 0;
         const hasImageClick = canvas.contextMenuImage !== null && canvas.contextMenuImage !== undefined;
@@ -2356,7 +2529,6 @@ function setupContextMenu() {
         deleteSelectedItem.style.display = hasSelection ? 'block' : 'none';
         deselectAllItem.style.display = hasSelection ? 'block' : 'none';
         enableRotateItem.style.display = hasImageClick ? 'block' : 'none';
-        extractPaletteItem.style.display = hasImageClick ? 'block' : 'none';
         separator.style.display = (hasSelection || hasImageClick) ? 'block' : 'none';
 
         contextMenu.style.left = `${e.clientX}px`;
@@ -2390,83 +2562,6 @@ function setupContextMenu() {
             canvas.enableRotationMode(canvas.contextMenuImage, contextMenuMousePos.x, contextMenuMousePos.y);
         }
         contextMenu.classList.remove('show');
-    });
-
-    extractPaletteItem.addEventListener('click', async () => {
-        contextMenu.classList.remove('show');
-
-        if (!canvas.contextMenuImage) return;
-
-        const image = canvas.contextMenuImage;
-        const img = image.img;
-
-        try {
-            const { extractColorsFromImage } = await import('./modal-utils.js');
-            const colors = await extractColorsFromImage(img);
-
-            // Calculate grid layout
-            const numColors = colors.length;
-            let gridCols, gridRows, hasWideCell = false;
-
-            if (numColors === 1) {
-                gridCols = 1; gridRows = 1;
-            } else if (numColors === 2) {
-                gridCols = 2; gridRows = 1;
-            } else if (numColors === 3) {
-                gridCols = 2; gridRows = 1; hasWideCell = true;
-            } else if (numColors === 4) {
-                gridCols = 2; gridRows = 2;
-            } else if (numColors === 5) {
-                gridCols = 2; gridRows = 2; hasWideCell = true;
-            } else if (numColors === 6) {
-                gridCols = 3; gridRows = 2;
-            } else if (numColors === 7) {
-                gridCols = 3; gridRows = 2; hasWideCell = true;
-            } else if (numColors === 8) {
-                gridCols = 4; gridRows = 2;
-            } else if (numColors === 9) {
-                gridCols = 3; gridRows = 3;
-            } else {
-                gridCols = 5; gridRows = 2;
-            }
-
-            const baseCellSize = 60;
-            const zoomFactor = 1 / canvas.zoom;
-            const cellSize = baseCellSize * zoomFactor;
-
-            const width = gridCols * cellSize;
-            const height = hasWideCell ? (gridRows + 1) * cellSize : gridRows * cellSize;
-
-            // Place near the image
-            const paletteX = image.x + image.width + 20;
-            const paletteY = image.y;
-
-            // Create color palette object
-            const paletteObject = {
-                type: 'colorPalette',
-                id: Date.now() + Math.random(),
-                x: paletteX,
-                y: paletteY,
-                width: width,
-                height: height,
-                colors: colors,
-                sourceImage: img, // Store source image for regeneration
-                gridCols: gridCols,
-                gridRows: gridRows,
-                cellSize: cellSize,
-                hasWideCell: hasWideCell,
-                zIndex: canvas.objectsManager.objects.reduce((max, obj) => Math.max(max, obj.zIndex || 0), 0) + 1
-            };
-
-            canvas.objectsManager.objects.push(paletteObject);
-            canvas.needsRender = true;
-            canvas.objectsManager.dispatchObjectsChanged();
-
-            showToast(`Extracted ${numColors} color${numColors > 1 ? 's' : ''} from image`, 'success', 3000);
-        } catch (error) {
-            console.error('Error extracting colors:', error);
-            showToast('Error extracting colors from image', 'error');
-        }
     });
 
     document.getElementById('context-recenter').addEventListener('click', () => {
@@ -2897,123 +2992,11 @@ async function openFloatingWindow() {
 function showPropertiesPanel(obj) {
     const propertiesPanel = document.getElementById('object-properties');
     const defaultProperties = document.getElementById('default-properties');
-    const textProperties = document.getElementById('text-properties');
-    const shapeProperties = document.getElementById('shape-properties');
-    const paletteProperties = document.getElementById('palette-properties');
-    const propertiesTitle = document.getElementById('object-properties-title');
 
     if (!propertiesPanel) return;
 
-    // Hide default properties
-    if (defaultProperties) defaultProperties.style.display = 'none';
-
-    // Show properties panel
-    propertiesPanel.style.display = 'flex';
-
-    if (obj.type === 'colorPalette') {
-        propertiesTitle.textContent = 'Color Palette';
-        textProperties.style.display = 'none';
-        shapeProperties.style.display = 'none';
-        paletteProperties.style.display = 'block';
-
-        // Setup regenerate button
-        const regenerateBtn = document.getElementById('palette-regenerate-btn');
-        const newRegenerateBtn = regenerateBtn.cloneNode(true);
-        regenerateBtn.parentNode.replaceChild(newRegenerateBtn, regenerateBtn);
-
-        newRegenerateBtn.addEventListener('click', async () => {
-            // Check if the palette has a sourceImage reference
-            if (!obj.sourceImage) {
-                showToast('Cannot regenerate - source image not found', 'error', 3000);
-                return;
-            }
-
-            try {
-                newRegenerateBtn.disabled = true;
-                newRegenerateBtn.textContent = 'Regenerating...';
-
-                // Extract colors from the source image
-                const { extractColorsFromImage } = await import('./modal-utils.js');
-                const colors = await extractColorsFromImage(obj.sourceImage);
-
-                // Update the palette with new colors
-                obj.colors = colors;
-
-                // Update the color list in the properties panel
-                const colorsList = document.getElementById('palette-colors-list');
-                colorsList.innerHTML = '';
-
-                obj.colors.forEach((color, index) => {
-                    const colorItem = document.createElement('div');
-                    colorItem.className = 'palette-color-item';
-                    colorItem.innerHTML = `
-                        <div class="palette-color-preview" style="background-color: ${color.hex};"></div>
-                        <div class="palette-color-values">
-                            <div class="palette-color-value" data-value="${color.hex}" title="Click to copy">${color.hex}</div>
-                            <div class="palette-color-value" data-value="${color.rgb}" title="Click to copy">${color.rgb}</div>
-                        </div>
-                    `;
-
-                    // Add click to copy functionality
-                    colorItem.querySelectorAll('.palette-color-value').forEach(valueEl => {
-                        valueEl.addEventListener('click', () => {
-                            const value = valueEl.dataset.value;
-                            navigator.clipboard.writeText(value).then(() => {
-                                showToast(`Copied ${value}`, 'success', 2000);
-                            });
-                        });
-                    });
-
-                    colorsList.appendChild(colorItem);
-                });
-
-                canvas.needsRender = true;
-                canvas.objectsManager.dispatchObjectsChanged();
-
-                showToast('Colors regenerated', 'success', 2000);
-            } catch (error) {
-                console.error('Regenerate error:', error);
-                showToast('Failed to regenerate colors', 'error', 3000);
-            } finally {
-                newRegenerateBtn.disabled = false;
-                newRegenerateBtn.textContent = 'Regenerate Colors';
-            }
-        });
-
-        // Populate color palette list
-        const colorsList = document.getElementById('palette-colors-list');
-        colorsList.innerHTML = '';
-
-        obj.colors.forEach((color, index) => {
-            const colorItem = document.createElement('div');
-            colorItem.className = 'palette-color-item';
-            colorItem.innerHTML = `
-                <div class="palette-color-preview" style="background-color: ${color.hex};"></div>
-                <div class="palette-color-values">
-                    <div class="palette-color-value" data-value="${color.hex}" title="Click to copy">${color.hex}</div>
-                    <div class="palette-color-value" data-value="${color.rgb}" title="Click to copy">${color.rgb}</div>
-                </div>
-            `;
-
-            // Add click to copy functionality
-            colorItem.querySelectorAll('.palette-color-value').forEach(valueEl => {
-                valueEl.addEventListener('click', () => {
-                    const value = valueEl.dataset.value;
-                    navigator.clipboard.writeText(value).then(() => {
-                        showToast(`Copied ${value}`, 'success', 2000);
-                    });
-                });
-            });
-
-            colorsList.appendChild(colorItem);
-        });
-    } else if (obj.type === 'shape') {
-        // Shape objects now use floating toolbar, hide properties panel
-        if (defaultProperties) defaultProperties.style.display = 'block';
-        propertiesPanel.style.display = 'none';
-        return;
-    } else if (obj.type === 'text') {
-        // Text objects now use floating toolbar, hide properties panel
+    // Shape and text objects use floating toolbar, hide properties panel
+    if (obj.type === 'shape' || obj.type === 'text') {
         if (defaultProperties) defaultProperties.style.display = 'block';
         propertiesPanel.style.display = 'none';
         return;
@@ -3042,16 +3025,16 @@ function hidePropertiesPanel() {
 function showFloatingToolbar(obj) {
     const textToolbar = document.getElementById('floating-text-toolbar');
     const shapeToolbar = document.getElementById('floating-shape-toolbar');
+    const palettePopup = document.getElementById('color-palette-popup');
 
-    // Hide all toolbars first
-    hideFloatingToolbars();
-
-    // Only show floating toolbars for text and shape objects
+    // Show floating toolbars based on object type
     if (obj.type === 'text') {
+        hideFloatingToolbars();
         textToolbar.style.display = 'block';
         positionFloatingToolbar(textToolbar, obj);
         setupTextFloatingToolbar(obj);
     } else if (obj.type === 'shape') {
+        hideFloatingToolbars();
         shapeToolbar.style.display = 'block';
         positionFloatingToolbar(shapeToolbar, obj);
         setupShapeFloatingToolbar(obj);
@@ -3514,9 +3497,11 @@ function setupLayerContextMenu() {
 
 function setupColorExtractorTool() {
     const colorExtractorBtn = document.getElementById('color-extractor-btn');
+
     if (!colorExtractorBtn) return;
 
     colorExtractorBtn.addEventListener('click', async () => {
+
         // Open color extractor modal
         const result = await showColorExtractorModal();
 
@@ -3553,10 +3538,8 @@ function setupColorExtractorTool() {
         }
 
         // Auto-scale based on zoom level
-        // When zoomed out (zoom < 1), make palette bigger so it's visible
-        // When zoomed in (zoom > 1), make it smaller so it's not huge
         const baseCellSize = 60;
-        const zoomFactor = 1 / canvas.zoom; // Inverse of zoom
+        const zoomFactor = 1 / canvas.zoom;
         const cellSize = baseCellSize * zoomFactor;
 
         const width = gridCols * cellSize;
@@ -3572,7 +3555,7 @@ function setupColorExtractorTool() {
         const paletteNumber = existingPalettes.length + 1;
         const paletteName = `Palette ${paletteNumber}`;
 
-        // Create color palette object
+        // Create color palette object on canvas
         const paletteObject = {
             type: 'colorPalette',
             id: Date.now() + Math.random(),
@@ -3582,7 +3565,7 @@ function setupColorExtractorTool() {
             width: width,
             height: height,
             colors: colors,
-            sourceImage: sourceImage, // Store source image for regeneration
+            sourceImage: sourceImage,
             gridCols: gridCols,
             gridRows: gridRows,
             cellSize: cellSize,
@@ -3597,6 +3580,199 @@ function setupColorExtractorTool() {
 
         showToast(`Color palette created with ${numColors} color${numColors > 1 ? 's' : ''}`, 'success', 3000);
     });
+
+}
+
+function populateColorPalette(colors) {
+    const grid = document.getElementById('color-palette-grid');
+    if (!grid) return;
+
+    console.log('Populating palette with colors:', colors);
+
+    // Create swatches in horizontal row
+    grid.innerHTML = colors.map((color, index) => {
+        // Handle both object format {hex, rgb} and string format
+        const hexColor = typeof color === 'string' ? color : color.hex;
+        const rgbColor = typeof color === 'string' ? null : color.rgb;
+
+        return `
+            <div class="color-palette-swatch"
+                 style="background-color: ${hexColor};"
+                 data-hex="${hexColor}"
+                 data-rgb="${rgbColor || ''}"
+                 data-index="${index}"
+                 title="${hexColor.toUpperCase()}">
+            </div>
+        `;
+    }).join('');
+
+    // Add click handler to show copy options
+    grid.querySelectorAll('.color-palette-swatch').forEach(swatch => {
+        swatch.addEventListener('click', (e) => {
+            const hex = swatch.dataset.hex;
+            const rgb = swatch.dataset.rgb;
+            showColorCopyOptions(hex, rgb, e.clientX, e.clientY);
+        });
+    });
+}
+
+function showColorCopyOptions(hexColor, rgbColor, x, y) {
+    // Remove any existing copy menu
+    const existingMenu = document.getElementById('color-copy-menu');
+    if (existingMenu) existingMenu.remove();
+
+    const hexText = hexColor.toUpperCase();
+    const rgbText = rgbColor || (() => {
+        const rgb = hexToRgb(hexColor);
+        return `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`;
+    })();
+
+    // Create copy menu
+    const menu = document.createElement('div');
+    menu.id = 'color-copy-menu';
+    menu.className = 'color-copy-menu';
+    menu.innerHTML = `
+        <div class="color-copy-option" data-value="${hexText}">
+            <span class="copy-label">HEX</span>
+            <span class="copy-value">${hexText}</span>
+        </div>
+        <div class="color-copy-option" data-value="${rgbText}">
+            <span class="copy-label">RGB</span>
+            <span class="copy-value">${rgbText}</span>
+        </div>
+    `;
+
+    // Position at center of screen if no coordinates provided
+    if (x === undefined || y === undefined) {
+        x = window.innerWidth / 2;
+        y = window.innerHeight / 2;
+    }
+
+    menu.style.left = `${x}px`;
+    menu.style.top = `${y}px`;
+    document.body.appendChild(menu);
+
+    // Position menu to not go off screen
+    const rect = menu.getBoundingClientRect();
+    if (rect.right > window.innerWidth) {
+        menu.style.left = `${x - rect.width}px`;
+    }
+    if (rect.bottom > window.innerHeight) {
+        menu.style.top = `${y - rect.height}px`;
+    }
+
+    // Add click handlers
+    menu.querySelectorAll('.color-copy-option').forEach(option => {
+        option.addEventListener('click', async () => {
+            const value = option.dataset.value;
+            try {
+                await navigator.clipboard.writeText(value);
+                showToast(`Copied ${value}`, 'success', 1500);
+                menu.remove();
+            } catch (err) {
+                console.error('Failed to copy:', err);
+                showToast('Failed to copy', 'error', 1500);
+            }
+        });
+    });
+
+    // Close menu on outside click - delay to prevent immediate close
+    setTimeout(() => {
+        const closeHandler = (e) => {
+            if (!menu.contains(e.target)) {
+                menu.remove();
+                document.removeEventListener('click', closeHandler);
+            }
+        };
+        document.addEventListener('click', closeHandler);
+    }, 200);
+}
+
+function showPaletteModal(paletteObj) {
+    const modal = document.createElement('div');
+    modal.className = 'modal-overlay';
+    modal.innerHTML = `
+        <div class="modal" style="max-width: 600px;">
+            <div class="modal-header">
+                <h2>Color Palette</h2>
+            </div>
+            <div class="modal-body">
+                <div id="palette-modal-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 16px; padding: 8px;">
+                    <!-- Colors will be populated here -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="modal-btn modal-btn-secondary" id="palette-modal-close">Close</button>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+    modal.style.display = 'flex';
+
+    // Populate colors
+    const grid = modal.querySelector('#palette-modal-grid');
+    paletteObj.colors.forEach(color => {
+        const hexColor = typeof color === 'string' ? color : color.hex;
+        const rgbColor = typeof color === 'string' ? null : color.rgb;
+
+        const colorItem = document.createElement('div');
+        colorItem.style.cssText = 'display: flex; flex-direction: column; align-items: center; gap: 8px;';
+        colorItem.innerHTML = `
+            <div style="width: 100%; aspect-ratio: 1; background-color: ${hexColor}; border-radius: 8px; border: 2px solid var(--border-color); cursor: pointer;"></div>
+            <div style="display: flex; flex-direction: column; gap: 4px; width: 100%;">
+                <button class="copy-hex-btn" style="padding: 6px 12px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-secondary); color: var(--text-primary); cursor: pointer; font-size: 12px;">
+                    Copy HEX
+                </button>
+                <button class="copy-rgb-btn" style="padding: 6px 12px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-secondary); color: var(--text-primary); cursor: pointer; font-size: 12px;">
+                    Copy RGB
+                </button>
+            </div>
+        `;
+
+        const hexBtn = colorItem.querySelector('.copy-hex-btn');
+        const rgbBtn = colorItem.querySelector('.copy-rgb-btn');
+
+        hexBtn.addEventListener('click', async () => {
+            try {
+                await navigator.clipboard.writeText(hexColor.toUpperCase());
+                showToast(`Copied ${hexColor.toUpperCase()}`, 'success', 1500);
+            } catch (err) {
+                showToast('Failed to copy', 'error', 1500);
+            }
+        });
+
+        rgbBtn.addEventListener('click', async () => {
+            const rgbText = rgbColor || (() => {
+                const rgb = hexToRgb(hexColor);
+                return `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`;
+            })();
+            try {
+                await navigator.clipboard.writeText(rgbText);
+                showToast(`Copied ${rgbText}`, 'success', 1500);
+            } catch (err) {
+                showToast('Failed to copy', 'error', 1500);
+            }
+        });
+
+        grid.appendChild(colorItem);
+    });
+
+    // Close modal on overlay click
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+            modal.remove();
+        }
+    });
+}
+
+function hexToRgb(hex) {
+    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    return result ? {
+        r: parseInt(result[1], 16),
+        g: parseInt(result[2], 16),
+        b: parseInt(result[3], 16)
+    } : { r: 0, g: 0, b: 0 };
 }
 
 // Keyboard Shortcuts Modal

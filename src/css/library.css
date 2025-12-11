@@ -407,6 +407,40 @@
     }
 }
 
+/* Skeleton Loading State */
+.library-skeleton-card {
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    overflow: hidden;
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
+.library-skeleton-image {
+    width: 100%;
+    aspect-ratio: 1;
+    background: var(--bg-tertiary);
+}
+
+.library-skeleton-info {
+    padding: 12px;
+}
+
+.library-skeleton-text {
+    height: 12px;
+    background: var(--bg-tertiary);
+    border-radius: 4px;
+    width: 60%;
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.5;
+    }
+}
+
 /* Download Toast Notification */
 .download-toast {
     position: fixed;
