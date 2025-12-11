@@ -231,7 +231,9 @@ export class Canvas {
         this.canvas.addEventListener('drop', this.onDrop.bind(this));
         
         document.addEventListener('keydown', (e) => {
-            if (e.key === ' ' && !this.isPanning && !e.repeat) {
+            // Don't prevent spacebar if editing text
+            const isEditingText = this.objectsManager.editingTextObject !== null;
+            if (e.key === ' ' && !this.isPanning && !e.repeat && !isEditingText) {
                 e.preventDefault();
                 this.canvas.style.cursor = 'grab';
             }
@@ -350,6 +352,16 @@ export class Canvas {
         if (this.objectsManager.currentTool) {
             if (this.objectsManager.handleMouseDown(e, { x, y })) {
                 return;
+            }
+        }
+
+        // Check for object rotation handles FIRST (before checking for clicked objects)
+        if (this.objectsManager.selectedObjects.length > 0) {
+            for (const obj of this.objectsManager.selectedObjects) {
+                if (this.objectsManager.isPointOnObjectRotationHandle(obj, x, y)) {
+                    this.enableRotationMode(obj, x, y);
+                    return;
+                }
             }
         }
 
@@ -478,7 +490,8 @@ export class Canvas {
                 x: this.selectedImage.x,
                 y: this.selectedImage.y,
                 width: this.selectedImage.width,
-                height: this.selectedImage.height
+                height: this.selectedImage.height,
+                rotation: this.selectedImage.rotation || 0
             };
             if (this.isPointOnRotationHandle(x, y, imgBounds)) {
                 this.enableRotationMode(this.selectedImage, x, y);
@@ -828,6 +841,7 @@ export class Canvas {
         this.canvas.style.cursor = 'default';
 
         if (wasModifying) {
+            this.needsRender = true;
             this.notifyChange();
         }
 
@@ -1382,12 +1396,27 @@ export class Canvas {
         if (!bounds) return false;
 
         const handleSize = 10 / this.zoom;
-        const midX = bounds.x + bounds.width / 2;
+        const centerX = bounds.x + bounds.width / 2;
+        const centerY = bounds.y + bounds.height / 2;
         const rotationHandleOffset = 30 / this.zoom;
-        const rotationHandleY = bounds.y - rotationHandleOffset;
 
-        const dx = x - midX;
-        const dy = y - rotationHandleY;
+        // Calculate handle position
+        let handleX = centerX;
+        let handleY = bounds.y - rotationHandleOffset;
+
+        // If bounds has rotation, rotate the handle position around the center
+        if (bounds.rotation && bounds.rotation !== 0) {
+            const angleRad = (bounds.rotation * Math.PI) / 180;
+            const dx = handleX - centerX;
+            const dy = handleY - centerY;
+            const rotatedDx = dx * Math.cos(angleRad) - dy * Math.sin(angleRad);
+            const rotatedDy = dx * Math.sin(angleRad) + dy * Math.cos(angleRad);
+            handleX = centerX + rotatedDx;
+            handleY = centerY + rotatedDy;
+        }
+
+        const dx = x - handleX;
+        const dy = y - handleY;
         const distance = Math.sqrt(dx * dx + dy * dy);
 
         return distance < handleSize;

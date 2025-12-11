@@ -213,9 +213,11 @@ async function initEditor() {
     // Text/shape object events
     canvasElement.addEventListener('objectSelected', (e) => {
         showPropertiesPanel(e.detail);
+        showFloatingToolbar(e.detail);
     });
     canvasElement.addEventListener('objectDeselected', () => {
         hidePropertiesPanel();
+        hideFloatingToolbars();
     });
     canvasElement.addEventListener('objectDoubleClicked', (e) => {
         const obj = e.detail;
@@ -351,9 +353,37 @@ function setupEventListeners() {
     
     document.getElementById('collapse-layers-btn').addEventListener('click', (e) => {
         const content = document.getElementById('layers-content');
-        const btn = e.target;
+        const btn = e.currentTarget;
         content.classList.toggle('collapsed');
-        btn.textContent = content.classList.contains('collapsed') ? '+' : '−';
+
+        const isCollapsed = content.classList.contains('collapsed');
+        btn.innerHTML = isCollapsed ? `
+            <svg class="collapse-icon collapse-icon-dark" width="14" height="14" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M45 33C39.4772 33 35 37.4772 35 43C35 48.5228 39.4772 53 45 53V43V33ZM114 53H124V33H114V43V53ZM45 43V53H114V43V33H45V43Z" fill="white"/>
+                <path d="M55 43C55 37.4772 50.5228 33 45 33C39.4772 33 35 37.4772 35 43H45H55ZM35 112L35 122H55L55 112H45H35ZM45 43H35V112H45H55V43H45Z" fill="white"/>
+                <path d="M214 225C219.523 225 224 220.523 224 215C224 209.477 219.523 205 214 205V215V225ZM145 205H135V225H145V215V205ZM214 215V205L145 205V215V225L214 225V215Z" fill="white"/>
+                <path d="M204 215C204 220.523 208.477 225 214 225C219.523 225 224 220.523 224 215H214H204ZM224 146L224 136H204L204 146H214H224ZM214 215H224V146H214H204V215H214Z" fill="white"/>
+            </svg>
+            <svg class="collapse-icon collapse-icon-light" width="14" height="14" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M45 33C39.4772 33 35 37.4772 35 43C35 48.5228 39.4772 53 45 53V43V33ZM114 53H124V33H114V43V53ZM45 43V53H114V43V33H45V43Z" fill="black"/>
+                <path d="M55 43C55 37.4772 50.5228 33 45 33C39.4772 33 35 37.4772 35 43H45H55ZM35 112L35 122H55L55 112H45H35ZM45 43H35V112H45H55V43H45Z" fill="black"/>
+                <path d="M214 225C219.523 225 224 220.523 224 215C224 209.477 219.523 205 214 205V215V225ZM145 205H135V225H145V215V205ZM214 215V205L145 205V215V225L214 225V215Z" fill="black"/>
+                <path d="M204 215C204 220.523 208.477 225 214 225C219.523 225 224 220.523 224 215H214H204ZM224 146L224 136H204L204 146H214H224ZM214 215H224V146H214H204V215H214Z" fill="black"/>
+            </svg>
+        ` : `
+            <svg class="collapse-icon collapse-icon-dark" width="14" height="14" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M114 122C119.523 122 124 117.523 124 112C124 106.477 119.523 102 114 102V112V122ZM45 102H35V122H45V112V102ZM114 112V102H45V112V122H114V112Z" fill="white"/>
+                <path d="M104 112C104 117.523 108.477 122 114 122C119.523 122 124 117.523 124 112H114H104ZM124 43V33H104V43H114H124ZM114 112H124V43H114H104V112H114Z" fill="white"/>
+                <path d="M145 136C139.477 136 135 140.477 135 146C135 151.523 139.477 156 145 156V146V136ZM214 156H224V136H214V146V156ZM145 146V156H214V146V136H145V146Z" fill="white"/>
+                <path d="M155 146C155 140.477 150.523 136 145 136C139.477 136 135 140.477 135 146H145H155ZM135 215V225H155V215H145H135ZM145 146H135V215H145H155V146H145Z" fill="white"/>
+            </svg>
+            <svg class="collapse-icon collapse-icon-light" width="14" height="14" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M114 122C119.523 122 124 117.523 124 112C124 106.477 119.523 102 114 102V112V122ZM45 102H35V122H45V112V102ZM114 112V102H45V112V122H114V112Z" fill="black"/>
+                <path d="M104 112C104 117.523 108.477 122 114 122C119.523 122 124 117.523 124 112H114H104ZM124 43V33H104V43H114H124ZM114 112H124V43H114H104V112H114Z" fill="black"/>
+                <path d="M145 136C139.477 136 135 140.477 135 146C135 151.523 139.477 156 145 156V146V136ZM214 156H224V136H214V146V156ZM145 146V156H214V146V136H145V146Z" fill="black"/>
+                <path d="M155 146C155 140.477 150.523 136 145 136C139.477 136 135 140.477 135 146H145H155ZM135 215V225H155V215H145H135ZM145 146H135V215H145H155V146H145Z" fill="black"/>
+            </svg>
+        `;
     });
 
     document.getElementById('assets-view-toggle').addEventListener('change', (e) => {
@@ -744,9 +774,9 @@ function createLayerItem(img, images) {
     });
 
     // Layer icon (image icon)
-    const layerIcon = document.createElement('div');
+    const layerIcon = document.createElement('img');
     layerIcon.className = 'layer-icon';
-    layerIcon.textContent = 'I';
+    layerIcon.src = 'assets/layericon.svg';
 
     const layerContent = document.createElement('div');
     layerContent.className = 'layer-content';
@@ -883,11 +913,23 @@ function createLayerItem(img, images) {
         const targetId = img.id;
         if (targetId === draggedLayerId && draggedLayerType === 'image') return;
 
+        // Clear all drag-over indicators first
+        document.querySelectorAll('.drag-over-above, .drag-over-below').forEach(el => {
+            el.classList.remove('drag-over-above', 'drag-over-below');
+        });
+
         if (allLayersOrder.length > 0) {
             // Edge detection: determine if hovering over top or bottom half
             const rect = layerItem.getBoundingClientRect();
             const midpoint = rect.top + rect.height / 2;
             const insertBefore = e.clientY < midpoint;
+
+            // Add visual indicator
+            if (insertBefore) {
+                layerItem.classList.add('drag-over-above');
+            } else {
+                layerItem.classList.add('drag-over-below');
+            }
 
             if (draggedLayerType === 'group') {
                 // If dragging a group onto a regular layer, move all group layers together
@@ -962,6 +1004,14 @@ function createLayerItem(img, images) {
         }
     });
 
+    layerItem.addEventListener('dragleave', (e) => {
+        layerItem.classList.remove('drag-over-above', 'drag-over-below');
+    });
+
+    layerItem.addEventListener('drop', (e) => {
+        layerItem.classList.remove('drag-over-above', 'drag-over-below');
+    });
+
     return layerItem;
 }
 
@@ -1008,14 +1058,14 @@ function createObjectLayerItem(obj, objects) {
     });
 
     // Layer icon based on type
-    const layerIcon = document.createElement('div');
+    const layerIcon = document.createElement('img');
     layerIcon.className = 'layer-icon';
     if (obj.type === 'text') {
-        layerIcon.textContent = 'T';
+        layerIcon.src = 'assets/TextIcon.svg';
     } else if (obj.type === 'shape') {
-        layerIcon.textContent = 'S';
+        layerIcon.src = 'assets/ShapeIcon.svg';
     } else if (obj.type === 'colorPalette') {
-        layerIcon.textContent = 'P';
+        layerIcon.src = 'assets/ColorPalette.svg';
     }
 
     const layerContent = document.createElement('div');
@@ -1149,11 +1199,23 @@ function createObjectLayerItem(obj, objects) {
         const targetId = obj.id;
         if (targetId === draggedLayerId && draggedLayerType === 'object') return;
 
+        // Clear all drag-over indicators first
+        document.querySelectorAll('.drag-over-above, .drag-over-below').forEach(el => {
+            el.classList.remove('drag-over-above', 'drag-over-below');
+        });
+
         if (allLayersOrder.length > 0) {
             // Edge detection: determine if hovering over top or bottom half
             const rect = layerItem.getBoundingClientRect();
             const midpoint = rect.top + rect.height / 2;
             const insertBefore = e.clientY < midpoint;
+
+            // Add visual indicator
+            if (insertBefore) {
+                layerItem.classList.add('drag-over-above');
+            } else {
+                layerItem.classList.add('drag-over-below');
+            }
 
             if (draggedLayerType === 'group') {
                 // If dragging a group onto an object layer, move all group layers together
@@ -1226,6 +1288,14 @@ function createObjectLayerItem(obj, objects) {
                 }
             }
         }
+    });
+
+    layerItem.addEventListener('dragleave', () => {
+        layerItem.classList.remove('drag-over-above', 'drag-over-below');
+    });
+
+    layerItem.addEventListener('drop', () => {
+        layerItem.classList.remove('drag-over-above', 'drag-over-below');
     });
 
     return layerItem;
@@ -1327,6 +1397,54 @@ function createGroupElement(group, allLayers, images, objects) {
     groupHeader.className = 'group-header';
     groupHeader.draggable = true;
 
+    // Collapse/expand toggle button
+    const collapseToggle = document.createElement('button');
+    collapseToggle.className = 'group-collapse-toggle';
+    collapseToggle.type = 'button';
+
+    // Create icon container with both dark and light mode versions
+    const updateToggleIcon = (collapsed) => {
+        collapseToggle.innerHTML = collapsed ? `
+            <svg class="group-toggle-icon group-toggle-icon-dark" width="16" height="16" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M45 33C39.4772 33 35 37.4772 35 43C35 48.5228 39.4772 53 45 53V43V33ZM114 53H124V33H114V43V53ZM45 43V53H114V43V33H45V43Z" fill="white"/>
+                <path d="M55 43C55 37.4772 50.5228 33 45 33C39.4772 33 35 37.4772 35 43H45H55ZM35 112L35 122H55L55 112H45H35ZM45 43H35V112H45H55V43H45Z" fill="white"/>
+                <path d="M214 225C219.523 225 224 220.523 224 215C224 209.477 219.523 205 214 205V215V225ZM145 205H135V225H145V215V205ZM214 215V205L145 205V215V225L214 225V215Z" fill="white"/>
+                <path d="M204 215C204 220.523 208.477 225 214 225C219.523 225 224 220.523 224 215H214H204ZM224 146L224 136H204L204 146H214H224ZM214 215H224V146H214H204V215H214Z" fill="white"/>
+            </svg>
+            <svg class="group-toggle-icon group-toggle-icon-light" width="16" height="16" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M45 33C39.4772 33 35 37.4772 35 43C35 48.5228 39.4772 53 45 53V43V33ZM114 53H124V33H114V43V53ZM45 43V53H114V43V33H45V43Z" fill="black"/>
+                <path d="M55 43C55 37.4772 50.5228 33 45 33C39.4772 33 35 37.4772 35 43H45H55ZM35 112L35 122H55L55 112H45H35ZM45 43H35V112H45H55V43H45Z" fill="black"/>
+                <path d="M214 225C219.523 225 224 220.523 224 215C224 209.477 219.523 205 214 205V215V225ZM145 205H135V225H145V215V205ZM214 215V205L145 205V215V225L214 225V215Z" fill="black"/>
+                <path d="M204 215C204 220.523 208.477 225 214 225C219.523 225 224 220.523 224 215H214H204ZM224 146L224 136H204L204 146H214H224ZM214 215H224V146H214H204V215H214Z" fill="black"/>
+            </svg>
+        ` : `
+            <svg class="group-toggle-icon group-toggle-icon-dark" width="16" height="16" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M114 122C119.523 122 124 117.523 124 112C124 106.477 119.523 102 114 102V112V122ZM45 102H35V122H45V112V102ZM114 112V102H45V112V122H114V112Z" fill="white"/>
+                <path d="M104 112C104 117.523 108.477 122 114 122C119.523 122 124 117.523 124 112H114H104ZM124 43V33H104V43H114H124ZM114 112H124V43H114H104V112H114Z" fill="white"/>
+                <path d="M145 136C139.477 136 135 140.477 135 146C135 151.523 139.477 156 145 156V146V136ZM214 156H224V136H214V146V156ZM145 146V156H214V146V136H145V146Z" fill="white"/>
+                <path d="M155 146C155 140.477 150.523 136 145 136C139.477 136 135 140.477 135 146H145H155ZM135 215V225H155V215H145H135ZM145 146H135V215H145H155V146H145Z" fill="white"/>
+            </svg>
+            <svg class="group-toggle-icon group-toggle-icon-light" width="16" height="16" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M114 122C119.523 122 124 117.523 124 112C124 106.477 119.523 102 114 102V112V122ZM45 102H35V122H45V112V102ZM114 112V102H45V112V122H114V112Z" fill="black"/>
+                <path d="M104 112C104 117.523 108.477 122 114 122C119.523 122 124 117.523 124 112H114H104ZM124 43V33H104V43H114H124ZM114 112H124V43H114H104V112H114Z" fill="black"/>
+                <path d="M145 136C139.477 136 135 140.477 135 146C135 151.523 139.477 156 145 156V146V136ZM214 156H224V136H214V146V156ZM145 146V156H214V146V136H145V146Z" fill="black"/>
+                <path d="M155 146C155 140.477 150.523 136 145 136C139.477 136 135 140.477 135 146H145H155ZM135 215V225H155V215H145H135ZM145 146H135V215H145H155V146H145Z" fill="black"/>
+            </svg>
+        `;
+        collapseToggle.title = collapsed ? 'Expand group' : 'Collapse group';
+    };
+
+    updateToggleIcon(group.collapsed);
+
+    collapseToggle.addEventListener('click', (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        group.collapsed = !group.collapsed;
+        updateToggleIcon(group.collapsed);
+        renderLayers();
+        scheduleSave();
+    });
+
     // Drag handle
     const dragHandle = document.createElement('div');
     dragHandle.className = 'layer-drag-handle';
@@ -1337,10 +1455,9 @@ function createGroupElement(group, allLayers, images, objects) {
     `;
 
     // Group icon
-    const groupIcon = document.createElement('div');
+    const groupIcon = document.createElement('img');
     groupIcon.className = 'layer-icon';
-    groupIcon.textContent = 'G';
-    groupIcon.style.fontWeight = '600';
+    groupIcon.src = 'assets/foldericon.svg';
 
     // Group content (name wrapper)
     const groupContent = document.createElement('div');
@@ -1377,6 +1494,7 @@ function createGroupElement(group, allLayers, images, objects) {
 
     groupControls.appendChild(deleteBtn);
 
+    groupHeader.appendChild(collapseToggle);
     groupHeader.appendChild(dragHandle);
     groupHeader.appendChild(groupIcon);
     groupHeader.appendChild(groupContent);
@@ -1607,7 +1725,7 @@ function createGroupElement(group, allLayers, images, objects) {
 
     // Create children container
     const childrenContainer = document.createElement('div');
-    childrenContainer.className = 'group-children';
+    childrenContainer.className = group.collapsed ? 'group-children collapsed' : 'group-children';
 
     // Render child layers
     // Get layers that belong to this group
@@ -1638,16 +1756,24 @@ function createGroupElement(group, allLayers, images, objects) {
 }
 
 function showGroupContextMenu(x, y, group) {
-    // Remove existing context menu
-    const existingMenu = document.querySelector('.layer-context-menu');
-    if (existingMenu) {
-        existingMenu.remove();
+    console.log('showGroupContextMenu called for group:', group.name);
+
+    // Remove existing group context menus (but not the permanent layer-context-menu)
+    const existingMenus = document.querySelectorAll('.group-context-menu');
+    existingMenus.forEach(menu => menu.remove());
+
+    // Also hide the layer context menu if visible
+    const layerContextMenu = document.getElementById('layer-context-menu');
+    if (layerContextMenu) {
+        layerContextMenu.classList.remove('show');
     }
 
     const menu = document.createElement('div');
-    menu.className = 'layer-context-menu';
+    menu.className = 'layer-context-menu group-context-menu show';
     menu.style.left = x + 'px';
     menu.style.top = y + 'px';
+    menu.style.position = 'fixed';
+    menu.style.zIndex = '10000';
 
     const renameItem = document.createElement('div');
     renameItem.className = 'layer-context-menu-item';
@@ -1660,6 +1786,56 @@ function showGroupContextMenu(x, y, group) {
             renderLayers();
             scheduleSave();
         }
+    });
+
+    const duplicateItem = document.createElement('div');
+    duplicateItem.className = 'layer-context-menu-item';
+    duplicateItem.textContent = 'Duplicate';
+    duplicateItem.addEventListener('click', async () => {
+        menu.remove();
+
+        // Create new group with duplicated layers
+        const newGroup = {
+            id: Date.now() + Math.random(),
+            name: group.name + ' Copy',
+            layerIds: [],
+            objectIds: [],
+            collapsed: false
+        };
+
+        // Duplicate all image layers in the group
+        const images = canvas.getImages();
+        for (const imageId of group.layerIds) {
+            const originalImage = images.find(img => img.id === imageId);
+            if (originalImage) {
+                const duplicatedImage = await canvas.duplicateImage(originalImage);
+                if (duplicatedImage) {
+                    newGroup.layerIds.push(duplicatedImage.id);
+                }
+            }
+        }
+
+        // Duplicate all object layers in the group
+        if (group.objectIds) {
+            const objects = canvas.objectsManager.getObjects();
+            for (const objectId of group.objectIds) {
+                const originalObject = objects.find(obj => obj.id === objectId);
+                if (originalObject) {
+                    const duplicatedObject = canvas.objectsManager.duplicateObject(originalObject);
+                    if (duplicatedObject) {
+                        newGroup.objectIds.push(duplicatedObject.id);
+                    }
+                }
+            }
+        }
+
+        // Add new group to layerGroups
+        layerGroups.push(newGroup);
+
+        canvas.invalidateCullCache();
+        canvas.render();
+        renderLayers();
+        scheduleSave();
     });
 
     const separator = document.createElement('div');
@@ -1712,6 +1888,7 @@ function showGroupContextMenu(x, y, group) {
     });
 
     menu.appendChild(renameItem);
+    menu.appendChild(duplicateItem);
     menu.appendChild(separator);
     menu.appendChild(ungroupItem);
     menu.appendChild(deleteItem);
@@ -1761,6 +1938,15 @@ function reorderLayerElementsVisually() {
             }
         });
 
+        // Also track layers within groups
+        layersList.querySelectorAll('.group-children .layer-item').forEach(el => {
+            const id = el.dataset.layerId;
+            if (id && !elements.has(id)) {
+                elements.set(id, el);
+                oldPositions.set(id, el.getBoundingClientRect().top);
+            }
+        });
+
         // Get the correct order based on allLayersOrder (reversed for visual top-to-bottom)
         const reversedOrder = [...allLayersOrder].reverse();
         const renderedGroups = new Set();
@@ -1783,6 +1969,28 @@ function reorderLayerElementsVisually() {
                     layersList.appendChild(layerEl);
                 }
             }
+        });
+
+        // Reorder layers within each group's children container
+        layerGroups.forEach(group => {
+            const groupEl = elements.get(String(group.id));
+            if (!groupEl) return;
+
+            const childrenContainer = groupEl.querySelector('.group-children');
+            if (!childrenContainer) return;
+
+            // Get the layers that belong to this group in the correct order
+            const groupLayerOrder = reversedOrder.filter(layer =>
+                group.layerIds.includes(layer.data.id) || (group.objectIds && group.objectIds.includes(layer.data.id))
+            );
+
+            // Reorder the children
+            groupLayerOrder.forEach(layer => {
+                const layerEl = childrenContainer.querySelector(`[data-layer-id="${layer.data.id}"]`);
+                if (layerEl && layerEl.parentNode === childrenContainer) {
+                    childrenContainer.appendChild(layerEl);
+                }
+            });
         });
 
         // Only animate if NOT currently dragging (animate on drop only)
@@ -2060,12 +2268,27 @@ async function renderAssets() {
         deleteBtn.addEventListener('click', async (e) => {
             e.stopPropagation();
             showDeleteConfirm(asset.name, async () => {
+                // Animate out
+                assetItem.style.opacity = '0';
+                assetItem.style.transform = 'scale(0.8)';
+
+                // Delete from backend
                 if (showAllAssets) {
                     await boardManager.deleteFromAllAssets(asset.id);
                 } else {
                     await boardManager.deleteBoardAsset(currentBoardId, asset.id);
                 }
-                renderAssets();
+
+                // Remove from DOM after animation
+                setTimeout(() => {
+                    assetItem.remove();
+                    // Check if grid is now empty
+                    if (assetsGrid.children.length === 0) {
+                        assetsGrid.innerHTML = showAllAssets
+                            ? '<div class="empty-message">No assets yet</div>'
+                            : '<div class="empty-message">No board assets yet</div>';
+                    }
+                }, 200);
             });
         });
         
@@ -2306,33 +2529,120 @@ function importAssets() {
     input.type = 'file';
     input.accept = 'image/*';
     input.multiple = true;
-    
+
     input.onchange = (e) => {
         const files = Array.from(e.target.files);
+        const assetsGrid = document.getElementById('assets-grid');
+
+        // Remove empty message if it exists
+        const emptyMessage = assetsGrid.querySelector('.empty-message');
+        if (emptyMessage) {
+            emptyMessage.remove();
+        }
+
         files.forEach(file => {
             const reader = new FileReader();
             reader.onload = async (event) => {
                 const board = boardManager.currentBoard;
                 if (!board.assets) board.assets = [];
-                
+
                 const existsInBoard = board.assets.some(a => a.name === file.name);
                 if (!existsInBoard) {
-                    board.assets.push({
+                    const newAsset = {
                         id: Date.now() + Math.random(),
                         src: event.target.result,
                         name: file.name
-                    });
+                    };
+                    board.assets.push(newAsset);
+
+                    // Update backend
+                    await boardManager.updateBoard(currentBoardId, { assets: board.assets });
+                    const allAsset = await boardManager.addToAllAssets(file.name, event.target.result);
+
+                    // Add to DOM immediately - use the asset from "All Assets" if available
+                    const assetToDisplay = (showAllAssets && allAsset) ? allAsset : newAsset;
+                    appendAssetToDOM(assetToDisplay, assetsGrid);
                 }
-                
-                await boardManager.updateBoard(currentBoardId, { assets: board.assets });
-                await boardManager.addToAllAssets(file.name, event.target.result);
-                renderAssets();
             };
             reader.readAsDataURL(file);
         });
     };
-    
+
     input.click();
+}
+
+// Helper function to append a single asset to DOM
+function appendAssetToDOM(asset, container) {
+    const assetItem = document.createElement('div');
+    assetItem.className = 'asset-item';
+    assetItem.style.opacity = '0';
+    assetItem.style.transform = 'scale(0.8)';
+
+    const img = document.createElement('img');
+    img.src = asset.src;
+    img.draggable = false;
+
+    const deleteBtn = document.createElement('button');
+    deleteBtn.className = 'asset-delete-btn';
+    deleteBtn.textContent = '×';
+    deleteBtn.title = showAllAssets ? 'Delete from all assets' : 'Delete from board';
+    deleteBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        showDeleteConfirm(asset.name, async () => {
+            assetItem.style.opacity = '0';
+            assetItem.style.transform = 'scale(0.8)';
+
+            if (showAllAssets) {
+                await boardManager.deleteFromAllAssets(asset.id);
+            } else {
+                await boardManager.deleteBoardAsset(currentBoardId, asset.id);
+            }
+
+            setTimeout(() => {
+                assetItem.remove();
+                if (container.children.length === 0) {
+                    container.innerHTML = showAllAssets
+                        ? '<div class="empty-message">No assets yet</div>'
+                        : '<div class="empty-message">No board assets yet</div>';
+                }
+            }, 200);
+        });
+    });
+
+    assetItem.appendChild(img);
+    assetItem.appendChild(deleteBtn);
+
+    assetItem.addEventListener('click', async () => {
+        const imgElement = new Image();
+        imgElement.onload = async () => {
+            canvas.addImage(imgElement, 100, 100, asset.name);
+            renderLayers();
+
+            if (showAllAssets) {
+                const board = boardManager.currentBoard;
+                const boardAssets = board.assets || [];
+                const existsInBoard = boardAssets.some(a => a.name === asset.name && a.src === asset.src);
+                if (!existsInBoard) {
+                    boardAssets.push({
+                        id: asset.id,
+                        name: asset.name,
+                        src: asset.src
+                    });
+                    await boardManager.updateBoard(currentBoardId, { assets: boardAssets });
+                }
+            }
+        };
+        imgElement.src = asset.src;
+    });
+
+    container.appendChild(assetItem);
+
+    // Animate in
+    requestAnimationFrame(() => {
+        assetItem.style.transition = 'opacity 0.2s, transform 0.2s';
+        assetItem.style.opacity = '1';
+        assetItem.style.transform = 'scale(1)';
+    });
 }
 
 async function exportBoard() {
@@ -2698,36 +3008,15 @@ function showPropertiesPanel(obj) {
             colorsList.appendChild(colorItem);
         });
     } else if (obj.type === 'shape') {
-        propertiesTitle.textContent = 'Shape Properties';
-        textProperties.style.display = 'none';
-        shapeProperties.style.display = 'block';
-        paletteProperties.style.display = 'none';
-
-        // Populate shape properties
-        document.getElementById('shape-type').value = obj.shapeType || 'square';
-        document.getElementById('shape-fill-color').value = obj.fillColor || '#3b82f6';
-        document.getElementById('shape-has-stroke').checked = obj.hasStroke !== false;
-        document.getElementById('shape-stroke-color').value = obj.strokeColor || '#000000';
-        document.getElementById('shape-stroke-width').value = obj.strokeWidth || 2;
-
-        // Add event listeners for shape properties
-        setupShapePropertyListeners();
+        // Shape objects now use floating toolbar, hide properties panel
+        if (defaultProperties) defaultProperties.style.display = 'block';
+        propertiesPanel.style.display = 'none';
+        return;
     } else if (obj.type === 'text') {
-        propertiesTitle.textContent = 'Text Properties';
-        textProperties.style.display = 'block';
-        shapeProperties.style.display = 'none';
-        paletteProperties.style.display = 'none';
-
-        // Populate text properties
-        document.getElementById('text-content').value = obj.text || '';
-        document.getElementById('text-font-size').value = obj.fontSize || 32;
-        document.getElementById('text-font-family').value = obj.fontFamily || 'Arial';
-        document.getElementById('text-color').value = obj.color || '#000000';
-        document.getElementById('text-font-weight').value = obj.fontWeight || 'normal';
-        document.getElementById('text-align').value = obj.textAlign || 'left';
-
-        // Add event listeners for text properties
-        setupTextPropertyListeners();
+        // Text objects now use floating toolbar, hide properties panel
+        if (defaultProperties) defaultProperties.style.display = 'block';
+        propertiesPanel.style.display = 'none';
+        return;
     }
 
     // Close button
@@ -2748,6 +3037,152 @@ function hidePropertiesPanel() {
 
     // Remove event listeners
     removeShapePropertyListeners();
+}
+
+function showFloatingToolbar(obj) {
+    const textToolbar = document.getElementById('floating-text-toolbar');
+    const shapeToolbar = document.getElementById('floating-shape-toolbar');
+
+    // Hide all toolbars first
+    hideFloatingToolbars();
+
+    // Only show floating toolbars for text and shape objects
+    if (obj.type === 'text') {
+        textToolbar.style.display = 'block';
+        positionFloatingToolbar(textToolbar, obj);
+        setupTextFloatingToolbar(obj);
+    } else if (obj.type === 'shape') {
+        shapeToolbar.style.display = 'block';
+        positionFloatingToolbar(shapeToolbar, obj);
+        setupShapeFloatingToolbar(obj);
+    }
+}
+
+function hideFloatingToolbars() {
+    const textToolbar = document.getElementById('floating-text-toolbar');
+    const shapeToolbar = document.getElementById('floating-shape-toolbar');
+
+    if (textToolbar) textToolbar.style.display = 'none';
+    if (shapeToolbar) shapeToolbar.style.display = 'none';
+}
+
+function positionFloatingToolbar(toolbar, obj) {
+    const canvasRect = canvas.canvas.getBoundingClientRect();
+
+    // Get object's screen position and size
+    const objScreenPos = canvas.worldToScreen(obj.x, obj.y);
+    const objWidth = (obj.width || 100) * canvas.zoom;
+    const objHeight = (obj.height || 100) * canvas.zoom;
+
+    // Position toolbar below the object
+    const toolbarX = canvasRect.left + objScreenPos.x;
+    const toolbarY = canvasRect.top + objScreenPos.y + objHeight + 10; // 10px below
+
+    toolbar.style.left = `${toolbarX}px`;
+    toolbar.style.top = `${toolbarY}px`;
+}
+
+function setupTextFloatingToolbar(obj) {
+    const fontFamily = document.getElementById('floating-font-family');
+    const fontSize = document.getElementById('floating-font-size');
+    const boldBtn = document.getElementById('floating-text-bold');
+    const colorInput = document.getElementById('floating-text-color');
+    const alignLeft = document.getElementById('floating-text-align-left');
+    const alignCenter = document.getElementById('floating-text-align-center');
+    const alignRight = document.getElementById('floating-text-align-right');
+
+    // Set current values
+    fontFamily.value = obj.fontFamily || 'Arial';
+    fontSize.value = obj.fontSize || 32;
+    colorInput.value = obj.color || '#000000';
+
+    // Update bold button state
+    if (obj.fontWeight === 'bold') {
+        boldBtn.classList.add('active');
+    } else {
+        boldBtn.classList.remove('active');
+    }
+
+    // Update alignment buttons
+    alignLeft.classList.toggle('active', obj.textAlign === 'left' || !obj.textAlign);
+    alignCenter.classList.toggle('active', obj.textAlign === 'center');
+    alignRight.classList.toggle('active', obj.textAlign === 'right');
+
+    // Event listeners
+    fontFamily.onchange = () => canvas.objectsManager.updateSelectedObject({ fontFamily: fontFamily.value });
+    fontSize.oninput = () => canvas.objectsManager.updateSelectedObject({ fontSize: parseInt(fontSize.value) });
+    boldBtn.onclick = () => {
+        const newWeight = obj.fontWeight === 'bold' ? 'normal' : 'bold';
+        canvas.objectsManager.updateSelectedObject({ fontWeight: newWeight });
+        boldBtn.classList.toggle('active');
+    };
+    colorInput.oninput = () => canvas.objectsManager.updateSelectedObject({ color: colorInput.value });
+
+    alignLeft.onclick = () => {
+        canvas.objectsManager.updateSelectedObject({ textAlign: 'left' });
+        alignLeft.classList.add('active');
+        alignCenter.classList.remove('active');
+        alignRight.classList.remove('active');
+    };
+    alignCenter.onclick = () => {
+        canvas.objectsManager.updateSelectedObject({ textAlign: 'center' });
+        alignLeft.classList.remove('active');
+        alignCenter.classList.add('active');
+        alignRight.classList.remove('active');
+    };
+    alignRight.onclick = () => {
+        canvas.objectsManager.updateSelectedObject({ textAlign: 'right' });
+        alignLeft.classList.remove('active');
+        alignCenter.classList.remove('active');
+        alignRight.classList.add('active');
+    };
+}
+
+function setupShapeFloatingToolbar(obj) {
+    const shapeButtons = document.querySelectorAll('.shape-btn');
+    const fillColor = document.getElementById('floating-shape-fill');
+    const strokeToggle = document.getElementById('floating-shape-stroke-toggle');
+    const strokeColor = document.getElementById('floating-shape-stroke-color');
+    const strokeWidth = document.getElementById('floating-shape-stroke-width');
+
+    // Set current values
+    fillColor.value = obj.fillColor || '#3b82f6';
+    strokeColor.value = obj.strokeColor || '#000000';
+    strokeWidth.value = obj.strokeWidth || 2;
+
+    // Update shape button states
+    const currentShapeType = obj.shapeType || 'square';
+    shapeButtons.forEach(btn => {
+        if (btn.dataset.shape === currentShapeType) {
+            btn.classList.add('active');
+        } else {
+            btn.classList.remove('active');
+        }
+    });
+
+    // Update stroke toggle state
+    strokeToggle.classList.toggle('active', obj.hasStroke !== false);
+
+    // Event listeners for shape buttons
+    shapeButtons.forEach(btn => {
+        btn.onclick = () => {
+            const newShapeType = btn.dataset.shape;
+            canvas.objectsManager.updateSelectedObject({ shapeType: newShapeType });
+            shapeButtons.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+        };
+    });
+
+    fillColor.oninput = () => canvas.objectsManager.updateSelectedObject({ fillColor: fillColor.value });
+
+    strokeToggle.onclick = () => {
+        const newHasStroke = !obj.hasStroke;
+        canvas.objectsManager.updateSelectedObject({ hasStroke: newHasStroke });
+        strokeToggle.classList.toggle('active');
+    };
+
+    strokeColor.oninput = () => canvas.objectsManager.updateSelectedObject({ strokeColor: strokeColor.value });
+    strokeWidth.oninput = () => canvas.objectsManager.updateSelectedObject({ strokeWidth: parseInt(strokeWidth.value) });
 }
 
 
@@ -2935,7 +3370,16 @@ let currentContextLayer = null;
 let currentContextLayerType = null;
 
 function showLayerContextMenu(x, y, layer, type) {
+    // Close any open group context menus
+    const existingGroupMenus = document.querySelectorAll('.group-context-menu');
+    existingGroupMenus.forEach(menu => menu.remove());
+
     const contextMenu = document.getElementById('layer-context-menu');
+    if (!contextMenu) {
+        console.error('Layer context menu element not found!');
+        return;
+    }
+
     currentContextLayer = layer;
     currentContextLayerType = type;
 
@@ -2944,7 +3388,13 @@ function showLayerContextMenu(x, y, layer, type) {
     contextMenu.classList.add('show');
 }
 
+let layerContextMenuSetup = false;
+
 function setupLayerContextMenu() {
+    // Prevent duplicate setup
+    if (layerContextMenuSetup) return;
+    layerContextMenuSetup = true;
+
     const contextMenu = document.getElementById('layer-context-menu');
     const renameItem = document.getElementById('layer-context-rename');
     const duplicateItem = document.getElementById('layer-context-duplicate');

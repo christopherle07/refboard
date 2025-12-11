@@ -15,9 +15,14 @@ export function createModal(title, bodyHTML, onConfirm) {
             </div>
         </div>
     `;
-    
+
     document.body.appendChild(modal);
-    
+
+    // Make modal visible
+    setTimeout(() => {
+        modal.style.display = 'flex';
+    }, 10);
+
     const closeModal = () => {
         modal.classList.add('closing');
         setTimeout(() => {
@@ -71,16 +76,21 @@ export function showDeleteConfirm(itemName, onConfirm) {
             </div>
         </div>
     `;
-    
+
     document.body.appendChild(modal);
-    
+
+    // Make modal visible
+    setTimeout(() => {
+        modal.style.display = 'flex';
+    }, 10);
+
     const closeModal = () => {
         modal.classList.add('closing');
         setTimeout(() => {
             modal.remove();
         }, 250);
     };
-    
+
     modal.querySelector('[data-action="confirm"]').addEventListener('click', () => {
         if (modal.querySelector('#dont-show-again').checked) {
             localStorage.setItem(SKIP_CONFIRM_KEY, 'true');

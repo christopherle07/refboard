@@ -39,7 +39,9 @@
     <div class="editor-container">
         <aside class="sidebar">
             <div class="sidebar-header">
-                <button class="back-arrow-btn" id="back-home-btn" title="Back to Home">←</button>
+                <button class="back-arrow-btn" id="back-home-btn" title="Back to Home">
+                    <img src="assets/backarrow.svg" alt="Back" class="back-arrow-icon theme-icon">
+                </button>
                 <div class="board-name-wrapper">
                     <h2 class="board-name" id="board-name">Untitled Board</h2>
                     <button class="board-dropdown-btn" id="board-dropdown-btn"></button>
@@ -63,7 +65,20 @@
                         <div class="panel-section-header">
                             <h3>Layers</h3>
                             <div class="header-actions">
-                                <button class="collapse-btn" id="collapse-layers-btn">−</button>
+                                <button class="collapse-btn" id="collapse-layers-btn">
+                                    <svg class="collapse-icon collapse-icon-dark" width="14" height="14" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <path d="M114 122C119.523 122 124 117.523 124 112C124 106.477 119.523 102 114 102V112V122ZM45 102H35V122H45V112V102ZM114 112V102H45V112V122H114V112Z" fill="white"/>
+                                        <path d="M104 112C104 117.523 108.477 122 114 122C119.523 122 124 117.523 124 112H114H104ZM124 43V33H104V43H114H124ZM114 112H124V43H114H104V112H114Z" fill="white"/>
+                                        <path d="M145 136C139.477 136 135 140.477 135 146C135 151.523 139.477 156 145 156V146V136ZM214 156H224V136H214V146V156ZM145 146V156H214V146V136H145V146Z" fill="white"/>
+                                        <path d="M155 146C155 140.477 150.523 136 145 136C139.477 136 135 140.477 135 146H145H155ZM135 215V225H155V215H145H135ZM145 146H135V215H145H155V146H145Z" fill="white"/>
+                                    </svg>
+                                    <svg class="collapse-icon collapse-icon-light" width="14" height="14" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <path d="M114 122C119.523 122 124 117.523 124 112C124 106.477 119.523 102 114 102V112V122ZM45 102H35V122H45V112V102ZM114 112V102H45V112V122H114V112Z" fill="black"/>
+                                        <path d="M104 112C104 117.523 108.477 122 114 122C119.523 122 124 117.523 124 112H114H104ZM124 43V33H104V43H114H124ZM114 112H124V43H114H104V112H114Z" fill="black"/>
+                                        <path d="M145 136C139.477 136 135 140.477 135 146C135 151.523 139.477 156 145 156V146V136ZM214 156H224V136H214V146V156ZM145 146V156H214V146V136H145V146Z" fill="black"/>
+                                        <path d="M155 146C155 140.477 150.523 136 145 136C139.477 136 135 140.477 135 146H145H155ZM135 215V225H155V215H145H135ZM145 146H135V215H145H155V146H145Z" fill="black"/>
+                                    </svg>
+                                </button>
                             </div>
                         </div>
                         <div class="panel-section-content" id="layers-content">
@@ -88,7 +103,7 @@
                                 <img src="assets/TextIcon.svg" alt="Text Tool" class="tool-icon theme-icon">
                             </button>
                             <button class="tool-btn" id="color-extractor-btn" title="Color Extractor">
-                                CE
+                                <img src="assets/ColorPalette.svg" alt="Color Extractor" class="tool-icon theme-icon">
                             </button>
                         </div>
                     </div>
@@ -263,7 +278,9 @@
         </aside>
 
         <main class="canvas-area">
-            <button class="floating-canvas-btn" id="open-floating-btn" title="Open Canvas Window">+</button>
+            <button class="floating-canvas-btn" id="open-floating-btn" title="Open Canvas Window">
+                <img src="assets/new-window-icon.svg" alt="New Window" class="floating-canvas-icon">
+            </button>
 
             <div class="drawing-toolbar" id="drawing-toolbar">
                 <div class="toolbar-group">
@@ -309,6 +326,127 @@
                     <button class="toolbar-btn" id="draw-clear-btn" title="Clear All Strokes">
                         C
                     </button>
+                </div>
+            </div>
+
+            <!-- Floating Text Toolbar -->
+            <div class="floating-toolbar" id="floating-text-toolbar" style="display: none;">
+                <div class="floating-toolbar-content">
+                    <select id="floating-font-family" class="floating-select" title="Font Family" size="1">
+                        <option value="Arial">Arial</option>
+                        <option value="Arial Black">Arial Black</option>
+                        <option value="Bahnschrift">Bahnschrift</option>
+                        <option value="Calibri">Calibri</option>
+                        <option value="Cambria">Cambria</option>
+                        <option value="Candara">Candara</option>
+                        <option value="Century Gothic">Century Gothic</option>
+                        <option value="Comic Sans MS">Comic Sans MS</option>
+                        <option value="Consolas">Consolas</option>
+                        <option value="Constantia">Constantia</option>
+                        <option value="Corbel">Corbel</option>
+                        <option value="Courier New">Courier New</option>
+                        <option value="Ebrima">Ebrima</option>
+                        <option value="Franklin Gothic Medium">Franklin Gothic Medium</option>
+                        <option value="Gabriola">Gabriola</option>
+                        <option value="Gadugi">Gadugi</option>
+                        <option value="Georgia">Georgia</option>
+                        <option value="Impact">Impact</option>
+                        <option value="Ink Free">Ink Free</option>
+                        <option value="Javanese Text">Javanese Text</option>
+                        <option value="Leelawadee UI">Leelawadee UI</option>
+                        <option value="Lucida Console">Lucida Console</option>
+                        <option value="Lucida Sans Unicode">Lucida Sans Unicode</option>
+                        <option value="Malgun Gothic">Malgun Gothic</option>
+                        <option value="Microsoft Sans Serif">Microsoft Sans Serif</option>
+                        <option value="Mongolian Baiti">Mongolian Baiti</option>
+                        <option value="MS Gothic">MS Gothic</option>
+                        <option value="MV Boli">MV Boli</option>
+                        <option value="Myanmar Text">Myanmar Text</option>
+                        <option value="Nirmala UI">Nirmala UI</option>
+                        <option value="Palatino Linotype">Palatino Linotype</option>
+                        <option value="Segoe Print">Segoe Print</option>
+                        <option value="Segoe Script">Segoe Script</option>
+                        <option value="Segoe UI">Segoe UI</option>
+                        <option value="Segoe UI Black">Segoe UI Black</option>
+                        <option value="Segoe UI Emoji">Segoe UI Emoji</option>
+                        <option value="Segoe UI Historic">Segoe UI Historic</option>
+                        <option value="Segoe UI Light">Segoe UI Light</option>
+                        <option value="Segoe UI Semibold">Segoe UI Semibold</option>
+                        <option value="Sitka">Sitka</option>
+                        <option value="Sylfaen">Sylfaen</option>
+                        <option value="Tahoma">Tahoma</option>
+                        <option value="Times New Roman">Times New Roman</option>
+                        <option value="Trebuchet MS">Trebuchet MS</option>
+                        <option value="Verdana">Verdana</option>
+                        <option value="Yu Gothic">Yu Gothic</option>
+                    </select>
+                    <input type="number" id="floating-font-size" min="8" max="200" value="32" class="floating-input" title="Font Size">
+                    <button class="floating-btn" id="floating-text-bold" title="Bold">
+                        <strong>B</strong>
+                    </button>
+                    <input type="color" id="floating-text-color" value="#000000" class="floating-color" title="Text Color">
+                    <div class="floating-separator"></div>
+                    <button class="floating-btn" id="floating-text-align-left" title="Align Left">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                            <rect x="2" y="3" width="12" height="2"/>
+                            <rect x="2" y="7" width="8" height="2"/>
+                            <rect x="2" y="11" width="10" height="2"/>
+                        </svg>
+                    </button>
+                    <button class="floating-btn" id="floating-text-align-center" title="Align Center">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                            <rect x="2" y="3" width="12" height="2"/>
+                            <rect x="4" y="7" width="8" height="2"/>
+                            <rect x="3" y="11" width="10" height="2"/>
+                        </svg>
+                    </button>
+                    <button class="floating-btn" id="floating-text-align-right" title="Align Right">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                            <rect x="2" y="3" width="12" height="2"/>
+                            <rect x="6" y="7" width="8" height="2"/>
+                            <rect x="4" y="11" width="10" height="2"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Floating Shape Toolbar -->
+            <div class="floating-toolbar" id="floating-shape-toolbar" style="display: none;">
+                <div class="floating-toolbar-content">
+                    <button class="floating-btn shape-btn" id="shape-btn-square" data-shape="square" title="Square">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                            <rect x="2" y="2" width="12" height="12" rx="1"/>
+                        </svg>
+                    </button>
+                    <button class="floating-btn shape-btn" id="shape-btn-circle" data-shape="circle" title="Circle">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                            <circle cx="8" cy="8" r="6"/>
+                        </svg>
+                    </button>
+                    <button class="floating-btn shape-btn" id="shape-btn-triangle" data-shape="triangle" title="Triangle">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                            <path d="M8 2 L14 14 L2 14 Z"/>
+                        </svg>
+                    </button>
+                    <button class="floating-btn shape-btn" id="shape-btn-line" data-shape="line" title="Line">
+                        <svg width="16" height="16" viewBox="0 0 16 16" stroke="currentColor" stroke-width="2" fill="none">
+                            <line x1="2" y1="14" x2="14" y2="2"/>
+                        </svg>
+                    </button>
+                    <button class="floating-btn shape-btn" id="shape-btn-arrow" data-shape="arrow" title="Arrow">
+                        <svg width="16" height="16" viewBox="0 0 16 16" stroke="currentColor" stroke-width="2" fill="none">
+                            <line x1="2" y1="14" x2="14" y2="2"/>
+                            <polyline points="10,2 14,2 14,6" fill="none"/>
+                        </svg>
+                    </button>
+                    <div class="floating-separator"></div>
+                    <input type="color" id="floating-shape-fill" value="#3b82f6" class="floating-color" title="Fill Color">
+                    <div class="floating-separator"></div>
+                    <button class="floating-btn" id="floating-shape-stroke-toggle" title="Toggle Stroke">
+                        <strong>S</strong>
+                    </button>
+                    <input type="color" id="floating-shape-stroke-color" value="#000000" class="floating-color" title="Stroke Color">
+                    <input type="number" id="floating-shape-stroke-width" min="0" max="20" value="2" class="floating-input-sm" title="Stroke Width">
                 </div>
             </div>
 

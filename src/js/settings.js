@@ -141,6 +141,17 @@ function setupNavigation() {
         });
     }
 
+    // Keyboard shortcuts button
+    const shortcutsBtn = document.getElementById('shortcuts-btn');
+    if (shortcutsBtn) {
+        shortcutsBtn.addEventListener('click', () => {
+            // Import and show shortcuts modal
+            import('./shortcuts.js').then(module => {
+                module.showShortcutsModal();
+            });
+        });
+    }
+
     // Website link button
     const websiteBtn = document.getElementById('website-btn');
     if (websiteBtn) {
@@ -228,11 +239,14 @@ function setupSettingsControls() {
     }
 }
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
     const savedTheme = getCurrentTheme();
     applyTheme(savedTheme);
     setupThemeOptions();
     setupNavigation();
     setupSettingsControls();
 
+    // Load and render collections
+    const collectionsModule = await import('./collections.js');
+    collectionsModule.setupCollections();
 });

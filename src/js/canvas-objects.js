@@ -27,16 +27,7 @@ export class CanvasObjectsManager {
     }
 
     handleMouseDown(e, worldPos) {
-        // Check if clicking on rotation handle of ANY selected object (even in multi-select)
-        if (!this.currentTool) {
-            for (const obj of this.selectedObjects) {
-                if (this.isPointOnObjectRotationHandle(obj, worldPos.x, worldPos.y)) {
-                    // Trigger rotation mode on canvas
-                    this.canvas.enableRotationMode(obj, worldPos.x, worldPos.y);
-                    return true;
-                }
-            }
-        }
+        // Rotation handle check is now done in canvas.js before this function is called
 
         // Check if clicking on a resize handle of selected object (single selection only)
         if (this.selectedObject && this.selectedObjects.length === 1 && !this.currentTool) {
@@ -375,11 +366,71 @@ export class CanvasObjectsManager {
     handleDoubleClick(e, worldPos) {
         const clickedObject = this.getObjectAtPoint(worldPos.x, worldPos.y);
         if (clickedObject && clickedObject.type === 'text') {
-            // Double-click on text opens edit mode
+            // Double-click on text opens inline edit mode
             this.selectObject(clickedObject, true);
+            this.startInlineTextEdit(clickedObject);
             return true;
         }
         return false;
+    }
+
+    startInlineTextEdit(textObj) {
+        // Set the text object to editing mode
+        textObj.isEditing = true;
+
+        // Store reference to editing object
+        this.editingTextObject = textObj;
+
+        // Create visible textarea for editing
+        const textarea = document.createElement('textarea');
+        textarea.className = 'inline-text-editor-visible';
+        textarea.value = textObj.text || '';
+
+        // Position the textarea at the text object's location
+        const rect = this.canvas.canvas.getBoundingClientRect();
+        const screenPos = this.canvas.worldToScreen(textObj.x, textObj.y);
+        const scaledWidth = textObj.width * this.canvas.zoom;
+        const scaledHeight = textObj.height * this.canvas.zoom;
+
+        textarea.style.position = 'absolute';
+        textarea.style.left = `${rect.left + screenPos.x}px`;
+        textarea.style.top = `${rect.top + screenPos.y}px`;
+        textarea.style.width = `${scaledWidth}px`;
+        textarea.style.height = `${scaledHeight}px`;
+        textarea.style.fontSize = `${(textObj.fontSize || 32) * this.canvas.zoom}px`;
+        textarea.style.fontFamily = textObj.fontFamily || 'Arial';
+        textarea.style.fontWeight = textObj.fontWeight || 'normal';
+        textarea.style.color = textObj.color || '#000000';
+        textarea.style.textAlign = textObj.textAlign || 'left';
+        textarea.style.padding = `${10 * this.canvas.zoom}px`;
+        textarea.style.lineHeight = '1.2';
+
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+
+        // Update text as user types
+        textarea.addEventListener('input', () => {
+            textObj.text = textarea.value;
+            this.canvas.needsRender = true;
+        });
+
+        // Finish editing
+        const finishEditing = () => {
+            textObj.isEditing = false;
+            this.editingTextObject = null;
+            textarea.remove();
+            this.canvas.needsRender = true;
+            this.dispatchObjectsChanged();
+        };
+
+        textarea.addEventListener('blur', finishEditing);
+        textarea.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                finishEditing();
+            }
+        });
     }
 
     getObjectAtPoint(x, y) {
@@ -975,11 +1026,13 @@ export class CanvasObjectsManager {
         ctx.rect(textObj.x, textObj.y, textObj.width, textObj.height);
         ctx.clip();
 
-        // Draw each wrapped line
-        wrappedLines.forEach((line, i) => {
-            const y = textObj.y + padding + i * lineHeight; // Top padding
-            ctx.fillText(line, textObj.x + xOffset, y);
-        });
+        // Draw each wrapped line (only if not editing - when editing, textarea shows the text)
+        if (!textObj.isEditing) {
+            wrappedLines.forEach((line, i) => {
+                const y = textObj.y + padding + i * lineHeight; // Top padding
+                ctx.fillText(line, textObj.x + xOffset, y);
+            });
+        }
 
         ctx.restore();
     }
@@ -1109,6 +1162,47 @@ export class CanvasObjectsManager {
                 ctx.fill();
                 ctx.stroke();
             }
+
+            // Draw rotation handle for line/arrow
+            const rotationHandleOffset = 30 / zoom;
+            const centerX = (x1 + x2) / 2;
+            const centerY = (y1 + y2) / 2;
+            const rotationHandleY = boxY - rotationHandleOffset;
+
+            // Draw connecting line
+            ctx.beginPath();
+            ctx.moveTo(centerX, boxY);
+            ctx.lineTo(centerX, rotationHandleY);
+            ctx.strokeStyle = '#0066ff';
+            ctx.lineWidth = 2 / zoom;
+            ctx.stroke();
+
+            // Draw rotation handle circle
+            ctx.beginPath();
+            ctx.arc(centerX, rotationHandleY, handleRadius * 1.2, 0, Math.PI * 2);
+            ctx.fillStyle = '#ffffff';
+            ctx.fill();
+            ctx.strokeStyle = '#0066ff';
+            ctx.lineWidth = 1.5 / zoom;
+            ctx.stroke();
+
+            // Draw rotation icon (circular arrow)
+            ctx.save();
+            ctx.translate(centerX, rotationHandleY);
+            ctx.strokeStyle = '#0066ff';
+            ctx.lineWidth = 1 / zoom;
+            ctx.beginPath();
+            ctx.arc(0, 0, handleRadius * 0.6, -Math.PI * 0.3, Math.PI * 1.5);
+            ctx.stroke();
+            // Arrow head
+            ctx.beginPath();
+            ctx.moveTo(handleRadius * 0.6 * Math.cos(Math.PI * 1.5), handleRadius * 0.6 * Math.sin(Math.PI * 1.5));
+            ctx.lineTo(handleRadius * 0.6 * Math.cos(Math.PI * 1.5) - 2 / zoom, handleRadius * 0.6 * Math.sin(Math.PI * 1.5) - 2 / zoom);
+            ctx.lineTo(handleRadius * 0.6 * Math.cos(Math.PI * 1.5) + 2 / zoom, handleRadius * 0.6 * Math.sin(Math.PI * 1.5) - 2 / zoom);
+            ctx.closePath();
+            ctx.fillStyle = '#0066ff';
+            ctx.fill();
+            ctx.restore();
         } else {
             // Normal selection box for other shapes
             ctx.strokeStyle = '#0066ff';
@@ -1145,42 +1239,87 @@ export class CanvasObjectsManager {
 
             // Draw rotation handle extending upward from top center
             const rotationHandleOffset = 30 / zoom;
-            const rotationHandleY = obj.y - rotationHandleOffset;
 
-            // Draw connecting line
-            ctx.beginPath();
-            ctx.moveTo(midX, obj.y);
-            ctx.lineTo(midX, rotationHandleY);
-            ctx.strokeStyle = '#0066ff';
-            ctx.lineWidth = 2 / zoom;
-            ctx.stroke();
+            // If object is rotated, draw in rotated space; otherwise draw normally
+            if (obj.rotation && obj.rotation !== 0) {
+                // Already in rotated space from ctx.save() above
+                // Draw at top center in local coordinates
+                const localMidX = obj.x + obj.width / 2;
+                const localTopY = obj.y;
+                const localHandleY = localTopY - rotationHandleOffset;
 
-            // Draw rotation handle circle
-            ctx.beginPath();
-            ctx.arc(midX, rotationHandleY, handleRadius * 1.2, 0, Math.PI * 2);
-            ctx.fillStyle = '#ffffff';
-            ctx.fill();
-            ctx.strokeStyle = '#0066ff';
-            ctx.lineWidth = 1.5 / zoom;
-            ctx.stroke();
+                // Draw connecting line
+                ctx.beginPath();
+                ctx.moveTo(localMidX, localTopY);
+                ctx.lineTo(localMidX, localHandleY);
+                ctx.strokeStyle = '#0066ff';
+                ctx.lineWidth = 2 / zoom;
+                ctx.stroke();
 
-            // Draw rotation icon (circular arrow)
-            ctx.save();
-            ctx.translate(midX, rotationHandleY);
-            ctx.strokeStyle = '#0066ff';
-            ctx.lineWidth = 1 / zoom;
-            ctx.beginPath();
-            ctx.arc(0, 0, handleRadius * 0.6, -Math.PI * 0.3, Math.PI * 1.5);
-            ctx.stroke();
-            // Arrow head
-            ctx.beginPath();
-            ctx.moveTo(handleRadius * 0.6 * Math.cos(Math.PI * 1.5), handleRadius * 0.6 * Math.sin(Math.PI * 1.5));
-            ctx.lineTo(handleRadius * 0.6 * Math.cos(Math.PI * 1.5) - 2 / zoom, handleRadius * 0.6 * Math.sin(Math.PI * 1.5) - 2 / zoom);
-            ctx.lineTo(handleRadius * 0.6 * Math.cos(Math.PI * 1.5) + 2 / zoom, handleRadius * 0.6 * Math.sin(Math.PI * 1.5) - 2 / zoom);
-            ctx.closePath();
-            ctx.fillStyle = '#0066ff';
-            ctx.fill();
-            ctx.restore();
+                // Draw rotation handle circle
+                ctx.beginPath();
+                ctx.arc(localMidX, localHandleY, handleRadius * 1.2, 0, Math.PI * 2);
+                ctx.fillStyle = '#ffffff';
+                ctx.fill();
+                ctx.strokeStyle = '#0066ff';
+                ctx.lineWidth = 1.5 / zoom;
+                ctx.stroke();
+
+                // Draw rotation icon (circular arrow)
+                ctx.save();
+                ctx.translate(localMidX, localHandleY);
+                ctx.strokeStyle = '#0066ff';
+                ctx.lineWidth = 1 / zoom;
+                ctx.beginPath();
+                ctx.arc(0, 0, handleRadius * 0.6, -Math.PI * 0.3, Math.PI * 1.5);
+                ctx.stroke();
+                // Arrow head
+                ctx.beginPath();
+                ctx.moveTo(handleRadius * 0.6 * Math.cos(Math.PI * 1.5), handleRadius * 0.6 * Math.sin(Math.PI * 1.5));
+                ctx.lineTo(handleRadius * 0.6 * Math.cos(Math.PI * 1.5) - 2 / zoom, handleRadius * 0.6 * Math.sin(Math.PI * 1.5) - 2 / zoom);
+                ctx.lineTo(handleRadius * 0.6 * Math.cos(Math.PI * 1.5) + 2 / zoom, handleRadius * 0.6 * Math.sin(Math.PI * 1.5) - 2 / zoom);
+                ctx.closePath();
+                ctx.fillStyle = '#0066ff';
+                ctx.fill();
+                ctx.restore();
+            } else {
+                const rotationHandleY = obj.y - rotationHandleOffset;
+
+                // Draw connecting line
+                ctx.beginPath();
+                ctx.moveTo(midX, obj.y);
+                ctx.lineTo(midX, rotationHandleY);
+                ctx.strokeStyle = '#0066ff';
+                ctx.lineWidth = 2 / zoom;
+                ctx.stroke();
+
+                // Draw rotation handle circle
+                ctx.beginPath();
+                ctx.arc(midX, rotationHandleY, handleRadius * 1.2, 0, Math.PI * 2);
+                ctx.fillStyle = '#ffffff';
+                ctx.fill();
+                ctx.strokeStyle = '#0066ff';
+                ctx.lineWidth = 1.5 / zoom;
+                ctx.stroke();
+
+                // Draw rotation icon (circular arrow)
+                ctx.save();
+                ctx.translate(midX, rotationHandleY);
+                ctx.strokeStyle = '#0066ff';
+                ctx.lineWidth = 1 / zoom;
+                ctx.beginPath();
+                ctx.arc(0, 0, handleRadius * 0.6, -Math.PI * 0.3, Math.PI * 1.5);
+                ctx.stroke();
+                // Arrow head
+                ctx.beginPath();
+                ctx.moveTo(handleRadius * 0.6 * Math.cos(Math.PI * 1.5), handleRadius * 0.6 * Math.sin(Math.PI * 1.5));
+                ctx.lineTo(handleRadius * 0.6 * Math.cos(Math.PI * 1.5) - 2 / zoom, handleRadius * 0.6 * Math.sin(Math.PI * 1.5) - 2 / zoom);
+                ctx.lineTo(handleRadius * 0.6 * Math.cos(Math.PI * 1.5) + 2 / zoom, handleRadius * 0.6 * Math.sin(Math.PI * 1.5) - 2 / zoom);
+                ctx.closePath();
+                ctx.fillStyle = '#0066ff';
+                ctx.fill();
+                ctx.restore();
+            }
         }
 
         ctx.restore();

@@ -389,8 +389,6 @@ body {
     border-radius: 50%;
     background: var(--bg-primary);
     border: 2px solid var(--border-color);
-    color: var(--text-primary);
-    font-size: 24px;
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -398,12 +396,25 @@ body {
     z-index: 100;
     transition: all 0.2s;
     box-shadow: 0 2px 8px var(--shadow);
+    padding: 8px;
 }
 
 .floating-canvas-btn:hover {
     transform: scale(1.1);
     border-color: var(--border-color-hover);
     box-shadow: 0 4px 12px var(--shadow);
+}
+
+.floating-canvas-icon {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+/* Invert icon for dark themes */
+[data-theme="dark"] .floating-canvas-icon,
+[data-theme="midnight"] .floating-canvas-icon {
+    filter: invert(1) brightness(0.8);
 }
 
 .floating-canvas-btn:active {
@@ -575,7 +586,7 @@ body {
 }
 
 .collection-item {
-    padding: 10px 12px 10px 32px;
+    padding: 10px 12px;
     background: none;
     border: none;
     text-align: left;
@@ -589,15 +600,6 @@ body {
     align-items: center;
     justify-content: space-between;
     position: relative;
-    border-left: 3px solid transparent;
-}
-
-.collection-item::before {
-    content: '📁';
-    position: absolute;
-    left: 10px;
-    font-size: 14px;
-    opacity: 0.7;
 }
 
 .collection-item:hover {
@@ -605,19 +607,10 @@ body {
     color: var(--text-primary);
 }
 
-.collection-item:hover::before {
-    opacity: 1;
-}
-
 .collection-item.active {
-    background: rgba(91, 138, 197, 0.15);
-    color: #5B8AC5;
-    border-left-color: #5B8AC5;
+    background: var(--bg-hover);
+    color: var(--text-primary);
     font-weight: 600;
-}
-
-.collection-item.active::before {
-    opacity: 1;
 }
 
 .collection-name {
@@ -698,4 +691,178 @@ body {
 
 .context-menu-item.checked {
     background: var(--bg-tertiary);
+}
+
+/* Inline text editor - visible textarea */
+.inline-text-editor-visible {
+    position: absolute;
+    background: transparent;
+    border: none;
+    outline: none;
+    resize: none;
+    overflow: hidden;
+    z-index: 10000;
+    box-sizing: border-box;
+}
+
+.inline-text-editor-visible::selection {
+    background: rgba(13, 110, 253, 0.3);
+}
+
+.inline-text-editor-visible::-moz-selection {
+    background: rgba(13, 110, 253, 0.3);
+}
+
+/* Floating Toolbars */
+.floating-toolbar {
+    position: absolute;
+    z-index: 9999;
+    pointer-events: all;
+}
+
+.floating-toolbar-content {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: var(--bg-primary);
+    border: none;
+    border-radius: 24px;
+    padding: 6px 10px;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.2);
+}
+
+.floating-select {
+    padding: 6px 10px;
+    border: none;
+    border-radius: 4px;
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    font-size: 13px;
+    font-weight: 500;
+    outline: none;
+    cursor: pointer;
+}
+
+.floating-select:hover {
+    background: var(--bg-hover);
+}
+
+/* Dropdown menu styling */
+.floating-select option {
+    padding: 8px 12px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-size: 13px;
+}
+
+.floating-select option:hover {
+    background: var(--bg-hover);
+}
+
+.floating-input {
+    width: 45px;
+    padding: 6px 8px;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--text-primary);
+    font-size: 13px;
+    outline: none;
+    text-align: center;
+    -moz-appearance: textfield;
+    appearance: textfield;
+}
+
+/* Hide number input arrows */
+.floating-input::-webkit-outer-spin-button,
+.floating-input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.floating-input:hover {
+    background: var(--bg-hover);
+}
+
+.floating-input-sm {
+    width: 35px;
+    padding: 6px 8px;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--text-primary);
+    font-size: 13px;
+    outline: none;
+    text-align: center;
+    -moz-appearance: textfield;
+    appearance: textfield;
+}
+
+/* Hide number input arrows for small input */
+.floating-input-sm::-webkit-outer-spin-button,
+.floating-input-sm::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.floating-input-sm:hover {
+    background: var(--bg-hover);
+}
+
+.floating-btn {
+    width: 28px;
+    height: 28px;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.15s;
+    font-size: 14px;
+}
+
+.floating-btn:hover {
+    background: var(--bg-hover);
+}
+
+.floating-btn.active {
+    background: var(--bg-active);
+}
+
+.floating-color {
+    width: 28px;
+    height: 28px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    outline: none;
+    padding: 0;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+}
+
+/* Remove default color picker styling */
+.floating-color::-webkit-color-swatch-wrapper {
+    padding: 0;
+}
+
+.floating-color::-webkit-color-swatch {
+    border: none;
+    border-radius: 6px;
+}
+
+.floating-color::-moz-color-swatch {
+    border: none;
+    border-radius: 6px;
+}
+
+.floating-separator {
+    width: 1px;
+    height: 20px;
+    background: var(--border-color);
+    margin: 0 2px;
 }

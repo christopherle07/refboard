@@ -185,8 +185,28 @@
 .form-group input[type="color"] {
     width: 100%;
     height: 48px;
-    border: 1px solid var(--border-color);
+    border: none;
+    border-radius: 8px;
     cursor: pointer;
+    padding: 0;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+}
+
+.form-group input[type="color"]::-webkit-color-swatch-wrapper {
+    padding: 0;
+    border: none;
+}
+
+.form-group input[type="color"]::-webkit-color-swatch {
+    border: none;
+    border-radius: 8px;
+}
+
+.form-group input[type="color"]::-moz-color-swatch {
+    border: none;
+    border-radius: 8px;
 }
 
 .modal-footer {

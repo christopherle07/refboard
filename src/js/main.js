@@ -2,6 +2,8 @@ import { boardManager } from './board-manager.js';
 import { showCreateBoardModal, showDeleteConfirm } from './modal.js';
 import { showToast } from './modal-utils.js';
 import CollectionManager from './collection-manager.js';
+import { showSettingsModal } from './settingsModal.js';
+import { showLibraryModal } from './library.js';
 
 let currentPage = 1;
 const BOARDS_PER_PAGE = 14;
@@ -110,15 +112,19 @@ function setupEventListeners() {
 
     document.getElementById('import-board-btn').addEventListener('click', importBoardAsNew);
 
+    // Library button
+    const libraryBtn = document.getElementById('library-btn');
+    if (libraryBtn) {
+        libraryBtn.addEventListener('click', () => {
+            showLibraryModal();
+        });
+    }
+
     // Settings button
     const settingsBtn = document.getElementById('settings-btn');
     if (settingsBtn) {
-        settingsBtn.addEventListener('click', (e) => {
-            e.preventDefault();
-            document.querySelector('.homepage').classList.add('page-exit');
-            setTimeout(() => {
-                window.location.href = 'settings.html';
-            }, 100);
+        settingsBtn.addEventListener('click', () => {
+            showSettingsModal();
         });
     }
 

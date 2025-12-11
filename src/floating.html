@@ -25,9 +25,7 @@
     <div class="titlebar" data-tauri-drag-region>
         <div class="titlebar-title" id="window-title">Board</div>
         <div class="titlebar-controls">
-            <button class="titlebar-btn" id="toolbar-toggle-btn" title="Toggle Drawing Toolbar">
-                <img src="assets/PenIcon.svg" alt="Drawing Toolbar" class="titlebar-icon bg-adaptive-icon" width="14" height="14">
-            </button>
+            
             <button class="titlebar-btn" id="pin-btn" title="Always on Top">
                 <img src="assets/PinIcon.svg" alt="Pin Window" class="titlebar-icon bg-adaptive-icon" width="14" height="14">
             </button>
@@ -37,46 +35,7 @@
     </div>
 
     <div class="floating-container">
-        <div class="drawing-toolbar" id="drawing-toolbar">
-            <div class="toolbar-group">
-                <button class="toolbar-btn" id="draw-pen-btn" title="Pen Tool">P</button>
-                <button class="toolbar-btn" id="draw-highlighter-btn" title="Highlighter Tool">H</button>
-                <button class="toolbar-btn" id="draw-eraser-btn" title="Eraser Tool">E</button>
-            </div>
-
-            <div class="toolbar-separator"></div>
-
-            <div class="toolbar-group">
-                <input type="color" id="draw-color-picker" class="color-picker-input" value="#000000" title="Drawing Color">
-                <div class="size-control">
-                    <label class="size-label">Size:</label>
-                    <div class="size-input-group">
-                        <input type="number" id="draw-size-input" class="size-input" min="1" max="500" value="2">
-                        <input type="range" id="draw-size-slider" class="size-slider" min="1" max="100" value="2">
-                    </div>
-                </div>
-            </div>
-
-            <div class="toolbar-separator"></div>
-
-            <div class="toolbar-group">
-                <div class="eraser-mode-toggle" id="eraser-mode-toggle" style="display: none;">
-                    <label class="toggle-label">Erase:</label>
-                    <div class="toggle-buttons">
-                        <button class="toggle-option active" data-mode="strokes">Strokes</button>
-                        <button class="toggle-option" data-mode="pixels">Pixels</button>
-                    </div>
-                </div>
-            </div>
-
-            <div class="toolbar-separator" id="clear-separator"></div>
-
-            <div class="toolbar-group">
-                <button class="toolbar-btn" id="draw-clear-btn" title="Clear All Strokes">
-                    C
-                </button>
-            </div>
-        </div>
+        
 
         <canvas id="floating-canvas"></canvas>
     </div>

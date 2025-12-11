@@ -153,7 +153,7 @@ class BoardManager {
             return;
         }
         let allAssets = await this.getAllAssets();
-        allAssets = allAssets.filter(a => a.id !== assetId);
+        allAssets = allAssets.filter(a => a.id != assetId); // Use != instead of !== to handle type coercion
         localStorage.setItem(this.ALL_ASSETS_KEY, JSON.stringify(allAssets));
     }
 
