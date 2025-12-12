@@ -15,6 +15,9 @@ pub fn run() {
             commands::add_to_all_assets,
             commands::delete_from_all_assets,
             commands::delete_board_asset,
+            commands::update_asset,
+            commands::get_tag_presets,
+            commands::save_tag_presets,
         ])
         .setup(|app| {
             database::init_storage(app.handle())?;

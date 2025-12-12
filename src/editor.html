@@ -419,15 +419,16 @@
                     <div class="assets-library-controls">
                         <input type="text" class="assets-search-bar" id="assets-search-bar" placeholder="Search assets...">
                         <button class="assets-import-btn" id="assets-library-import-btn">+ Import Images</button>
-                        <div class="assets-view-toggle">
-                            <span class="assets-view-label">Board Assets</span>
-                            <label class="toggle-switch">
-                                <input type="checkbox" id="assets-library-toggle">
-                                <span class="toggle-slider"></span>
-                            </label>
-                            <span class="assets-view-label">All Assets</span>
+                        <div class="assets-view-buttons">
+                            <button class="assets-view-btn active" id="board-assets-btn">Board Assets</button>
+                            <button class="assets-view-btn" id="all-assets-btn">All Assets</button>
                         </div>
                     </div>
+                </div>
+                <div class="assets-tag-filter-bar" id="assets-tag-filter-bar" style="display: none;">
+                    <span class="assets-tag-filter-label">Filter by tags:</span>
+                    <div class="assets-tag-filter-pills" id="assets-tag-filter-pills"></div>
+                    <button class="assets-tag-clear-btn" id="assets-tag-clear-btn">Clear All</button>
                 </div>
                 <div class="assets-library-content">
                     <div class="assets-library-grid" id="assets-library-grid">
@@ -549,51 +550,52 @@
         </div>
     </div>
 
-    <!-- Asset Details Modal -->
-    <div class="asset-modal-overlay" id="asset-modal-overlay">
-        <div class="asset-modal">
-            <div class="asset-modal-header">
-                <h2>Asset Details</h2>
-                <button class="asset-modal-close" id="asset-modal-close">×</button>
+    <!-- Asset Details Sidebar -->
+    <aside class="asset-sidebar" id="asset-sidebar">
+        <div class="asset-sidebar-header">
+            <h2>Asset Details</h2>
+            <button class="asset-sidebar-close" id="asset-sidebar-close">×</button>
+        </div>
+        <div class="asset-sidebar-body">
+            <img src="" alt="Asset Preview" class="asset-sidebar-preview" id="asset-sidebar-preview">
+
+            <div class="asset-sidebar-section">
+                <h3>Name</h3>
+                <input type="text" class="asset-sidebar-input" id="asset-sidebar-name" placeholder="Asset name">
             </div>
-            <div class="asset-modal-body">
-                <img src="" alt="Asset Preview" class="asset-modal-preview" id="asset-modal-preview">
 
-                <div class="asset-modal-section">
-                    <h3>Name</h3>
-                    <input type="text" class="asset-modal-input" id="asset-modal-name" placeholder="Asset name">
+            <div class="asset-sidebar-section">
+                <h3>Tags</h3>
+                <div class="asset-sidebar-tags" id="asset-sidebar-tags">
+                    <!-- Tags will be populated here -->
                 </div>
-
-                <div class="asset-modal-section">
-                    <h3>Tags</h3>
-                    <div class="asset-modal-tags" id="asset-modal-tags">
-                        <!-- Tags will be populated here -->
-                    </div>
-                    <div class="asset-tag-input-row">
-                        <input type="text" class="asset-modal-input asset-tag-input" id="asset-tag-input" placeholder="Add a tag or select from presets">
-                        <button class="asset-tag-add-btn" id="asset-tag-add-btn">Add Tag</button>
-                        <div class="asset-tag-presets" id="asset-tag-presets">
-                            <!-- Tag presets will be populated here -->
-                        </div>
-                    </div>
+                <div class="asset-tag-quick-presets" id="asset-tag-quick-presets">
+                    <!-- Quick preset tags will be populated here -->
                 </div>
-
-                <div class="asset-modal-section">
-                    <h3>Metadata</h3>
-                    <div class="asset-modal-metadata" id="asset-modal-metadata">
-                        <!-- Metadata will be populated here -->
-                    </div>
+                <div class="asset-tag-input-row">
+                    <input type="text" class="asset-sidebar-input asset-tag-input" id="asset-tag-input" placeholder="Add a tag">
+                    <button class="asset-tag-add-btn" id="asset-tag-add-btn">Add</button>
                 </div>
+                <div class="asset-tag-presets-dropdown" id="asset-tag-presets-dropdown">
+                    <!-- All tag presets dropdown will be populated here -->
+                </div>
+            </div>
 
-                <div class="asset-modal-section">
-                    <div class="asset-modal-actions">
-                        <button class="asset-modal-btn asset-modal-btn-primary" id="asset-modal-add-to-canvas">Add to Canvas</button>
-                        <button class="asset-modal-btn asset-modal-btn-danger" id="asset-modal-delete">Delete Asset</button>
-                    </div>
+            <div class="asset-sidebar-section">
+                <h3>Metadata</h3>
+                <div class="asset-sidebar-metadata" id="asset-sidebar-metadata">
+                    <!-- Metadata will be populated here -->
+                </div>
+            </div>
+
+            <div class="asset-sidebar-section">
+                <div class="asset-sidebar-actions">
+                    <button class="asset-sidebar-btn asset-sidebar-btn-primary" id="asset-sidebar-add-to-canvas">Add to Canvas</button>
+                    <button class="asset-sidebar-btn asset-sidebar-btn-danger" id="asset-sidebar-delete">Delete Asset</button>
                 </div>
             </div>
         </div>
-    </div>
+    </aside>
 
     <script type="module" src="js/titlebar.js"></script>
     <script type="module" src="js/editor.js"></script>

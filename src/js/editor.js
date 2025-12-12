@@ -18,6 +18,7 @@ let draggedLayerType = null;
 let allLayersOrder = [];
 let syncChannel = null;
 let showAllAssets = false;
+let selectedTagFilters = []; // Array of selected tags for filtering
 let renderThrottle = null;
 let draggedElement = null;
 let ghostElement = null;
@@ -255,6 +256,9 @@ async function initEditor() {
 
     renderLayers();
     renderAssets();
+
+    // Sync board assets with canvas images on initial load
+    syncBoardAssetsWithCanvas();
 }
 
 function loadLayers(layers, viewState = null) {
@@ -341,7 +345,18 @@ function setupEventListeners() {
         importAssetsToLibrary();
     });
 
-    document.getElementById('assets-library-toggle').addEventListener('change', () => {
+    // Assets view buttons
+    document.getElementById('board-assets-btn').addEventListener('click', () => {
+        showAllAssets = false;
+        document.getElementById('board-assets-btn').classList.add('active');
+        document.getElementById('all-assets-btn').classList.remove('active');
+        loadAssetsLibrary();
+    });
+
+    document.getElementById('all-assets-btn').addEventListener('click', () => {
+        showAllAssets = true;
+        document.getElementById('all-assets-btn').classList.add('active');
+        document.getElementById('board-assets-btn').classList.remove('active');
         loadAssetsLibrary();
     });
 
@@ -350,12 +365,20 @@ function setupEventListeners() {
     });
 
     // Assets search bar
-    document.getElementById('assets-search-bar').addEventListener('input', (e) => {
+    const assetsSearchBar = document.getElementById('assets-search-bar');
+
+    assetsSearchBar.addEventListener('input', (e) => {
         loadAssetsLibrary(e.target.value);
     });
 
+    // Tag filter clear button
+    document.getElementById('assets-tag-clear-btn').addEventListener('click', () => {
+        selectedTagFilters = [];
+        loadAssetsLibrary(assetsSearchBar.value);
+    });
+
     // Asset modal event listeners
-    setupAssetModal();
+    setupAssetSidebar();
 
     // Tab switching logic
     document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -467,14 +490,18 @@ function setupEventListeners() {
         `;
     });
 
-    document.getElementById('assets-view-toggle').addEventListener('change', (e) => {
-        showAllAssets = e.target.checked;
-        renderAssets();
-    });
+    const assetsViewToggle = document.getElementById('assets-view-toggle');
+    if (assetsViewToggle) {
+        assetsViewToggle.addEventListener('change', (e) => {
+            showAllAssets = e.target.checked;
+            renderAssets();
+        });
+    }
     
     canvas.canvas.addEventListener('canvasChanged', () => {
         renderLayers();
         scheduleSave();
+        syncBoardAssetsWithCanvas();
     });
     
     canvas.canvas.addEventListener('imageSelected', (e) => {
@@ -2817,20 +2844,208 @@ function appendAssetToDOM(asset, container) {
     });
 }
 
+// Sync board assets with actual canvas images
+async function syncBoardAssetsWithCanvas() {
+    const board = boardManager.currentBoard;
+    if (!board || !board.assets) return;
+
+    // Get all image sources currently on the canvas
+    const canvasImageSources = new Set(canvas.images.map(img => img.img.src));
+
+    // Filter board assets to only include those that exist on the canvas
+    const syncedAssets = board.assets.filter(asset => canvasImageSources.has(asset.src));
+
+    // Only update if there's a difference
+    if (syncedAssets.length !== board.assets.length) {
+        board.assets = syncedAssets;
+        await boardManager.updateBoard(currentBoardId, { assets: syncedAssets });
+
+        // Refresh the assets library if we're showing board assets
+        if (!showAllAssets) {
+            loadAssetsLibrary();
+        }
+    }
+}
+
+// Update tag filter pills with available tags from all assets
+function updateTagFilterPills(assets) {
+    const filterBar = document.getElementById('assets-tag-filter-bar');
+    const pillsContainer = document.getElementById('assets-tag-filter-pills');
+    if (!filterBar || !pillsContainer) return;
+
+    // Collect all unique tags from assets
+    const allTags = new Set();
+    assets.forEach(asset => {
+        if (asset.tags && Array.isArray(asset.tags)) {
+            asset.tags.forEach(tag => {
+                if (tag && tag.trim()) {
+                    allTags.add(tag.toLowerCase());
+                }
+            });
+        }
+    });
+
+    // If no tags exist, hide the filter bar
+    if (allTags.size === 0) {
+        filterBar.style.display = 'none';
+        return;
+    }
+
+    // Show filter bar if there are tags
+    filterBar.style.display = 'flex';
+
+    // Sort tags alphabetically
+    const sortedTags = Array.from(allTags).sort();
+
+    // Rebuild tag pills
+    pillsContainer.innerHTML = '';
+    pillsContainer.classList.remove('expanded');
+
+    const tagPills = [];
+
+    sortedTags.forEach((tag) => {
+        const pill = document.createElement('button');
+        pill.className = 'assets-tag-filter-pill';
+        pill.textContent = tag;
+        pill.dataset.tag = tag;
+
+        // Mark as active if it's in the selected filters
+        if (selectedTagFilters.includes(tag)) {
+            pill.classList.add('active');
+        }
+
+        // Toggle tag on click
+        pill.addEventListener('click', () => {
+            const tagIndex = selectedTagFilters.indexOf(tag);
+            if (tagIndex > -1) {
+                // Remove tag from filters
+                selectedTagFilters.splice(tagIndex, 1);
+                pill.classList.remove('active');
+            } else {
+                // Add tag to filters
+                selectedTagFilters.push(tag);
+                pill.classList.add('active');
+            }
+
+            // Reload library with updated filters
+            const searchBar = document.getElementById('assets-search-bar');
+            loadAssetsLibrary(searchBar ? searchBar.value : '');
+        });
+
+        tagPills.push(pill);
+        pillsContainer.appendChild(pill);
+    });
+
+    // Detect overflow dynamically after pills are rendered
+    // Use requestAnimationFrame to ensure DOM has updated
+    requestAnimationFrame(() => {
+        // Temporarily remove max-height to measure natural height
+        const originalMaxHeight = pillsContainer.style.maxHeight;
+        pillsContainer.style.maxHeight = 'none';
+
+        const naturalHeight = pillsContainer.scrollHeight;
+
+        // Restore max-height
+        pillsContainer.style.maxHeight = originalMaxHeight;
+
+        // Check if content overflows the max-height (40px)
+        const maxHeight = 40;
+        const hasOverflow = naturalHeight > maxHeight;
+
+        if (hasOverflow) {
+            // Determine which pills to hide by measuring height incrementally
+            let lastVisibleIndex = -1;
+
+            // Temporarily expand to measure each pill
+            pillsContainer.style.maxHeight = 'none';
+
+            for (let i = 0; i < tagPills.length; i++) {
+                const pill = tagPills[i];
+                const pillRect = pill.getBoundingClientRect();
+                const pillTop = pillRect.top;
+                const containerTop = pillsContainer.getBoundingClientRect().top;
+                const relativeTop = pillTop - containerTop;
+
+                // If this pill is on the second row or beyond
+                if (relativeTop >= maxHeight) {
+                    break;
+                }
+                lastVisibleIndex = i;
+            }
+
+            // Restore max-height
+            pillsContainer.style.maxHeight = originalMaxHeight;
+
+            // Hide pills that overflow (leave room for "..." button)
+            // We need to hide one more pill to make room for the "..." button
+            for (let i = lastVisibleIndex; i < tagPills.length; i++) {
+                tagPills[i].classList.add('hidden');
+            }
+
+            // Add "..." button
+            const showMoreBtn = document.createElement('button');
+            showMoreBtn.className = 'assets-tag-filter-pill show-more';
+            showMoreBtn.textContent = '...';
+            showMoreBtn.title = 'Show more tags';
+
+            showMoreBtn.addEventListener('click', () => {
+                const isExpanded = pillsContainer.classList.contains('expanded');
+                const hiddenPills = pillsContainer.querySelectorAll('.assets-tag-filter-pill.hidden');
+
+                if (isExpanded) {
+                    // Collapse: hide pills again
+                    pillsContainer.classList.remove('expanded');
+                    hiddenPills.forEach(pill => pill.classList.add('hidden'));
+                    showMoreBtn.textContent = '...';
+                    showMoreBtn.title = 'Show more tags';
+                } else {
+                    // Expand: show all pills
+                    pillsContainer.classList.add('expanded');
+                    hiddenPills.forEach(pill => pill.classList.remove('hidden'));
+                    showMoreBtn.textContent = 'Show less';
+                    showMoreBtn.title = 'Show fewer tags';
+                }
+            });
+
+            pillsContainer.appendChild(showMoreBtn);
+        }
+    });
+}
+
 // Assets Library View Functions
 async function loadAssetsLibrary(searchQuery = '') {
     const libraryGrid = document.getElementById('assets-library-grid');
-    const toggle = document.getElementById('assets-library-toggle');
-    const showAll = toggle.checked;
+    const showAll = showAllAssets;
 
     libraryGrid.innerHTML = '';
 
-    let assets = [];
+    let allAssets = [];
     if (showAll) {
-        assets = await boardManager.getAllAssets();
+        allAssets = await boardManager.getAllAssets();
     } else {
         const board = boardManager.currentBoard;
-        assets = board.assets || [];
+        allAssets = board.assets || [];
+    }
+
+    // Update tag filter pills with ALL available tags (before filtering)
+    updateTagFilterPills(allAssets);
+
+    // Start with all assets, then filter
+    let assets = [...allAssets];
+
+    // Filter by selected tags (if any selected, asset must have ALL selected tags)
+    if (selectedTagFilters.length > 0) {
+        assets = assets.filter(asset => {
+            if (!asset.tags || !Array.isArray(asset.tags)) return false;
+
+            // Convert asset tags to lowercase for comparison
+            const assetTagsLower = asset.tags.map(t => t.toLowerCase());
+
+            // Asset must have ALL selected tags
+            return selectedTagFilters.every(filterTag =>
+                assetTagsLower.includes(filterTag.toLowerCase())
+            );
+        });
     }
 
     // Filter by search query (case-insensitive)
@@ -2844,8 +3059,8 @@ async function loadAssetsLibrary(searchQuery = '') {
     }
 
     if (assets.length === 0) {
-        libraryGrid.innerHTML = searchQuery.trim()
-            ? '<div class="empty-message">No assets found matching your search.</div>'
+        libraryGrid.innerHTML = searchQuery.trim() || selectedTagFilters.length > 0
+            ? '<div class="empty-message">No assets found matching your filters.</div>'
             : showAll
             ? '<div class="empty-message">No assets yet. Click "+ Import Images" to get started.</div>'
             : '<div class="empty-message">No board assets yet. Click "+ Import Images" to get started.</div>';
@@ -2911,7 +3126,7 @@ function appendAssetToLibrary(asset, container, isAllAssets) {
         if (e.target === deleteBtn || deleteBtn.contains(e.target)) {
             return;
         }
-        showAssetModal(asset, isAllAssets);
+        showAssetSidebar(asset, isAllAssets);
     });
 
     container.appendChild(assetItem);
@@ -2973,91 +3188,71 @@ function importAssetsToLibrary() {
     input.click();
 }
 
-// Asset Modal Functions
-let currentAssetInModal = null;
+// Asset Sidebar Functions
+let currentAssetInSidebar = null;
 let currentAssetIsAllAssets = false;
 
-function setupAssetModal() {
-    const overlay = document.getElementById('asset-modal-overlay');
-    const closeBtn = document.getElementById('asset-modal-close');
-    const addToCanvasBtn = document.getElementById('asset-modal-add-to-canvas');
-    const deleteBtn = document.getElementById('asset-modal-delete');
+function setupAssetSidebar() {
+    const sidebar = document.getElementById('asset-sidebar');
+    const closeBtn = document.getElementById('asset-sidebar-close');
+    const addToCanvasBtn = document.getElementById('asset-sidebar-add-to-canvas');
+    const deleteBtn = document.getElementById('asset-sidebar-delete');
     const tagInput = document.getElementById('asset-tag-input');
     const addTagBtn = document.getElementById('asset-tag-add-btn');
-    const nameInput = document.getElementById('asset-modal-name');
+    const nameInput = document.getElementById('asset-sidebar-name');
 
-    // Close modal
+    // Close sidebar
     closeBtn.addEventListener('click', () => {
-        overlay.style.display = 'none';
-        currentAssetInModal = null;
-    });
-
-    // Close on overlay click
-    overlay.addEventListener('click', (e) => {
-        if (e.target === overlay) {
-            overlay.style.display = 'none';
-            currentAssetInModal = null;
-        }
+        sidebar.classList.remove('open');
+        currentAssetInSidebar = null;
     });
 
     // Add to canvas
     addToCanvasBtn.addEventListener('click', async () => {
-        if (!currentAssetInModal) return;
+        if (!currentAssetInSidebar) return;
 
         const imgElement = new Image();
         imgElement.onload = async () => {
-            // Switch back to Layers tab
-            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-            document.querySelector('[data-tab="layers"]').classList.add('active');
-
-            // Show canvas, hide assets library
-            document.getElementById('canvas-container').style.display = 'block';
-            document.getElementById('assets-library-view').style.display = 'none';
-            const drawingToolbar = document.getElementById('drawing-toolbar');
-            const toolsSidebar = document.querySelector('.tools-sidebar');
-            if (drawingToolbar) drawingToolbar.style.display = 'flex';
-            if (toolsSidebar) toolsSidebar.style.display = 'flex';
-
             // Add image to canvas
-            canvas.addImage(imgElement, 100, 100, currentAssetInModal.name);
+            canvas.addImage(imgElement, 100, 100, currentAssetInSidebar.name);
             renderLayers();
 
             // If from "All Assets", add to board assets
             if (currentAssetIsAllAssets) {
                 const board = boardManager.currentBoard;
                 const boardAssets = board.assets || [];
-                const existsInBoard = boardAssets.some(a => a.name === currentAssetInModal.name && a.src === currentAssetInModal.src);
+                const existsInBoard = boardAssets.some(a => a.name === currentAssetInSidebar.name && a.src === currentAssetInSidebar.src);
                 if (!existsInBoard) {
                     boardAssets.push({
-                        id: currentAssetInModal.id,
-                        name: currentAssetInModal.name,
-                        src: currentAssetInModal.src,
-                        tags: currentAssetInModal.tags || [],
-                        metadata: currentAssetInModal.metadata || {}
+                        id: currentAssetInSidebar.id,
+                        name: currentAssetInSidebar.name,
+                        src: currentAssetInSidebar.src,
+                        tags: currentAssetInSidebar.tags || [],
+                        metadata: currentAssetInSidebar.metadata || {}
                     });
                     await boardManager.updateBoard(currentBoardId, { assets: boardAssets });
                 }
             }
 
-            // Close modal
-            overlay.style.display = 'none';
-            currentAssetInModal = null;
+            // Close sidebar (stay in assets view)
+            sidebar.classList.remove('open');
+            currentAssetInSidebar = null;
         };
-        imgElement.src = currentAssetInModal.src;
+        imgElement.src = currentAssetInSidebar.src;
     });
 
     // Delete asset
     deleteBtn.addEventListener('click', async () => {
-        if (!currentAssetInModal) return;
+        if (!currentAssetInSidebar) return;
 
-        showDeleteConfirm(currentAssetInModal.name, async () => {
+        showDeleteConfirm(currentAssetInSidebar.name, async () => {
             if (currentAssetIsAllAssets) {
-                await boardManager.deleteFromAllAssets(currentAssetInModal.id);
+                await boardManager.deleteFromAllAssets(currentAssetInSidebar.id);
             } else {
-                await boardManager.deleteBoardAsset(currentBoardId, currentAssetInModal.id);
+                await boardManager.deleteBoardAsset(currentBoardId, currentAssetInSidebar.id);
             }
-            overlay.style.display = 'none';
-            currentAssetInModal = null;
+            sidebar.classList.remove('open');
+            currentAssetInSidebar = null;
             loadAssetsLibrary();
         });
     });
@@ -3065,17 +3260,17 @@ function setupAssetModal() {
     // Add tag
     const addTag = async () => {
         const tagText = tagInput.value.trim();
-        if (!tagText || !currentAssetInModal) return;
+        if (!tagText || !currentAssetInSidebar) return;
 
-        if (!currentAssetInModal.tags) {
-            currentAssetInModal.tags = [];
+        if (!currentAssetInSidebar.tags) {
+            currentAssetInSidebar.tags = [];
         }
 
-        if (!currentAssetInModal.tags.includes(tagText)) {
-            currentAssetInModal.tags.push(tagText);
+        if (!currentAssetInSidebar.tags.includes(tagText)) {
+            currentAssetInSidebar.tags.push(tagText);
             await saveAssetChanges();
             await saveTagToPresets(tagText);
-            renderAssetModalTags();
+            renderAssetSidebarTags();
         }
 
         tagInput.value = '';
@@ -3090,33 +3285,27 @@ function setupAssetModal() {
         }
     });
 
-    // Show tag presets on focus
-    tagInput.addEventListener('focus', () => {
-        renderTagPresets();
-    });
-
-    tagInput.addEventListener('input', () => {
-        renderTagPresets(tagInput.value);
-    });
-
-    // Hide presets when clicking outside
+    // Hide dropdown when clicking outside
     document.addEventListener('click', (e) => {
-        const presetsContainer = document.getElementById('asset-tag-presets');
-        if (!tagInput.contains(e.target) && !presetsContainer.contains(e.target)) {
+        const dropdownContainer = document.getElementById('asset-tag-presets-dropdown');
+        const quickPresets = document.getElementById('asset-tag-quick-presets');
+        if (!tagInput.contains(e.target) &&
+            !dropdownContainer.contains(e.target) &&
+            !quickPresets.contains(e.target)) {
             hideTagPresets();
         }
     });
 
     // Save name on blur
     nameInput.addEventListener('blur', async () => {
-        if (currentAssetInModal) {
-            currentAssetInModal.name = nameInput.value;
+        if (currentAssetInSidebar) {
+            currentAssetInSidebar.name = nameInput.value;
             await saveAssetChanges();
         }
     });
 }
 
-async function showAssetModal(asset, isAllAssets) {
+async function showAssetSidebar(asset, isAllAssets) {
     // Load fresh asset data from storage to ensure we have the latest tags
     let freshAsset = asset;
 
@@ -3132,12 +3321,12 @@ async function showAssetModal(asset, isAllAssets) {
         }
     }
 
-    currentAssetInModal = freshAsset;
+    currentAssetInSidebar = freshAsset;
     currentAssetIsAllAssets = isAllAssets;
 
-    const overlay = document.getElementById('asset-modal-overlay');
-    const preview = document.getElementById('asset-modal-preview');
-    const nameInput = document.getElementById('asset-modal-name');
+    const sidebar = document.getElementById('asset-sidebar');
+    const preview = document.getElementById('asset-sidebar-preview');
+    const nameInput = document.getElementById('asset-sidebar-name');
 
     // Set preview image
     preview.src = freshAsset.src;
@@ -3146,24 +3335,27 @@ async function showAssetModal(asset, isAllAssets) {
     nameInput.value = freshAsset.name || '';
 
     // Render tags
-    renderAssetModalTags();
+    renderAssetSidebarTags();
+
+    // Render quick tag presets
+    await renderQuickTagPresets();
 
     // Render metadata
-    renderAssetModalMetadata();
+    renderAssetSidebarMetadata();
 
-    // Show modal
-    overlay.style.display = 'flex';
+    // Show sidebar
+    sidebar.classList.add('open');
 }
 
-function renderAssetModalTags() {
-    const tagsContainer = document.getElementById('asset-modal-tags');
+function renderAssetSidebarTags() {
+    const tagsContainer = document.getElementById('asset-sidebar-tags');
     tagsContainer.innerHTML = '';
 
-    if (!currentAssetInModal || !currentAssetInModal.tags || currentAssetInModal.tags.length === 0) {
+    if (!currentAssetInSidebar || !currentAssetInSidebar.tags || currentAssetInSidebar.tags.length === 0) {
         return;
     }
 
-    currentAssetInModal.tags.forEach(tag => {
+    currentAssetInSidebar.tags.forEach(tag => {
         const tagElement = document.createElement('div');
         tagElement.className = 'asset-tag';
         tagElement.innerHTML = `
@@ -3173,41 +3365,41 @@ function renderAssetModalTags() {
 
         const removeBtn = tagElement.querySelector('.asset-tag-remove');
         removeBtn.addEventListener('click', async () => {
-            currentAssetInModal.tags = currentAssetInModal.tags.filter(t => t !== tag);
+            currentAssetInSidebar.tags = currentAssetInSidebar.tags.filter(t => t !== tag);
             await saveAssetChanges();
-            renderAssetModalTags();
+            renderAssetSidebarTags();
         });
 
         tagsContainer.appendChild(tagElement);
     });
 }
 
-function renderAssetModalMetadata() {
-    const metadataContainer = document.getElementById('asset-modal-metadata');
+function renderAssetSidebarMetadata() {
+    const metadataContainer = document.getElementById('asset-sidebar-metadata');
 
-    if (!currentAssetInModal) return;
+    if (!currentAssetInSidebar) return;
 
     // Create metadata if it doesn't exist
-    if (!currentAssetInModal.metadata) {
-        currentAssetInModal.metadata = {};
+    if (!currentAssetInSidebar.metadata) {
+        currentAssetInSidebar.metadata = {};
     }
 
     // Add created date if not exists
-    if (!currentAssetInModal.metadata.created) {
-        currentAssetInModal.metadata.created = currentAssetInModal.id || Date.now();
+    if (!currentAssetInSidebar.metadata.created) {
+        currentAssetInSidebar.metadata.created = currentAssetInSidebar.id || Date.now();
     }
 
-    const metadata = currentAssetInModal.metadata;
+    const metadata = currentAssetInSidebar.metadata;
     const created = new Date(metadata.created);
 
     metadataContainer.innerHTML = `
-        <div class="asset-modal-metadata-item">
-            <span class="asset-modal-metadata-label">Created</span>
-            <span class="asset-modal-metadata-value">${created.toLocaleDateString()}</span>
+        <div class="asset-sidebar-metadata-item">
+            <span class="asset-sidebar-metadata-label">Created</span>
+            <span class="asset-sidebar-metadata-value">${created.toLocaleDateString()}</span>
         </div>
-        <div class="asset-modal-metadata-item">
-            <span class="asset-modal-metadata-label">ID</span>
-            <span class="asset-modal-metadata-value">${currentAssetInModal.id}</span>
+        <div class="asset-sidebar-metadata-item">
+            <span class="asset-sidebar-metadata-label">ID</span>
+            <span class="asset-sidebar-metadata-value">${currentAssetInSidebar.id}</span>
         </div>
     `;
 
@@ -3215,27 +3407,27 @@ function renderAssetModalMetadata() {
     const img = new Image();
     img.onload = () => {
         const sizeItem = document.createElement('div');
-        sizeItem.className = 'asset-modal-metadata-item';
+        sizeItem.className = 'asset-sidebar-metadata-item';
         sizeItem.innerHTML = `
-            <span class="asset-modal-metadata-label">Dimensions</span>
-            <span class="asset-modal-metadata-value">${img.width} × ${img.height}</span>
+            <span class="asset-sidebar-metadata-label">Dimensions</span>
+            <span class="asset-sidebar-metadata-value">${img.width} × ${img.height}</span>
         `;
         metadataContainer.appendChild(sizeItem);
     };
-    img.src = currentAssetInModal.src;
+    img.src = currentAssetInSidebar.src;
 }
 
 async function saveAssetChanges() {
-    if (!currentAssetInModal) return;
+    if (!currentAssetInSidebar) return;
 
-    console.log('Saving asset changes:', currentAssetInModal);
+    console.log('Saving asset changes:', currentAssetInSidebar);
 
     // Always update in board assets if it exists there
     const board = boardManager.currentBoard;
     if (board.assets) {
-        const boardIndex = board.assets.findIndex(a => a.id === currentAssetInModal.id);
+        const boardIndex = board.assets.findIndex(a => a.id === currentAssetInSidebar.id);
         if (boardIndex !== -1) {
-            board.assets[boardIndex] = { ...currentAssetInModal };
+            board.assets[boardIndex] = { ...currentAssetInSidebar };
             console.log('Updated in board assets:', board.assets[boardIndex]);
             await boardManager.updateBoard(currentBoardId, { assets: board.assets });
         }
@@ -3243,15 +3435,15 @@ async function saveAssetChanges() {
 
     // Also update in all assets
     let allAssets = await boardManager.getAllAssets();
-    const allIndex = allAssets.findIndex(a => a.id === currentAssetInModal.id);
+    const allIndex = allAssets.findIndex(a => a.id === currentAssetInSidebar.id);
     if (allIndex !== -1) {
-        allAssets[allIndex] = { ...currentAssetInModal };
+        allAssets[allIndex] = { ...currentAssetInSidebar };
         console.log('Updated in all assets:', allAssets[allIndex]);
 
         if (window.__TAURI__) {
             // Update via Tauri backend
             try {
-                await boardManager.invoke('update_asset', { asset: currentAssetInModal });
+                await boardManager.invoke('update_asset', { asset: currentAssetInSidebar });
             } catch (e) {
                 console.error('Failed to update asset:', e);
             }
@@ -3300,49 +3492,88 @@ async function saveTagToPresets(tag) {
 }
 
 async function renderTagPresets(filter = '') {
-    const presetsContainer = document.getElementById('asset-tag-presets');
-    const presets = await getTagPresets();
-
-    // Filter presets based on input
-    const filteredPresets = filter.trim()
-        ? presets.filter(tag => tag.toLowerCase().includes(filter.toLowerCase()))
-        : presets;
-
-    if (filteredPresets.length === 0) {
-        presetsContainer.innerHTML = '<div class="asset-tag-preset-empty">No tag presets yet</div>';
-        presetsContainer.classList.add('show');
-        return;
-    }
-
-    presetsContainer.innerHTML = filteredPresets.map(tag => `
-        <div class="asset-tag-preset-item" data-tag="${tag}">
-            <span class="asset-tag">${tag}</span>
-        </div>
-    `).join('');
-
-    // Add click handlers to preset items
-    presetsContainer.querySelectorAll('.asset-tag-preset-item').forEach(item => {
-        item.addEventListener('click', async () => {
-            const tag = item.dataset.tag;
-            if (currentAssetInModal && !currentAssetInModal.tags?.includes(tag)) {
-                if (!currentAssetInModal.tags) {
-                    currentAssetInModal.tags = [];
-                }
-                currentAssetInModal.tags.push(tag);
-                await saveAssetChanges();
-                renderAssetModalTags();
-                hideTagPresets();
-                document.getElementById('asset-tag-input').value = '';
-            }
-        });
-    });
-
-    presetsContainer.classList.add('show');
+    // This function is no longer used - keeping for backwards compatibility
+    // Tags are now shown inline via renderQuickTagPresets()
 }
 
 function hideTagPresets() {
-    const presetsContainer = document.getElementById('asset-tag-presets');
+    const presetsContainer = document.getElementById('asset-tag-presets-dropdown');
     presetsContainer.classList.remove('show');
+}
+
+let tagsExpanded = false;
+
+async function renderQuickTagPresets() {
+    const quickPresetsContainer = document.getElementById('asset-tag-quick-presets');
+    const presets = await getTagPresets();
+
+    quickPresetsContainer.innerHTML = '';
+
+    if (presets.length === 0) return;
+
+    // Determine which tags to show based on expanded state
+    const displayTags = tagsExpanded ? presets.slice().reverse() : presets.slice(-5).reverse();
+
+    // Show tags
+    displayTags.forEach(tag => {
+        const pill = document.createElement('div');
+        pill.className = 'asset-tag-preset-pill';
+        pill.innerHTML = `
+            <span>${tag}</span>
+            <span class="asset-tag-preset-delete">×</span>
+        `;
+
+        // Click on tag text to add it (optimized - no await)
+        pill.querySelector('span:first-child').addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (currentAssetInSidebar && !currentAssetInSidebar.tags?.includes(tag)) {
+                if (!currentAssetInSidebar.tags) {
+                    currentAssetInSidebar.tags = [];
+                }
+                currentAssetInSidebar.tags.push(tag);
+                renderAssetSidebarTags();
+                // Save in background without blocking UI
+                saveAssetChanges();
+            }
+        });
+
+        // Click on × to delete preset
+        pill.querySelector('.asset-tag-preset-delete').addEventListener('click', async (e) => {
+            e.stopPropagation();
+            await deleteTagPreset(tag);
+            await renderQuickTagPresets();
+        });
+
+        quickPresetsContainer.appendChild(pill);
+    });
+
+    // Add "..." button if there are more presets and not expanded
+    if (presets.length > 5) {
+        const morePill = document.createElement('div');
+        morePill.className = 'asset-tag-preset-pill more';
+        morePill.textContent = tagsExpanded ? '−' : '...';
+        morePill.addEventListener('click', () => {
+            tagsExpanded = !tagsExpanded;
+            renderQuickTagPresets();
+        });
+        quickPresetsContainer.appendChild(morePill);
+    }
+}
+
+
+async function deleteTagPreset(tag) {
+    let presets = await getTagPresets();
+    presets = presets.filter(t => t !== tag);
+
+    if (window.__TAURI__) {
+        try {
+            await boardManager.invoke('save_tag_presets', { presets });
+        } catch (e) {
+            console.error('Failed to delete tag preset:', e);
+        }
+    } else {
+        localStorage.setItem(TAG_PRESETS_KEY, JSON.stringify(presets));
+    }
 }
 
 async function exportBoard() {
@@ -4102,7 +4333,6 @@ function setupLayerContextMenu() {
 
 function setupColorExtractorTool() {
     const colorExtractorBtn = document.getElementById('color-extractor-btn');
-
     if (!colorExtractorBtn) return;
 
     colorExtractorBtn.addEventListener('click', async () => {

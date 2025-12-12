@@ -29,6 +29,10 @@ pub struct Asset {
     pub id: f64,
     pub name: String,
     pub src: String,
+    #[serde(default)]
+    pub tags: Vec<String>,
+    #[serde(default)]
+    pub metadata: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -223,19 +227,27 @@ fn save_all_assets(app: &AppHandle, assets: &Vec<Asset>) -> Result<(), String> {
     Ok(())
 }
 
-pub fn add_to_all_assets(app: &AppHandle, name: String, src: String) -> Result<Asset, String> {
+pub fn add_to_all_assets(
+    app: &AppHandle,
+    name: String,
+    src: String,
+    tags: Option<Vec<String>>,
+    metadata: Option<serde_json::Value>,
+) -> Result<Asset, String> {
     let mut all_assets = load_all_assets(app)?;
-    
+
     if let Some(existing) = all_assets.iter().find(|a| a.name == name && a.src == src) {
         return Ok(existing.clone());
     }
-    
+
     let asset = Asset {
         id: now_millis() as f64,
         name,
         src,
+        tags: tags.unwrap_or_default(),
+        metadata,
     };
-    
+
     all_assets.push(asset.clone());
     save_all_assets(app, &all_assets)?;
     Ok(asset)
@@ -254,6 +266,45 @@ pub fn delete_board_asset(app: &AppHandle, board_id: u64, asset_id: f64) -> Resu
     board.updated_at = now_millis();
     save_board(app, &board)?;
     Ok(board)
+}
+
+pub fn update_asset(app: &AppHandle, asset: Asset) -> Result<(), String> {
+    let mut all_assets = load_all_assets(app)?;
+
+    if let Some(index) = all_assets.iter().position(|a| a.id == asset.id) {
+        all_assets[index] = asset;
+        save_all_assets(app, &all_assets)?;
+        Ok(())
+    } else {
+        Err(format!("Asset with id {} not found", asset.id))
+    }
+}
+
+fn get_tag_presets_path(app: &AppHandle) -> PathBuf {
+    let data_dir = app.path().app_data_dir().expect("Failed to get app data dir");
+    data_dir.join("tag_presets.json")
+}
+
+pub fn load_tag_presets(app: &AppHandle) -> Result<Vec<String>, String> {
+    let path = get_tag_presets_path(app);
+
+    if !path.exists() {
+        let empty: Vec<String> = Vec::new();
+        let content = serde_json::to_string_pretty(&empty).map_err(|e| e.to_string())?;
+        fs::write(&path, content).map_err(|e| e.to_string())?;
+        return Ok(empty);
+    }
+
+    let content = fs::read_to_string(&path).map_err(|e| e.to_string())?;
+    let presets = serde_json::from_str(&content).map_err(|e| e.to_string())?;
+    Ok(presets)
+}
+
+pub fn save_tag_presets(app: &AppHandle, presets: Vec<String>) -> Result<(), String> {
+    let path = get_tag_presets_path(app);
+    let content = serde_json::to_string_pretty(&presets).map_err(|e| e.to_string())?;
+    fs::write(&path, content).map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 pub fn now_millis() -> u64 {

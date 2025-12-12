@@ -80,8 +80,14 @@ pub fn get_all_assets(app: AppHandle) -> Result<Vec<Asset>, String> {
 }
 
 #[tauri::command]
-pub fn add_to_all_assets(app: AppHandle, name: String, src: String) -> Result<Asset, String> {
-    database::add_to_all_assets(&app, name, src)
+pub fn add_to_all_assets(
+    app: AppHandle,
+    name: String,
+    src: String,
+    tags: Option<Vec<String>>,
+    metadata: Option<serde_json::Value>,
+) -> Result<Asset, String> {
+    database::add_to_all_assets(&app, name, src, tags, metadata)
 }
 
 #[tauri::command]
@@ -92,4 +98,19 @@ pub fn delete_from_all_assets(app: AppHandle, id: f64) -> Result<(), String> {
 #[tauri::command]
 pub fn delete_board_asset(app: AppHandle, board_id: u64, asset_id: f64) -> Result<Board, String> {
     database::delete_board_asset(&app, board_id, asset_id)
+}
+
+#[tauri::command]
+pub fn update_asset(app: AppHandle, asset: Asset) -> Result<(), String> {
+    database::update_asset(&app, asset)
+}
+
+#[tauri::command]
+pub fn get_tag_presets(app: AppHandle) -> Result<Vec<String>, String> {
+    database::load_tag_presets(&app)
+}
+
+#[tauri::command]
+pub fn save_tag_presets(app: AppHandle, presets: Vec<String>) -> Result<(), String> {
+    database::save_tag_presets(&app, presets)
 }
