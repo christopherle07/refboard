@@ -23,6 +23,7 @@
     <link rel="stylesheet" href="css/sidebar.css">
     <link rel="stylesheet" href="css/modal.css">
     <link rel="stylesheet" href="css/titlebar.css">
+    <link rel="stylesheet" href="css/assets-library.css">
 </head>
 <body>
     <div class="custom-titlebar" data-tauri-drag-region>
@@ -55,17 +56,17 @@
             </div>
 
             <div class="sidebar-tabs">
-                <button class="tab-btn active" data-tab="layers">Layers</button>
+                <button class="tab-btn active" data-tab="layers">Board</button>
                 <button class="tab-btn" data-tab="assets">Assets</button>
             </div>
 
             <div class="sidebar-content">
-                <div class="tab-panel active" data-panel="layers">
-                    <div class="panel-section layers-section-scrollable">
-                        <div class="panel-section-header">
-                            <h3>Layers</h3>
-                            <div class="header-actions">
-                                <button class="collapse-btn" id="collapse-layers-btn">
+                <div class="panel-section layers-section-scrollable">
+                    <div class="panel-section-header">
+                        <h3>Layers</h3>
+                        <div class="header-actions">
+                            <button class="icon-btn" id="add-layer-btn" title="Add Layer">+</button>
+                            <button class="collapse-btn" id="collapse-layers-btn">
                                     <svg class="collapse-icon collapse-icon-dark" width="14" height="14" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
                                         <path d="M114 122C119.523 122 124 117.523 124 112C124 106.477 119.523 102 114 102V112V122ZM45 102H35V122H45V112V102ZM114 112V102H45V112V122H114V112Z" fill="white"/>
                                         <path d="M104 112C104 117.523 108.477 122 114 122C119.523 122 124 117.523 124 112H114H104ZM124 43V33H104V43H114H124ZM114 112H124V43H114H104V112H114Z" fill="white"/>
@@ -226,24 +227,6 @@
 
                         </div>
                     </div>
-                </div>
-
-                <div class="tab-panel" data-panel="assets">
-                    <div class="assets-controls">
-                        <button class="import-btn" id="import-assets-btn">+ Import Images</button>
-                        <div class="assets-view-toggle">
-                            <span class="assets-view-label">Board Assets</span>
-                            <label class="toggle-switch">
-                                <input type="checkbox" id="assets-view-toggle">
-                                <span class="toggle-slider"></span>
-                            </label>
-                            <span class="assets-view-label">All Assets</span>
-                        </div>
-                    </div>
-                    <div class="assets-grid" id="assets-grid">
-                        <div class="empty-message">No assets yet</div>
-                    </div>
-                </div>
             </div>
         </aside>
 
@@ -424,6 +407,35 @@
                 <canvas id="main-canvas"></canvas>
             </div>
 
+            <!-- Assets Library View -->
+            <div class="assets-library-view" id="assets-library-view" style="display: none;">
+                <div class="assets-library-header">
+                    <div class="assets-library-header-left">
+                        <button class="back-to-canvas-btn" id="back-to-canvas-btn" title="Back to Canvas">
+                            <img src="assets/backarrow.svg" alt="Back" class="back-arrow-icon theme-icon">
+                        </button>
+                        <h1>Assets Library</h1>
+                    </div>
+                    <div class="assets-library-controls">
+                        <input type="text" class="assets-search-bar" id="assets-search-bar" placeholder="Search assets...">
+                        <button class="assets-import-btn" id="assets-library-import-btn">+ Import Images</button>
+                        <div class="assets-view-toggle">
+                            <span class="assets-view-label">Board Assets</span>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="assets-library-toggle">
+                                <span class="toggle-slider"></span>
+                            </label>
+                            <span class="assets-view-label">All Assets</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="assets-library-content">
+                    <div class="assets-library-grid" id="assets-library-grid">
+                        <div class="empty-message">No assets yet. Click "+ Import Images" to get started.</div>
+                    </div>
+                </div>
+            </div>
+
             <div class="canvas-context-menu" id="canvas-context-menu">
                 <div class="context-menu-item" id="context-delete-selected" style="display: none;">Delete Selected</div>
                 <div class="context-menu-item" id="context-deselect-all" style="display: none;">Deselect All</div>
@@ -534,6 +546,52 @@
     <div class="color-palette-popup" id="color-palette-popup" style="display: none;">
         <div class="color-palette-grid" id="color-palette-grid">
             <!-- Colors will be populated here -->
+        </div>
+    </div>
+
+    <!-- Asset Details Modal -->
+    <div class="asset-modal-overlay" id="asset-modal-overlay">
+        <div class="asset-modal">
+            <div class="asset-modal-header">
+                <h2>Asset Details</h2>
+                <button class="asset-modal-close" id="asset-modal-close">×</button>
+            </div>
+            <div class="asset-modal-body">
+                <img src="" alt="Asset Preview" class="asset-modal-preview" id="asset-modal-preview">
+
+                <div class="asset-modal-section">
+                    <h3>Name</h3>
+                    <input type="text" class="asset-modal-input" id="asset-modal-name" placeholder="Asset name">
+                </div>
+
+                <div class="asset-modal-section">
+                    <h3>Tags</h3>
+                    <div class="asset-modal-tags" id="asset-modal-tags">
+                        <!-- Tags will be populated here -->
+                    </div>
+                    <div class="asset-tag-input-row">
+                        <input type="text" class="asset-modal-input asset-tag-input" id="asset-tag-input" placeholder="Add a tag or select from presets">
+                        <button class="asset-tag-add-btn" id="asset-tag-add-btn">Add Tag</button>
+                        <div class="asset-tag-presets" id="asset-tag-presets">
+                            <!-- Tag presets will be populated here -->
+                        </div>
+                    </div>
+                </div>
+
+                <div class="asset-modal-section">
+                    <h3>Metadata</h3>
+                    <div class="asset-modal-metadata" id="asset-modal-metadata">
+                        <!-- Metadata will be populated here -->
+                    </div>
+                </div>
+
+                <div class="asset-modal-section">
+                    <div class="asset-modal-actions">
+                        <button class="asset-modal-btn asset-modal-btn-primary" id="asset-modal-add-to-canvas">Add to Canvas</button>
+                        <button class="asset-modal-btn asset-modal-btn-danger" id="asset-modal-delete">Delete Asset</button>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 

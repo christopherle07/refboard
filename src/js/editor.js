@@ -319,16 +319,6 @@ function loadLayers(layers, viewState = null) {
 
 
 function setupEventListeners() {
-    document.querySelectorAll('.tab-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const tab = btn.dataset.tab;
-            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-            document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
-            btn.classList.add('active');
-            document.querySelector(`[data-panel="${tab}"]`).classList.add('active');
-        });
-    });
-    
     document.getElementById('bg-color').addEventListener('change', (e) => {
         const color = e.target.value;
         canvas.setBackgroundColor(color);
@@ -343,9 +333,96 @@ function setupEventListeners() {
 
         scheduleSave();
     });
-    
-    document.getElementById('import-assets-btn').addEventListener('click', importAssets);
+
     document.getElementById('open-floating-btn').addEventListener('click', openFloatingWindow);
+
+    // Assets library event listeners
+    document.getElementById('assets-library-import-btn').addEventListener('click', () => {
+        importAssetsToLibrary();
+    });
+
+    document.getElementById('assets-library-toggle').addEventListener('change', () => {
+        loadAssetsLibrary();
+    });
+
+    document.getElementById('back-to-canvas-btn').addEventListener('click', () => {
+        window.toggleAssetsLibrary();
+    });
+
+    // Assets search bar
+    document.getElementById('assets-search-bar').addEventListener('input', (e) => {
+        loadAssetsLibrary(e.target.value);
+    });
+
+    // Asset modal event listeners
+    setupAssetModal();
+
+    // Tab switching logic
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const tab = e.target.dataset.tab;
+
+            // Update active tab button
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            e.target.classList.add('active');
+
+            if (tab === 'layers') {
+                // Show canvas view
+                document.getElementById('canvas-container').style.display = 'block';
+                document.getElementById('assets-library-view').style.display = 'none';
+                const drawingToolbar = document.getElementById('drawing-toolbar');
+                const toolsSidebar = document.querySelector('.tools-sidebar');
+                if (drawingToolbar) drawingToolbar.style.display = 'flex';
+                if (toolsSidebar) toolsSidebar.style.display = 'flex';
+            } else if (tab === 'assets') {
+                // Show assets library view
+                document.getElementById('canvas-container').style.display = 'none';
+                document.getElementById('assets-library-view').style.display = 'flex';
+                const drawingToolbar = document.getElementById('drawing-toolbar');
+                const toolsSidebar = document.querySelector('.tools-sidebar');
+                if (drawingToolbar) drawingToolbar.style.display = 'none';
+                if (toolsSidebar) toolsSidebar.style.display = 'none';
+
+                // Load assets into library view
+                loadAssetsLibrary();
+            }
+        });
+    });
+
+    // Assets library toggle function
+    window.toggleAssetsLibrary = function() {
+        const canvasContainer = document.getElementById('canvas-container');
+        const assetsLibraryView = document.getElementById('assets-library-view');
+        const drawingToolbar = document.getElementById('drawing-toolbar');
+        const toolsSidebar = document.querySelector('.tools-sidebar');
+
+        const isLibraryVisible = assetsLibraryView.style.display === 'flex';
+
+        if (isLibraryVisible) {
+            // Show canvas, hide assets library
+            canvasContainer.style.display = 'block';
+            assetsLibraryView.style.display = 'none';
+            if (drawingToolbar) drawingToolbar.style.display = 'flex';
+            if (toolsSidebar) toolsSidebar.style.display = 'flex';
+
+            // Switch to Layers tab
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.querySelector('[data-tab="layers"]').classList.add('active');
+        } else {
+            // Show assets library, hide canvas
+            canvasContainer.style.display = 'none';
+            assetsLibraryView.style.display = 'flex';
+            if (drawingToolbar) drawingToolbar.style.display = 'none';
+            if (toolsSidebar) toolsSidebar.style.display = 'none';
+
+            // Switch to Assets tab
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.querySelector('[data-tab="assets"]').classList.add('active');
+
+            // Load assets into library view
+            loadAssetsLibrary();
+        }
+    };
 
     setupContextMenu();
     setupBoardDropdown();
@@ -2740,6 +2817,534 @@ function appendAssetToDOM(asset, container) {
     });
 }
 
+// Assets Library View Functions
+async function loadAssetsLibrary(searchQuery = '') {
+    const libraryGrid = document.getElementById('assets-library-grid');
+    const toggle = document.getElementById('assets-library-toggle');
+    const showAll = toggle.checked;
+
+    libraryGrid.innerHTML = '';
+
+    let assets = [];
+    if (showAll) {
+        assets = await boardManager.getAllAssets();
+    } else {
+        const board = boardManager.currentBoard;
+        assets = board.assets || [];
+    }
+
+    // Filter by search query (case-insensitive)
+    if (searchQuery.trim()) {
+        const query = searchQuery.toLowerCase();
+        assets = assets.filter(asset => {
+            const nameMatch = asset.name && asset.name.toLowerCase().includes(query);
+            const tagsMatch = asset.tags && asset.tags.some(tag => tag.toLowerCase().includes(query));
+            return nameMatch || tagsMatch;
+        });
+    }
+
+    if (assets.length === 0) {
+        libraryGrid.innerHTML = searchQuery.trim()
+            ? '<div class="empty-message">No assets found matching your search.</div>'
+            : showAll
+            ? '<div class="empty-message">No assets yet. Click "+ Import Images" to get started.</div>'
+            : '<div class="empty-message">No board assets yet. Click "+ Import Images" to get started.</div>';
+        return;
+    }
+
+    assets.forEach(asset => {
+        appendAssetToLibrary(asset, libraryGrid, showAll);
+    });
+}
+
+function appendAssetToLibrary(asset, container, isAllAssets) {
+    const assetItem = document.createElement('div');
+    assetItem.className = 'assets-library-item';
+
+    const img = document.createElement('img');
+    img.src = asset.src;
+    img.draggable = false;
+
+    const deleteBtn = document.createElement('button');
+    deleteBtn.className = 'assets-library-item-delete';
+    deleteBtn.textContent = '×';
+    deleteBtn.title = isAllAssets ? 'Delete from all assets' : 'Delete from board';
+    deleteBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        showDeleteConfirm(asset.name, async () => {
+            if (isAllAssets) {
+                await boardManager.deleteFromAllAssets(asset.id);
+            } else {
+                await boardManager.deleteBoardAsset(currentBoardId, asset.id);
+            }
+            loadAssetsLibrary();
+        });
+    });
+
+    // Card info overlay
+    const cardInfo = document.createElement('div');
+    cardInfo.className = 'asset-card-info';
+
+    const tags = asset.tags || [];
+    const tagsHTML = tags.length > 0
+        ? `<div class="asset-card-tags">
+            ${tags.map(tag => `<span class="asset-card-tag">${tag}</span>`).join('')}
+           </div>`
+        : '';
+
+    const created = asset.metadata?.created || asset.id || Date.now();
+    const createdDate = new Date(created);
+
+    cardInfo.innerHTML = `
+        ${tagsHTML}
+        <div class="asset-card-name">${asset.name || 'Untitled'}</div>
+        <div class="asset-card-meta">${createdDate.toLocaleDateString()}</div>
+    `;
+
+    assetItem.appendChild(img);
+    assetItem.appendChild(cardInfo);
+    assetItem.appendChild(deleteBtn);
+
+    // Click to open modal
+    assetItem.addEventListener('click', (e) => {
+        // Don't open modal if clicking delete button
+        if (e.target === deleteBtn || deleteBtn.contains(e.target)) {
+            return;
+        }
+        showAssetModal(asset, isAllAssets);
+    });
+
+    container.appendChild(assetItem);
+}
+
+function importAssetsToLibrary() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.multiple = true;
+
+    input.onchange = async (e) => {
+        const files = Array.from(e.target.files);
+
+        for (const file of files) {
+            const reader = new FileReader();
+            reader.onload = async (event) => {
+                const board = boardManager.currentBoard;
+                if (!board.assets) board.assets = [];
+
+                const existsInBoard = board.assets.some(a => a.name === file.name);
+                if (!existsInBoard) {
+                    const newAsset = {
+                        id: Date.now() + Math.random(),
+                        src: event.target.result,
+                        name: file.name,
+                        tags: [],
+                        metadata: {
+                            created: Date.now()
+                        }
+                    };
+                    board.assets.push(newAsset);
+
+                    // Update backend
+                    await boardManager.updateBoard(currentBoardId, { assets: board.assets });
+
+                    // Add to all assets with tags and metadata
+                    let allAssets = await boardManager.getAllAssets();
+                    const existsInAll = allAssets.some(a => a.name === file.name && a.src === event.target.result);
+                    if (!existsInAll) {
+                        allAssets.push(newAsset);
+                        if (window.__TAURI__) {
+                            await boardManager.invoke('add_to_all_assets', { name: file.name, src: event.target.result, tags: [], metadata: { created: Date.now() } });
+                        } else {
+                            localStorage.setItem(boardManager.ALL_ASSETS_KEY, JSON.stringify(allAssets));
+                        }
+                    }
+                }
+            };
+            reader.readAsDataURL(file);
+        }
+
+        // Reload library after import
+        setTimeout(() => {
+            loadAssetsLibrary();
+        }, 500);
+    };
+
+    input.click();
+}
+
+// Asset Modal Functions
+let currentAssetInModal = null;
+let currentAssetIsAllAssets = false;
+
+function setupAssetModal() {
+    const overlay = document.getElementById('asset-modal-overlay');
+    const closeBtn = document.getElementById('asset-modal-close');
+    const addToCanvasBtn = document.getElementById('asset-modal-add-to-canvas');
+    const deleteBtn = document.getElementById('asset-modal-delete');
+    const tagInput = document.getElementById('asset-tag-input');
+    const addTagBtn = document.getElementById('asset-tag-add-btn');
+    const nameInput = document.getElementById('asset-modal-name');
+
+    // Close modal
+    closeBtn.addEventListener('click', () => {
+        overlay.style.display = 'none';
+        currentAssetInModal = null;
+    });
+
+    // Close on overlay click
+    overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) {
+            overlay.style.display = 'none';
+            currentAssetInModal = null;
+        }
+    });
+
+    // Add to canvas
+    addToCanvasBtn.addEventListener('click', async () => {
+        if (!currentAssetInModal) return;
+
+        const imgElement = new Image();
+        imgElement.onload = async () => {
+            // Switch back to Layers tab
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.querySelector('[data-tab="layers"]').classList.add('active');
+
+            // Show canvas, hide assets library
+            document.getElementById('canvas-container').style.display = 'block';
+            document.getElementById('assets-library-view').style.display = 'none';
+            const drawingToolbar = document.getElementById('drawing-toolbar');
+            const toolsSidebar = document.querySelector('.tools-sidebar');
+            if (drawingToolbar) drawingToolbar.style.display = 'flex';
+            if (toolsSidebar) toolsSidebar.style.display = 'flex';
+
+            // Add image to canvas
+            canvas.addImage(imgElement, 100, 100, currentAssetInModal.name);
+            renderLayers();
+
+            // If from "All Assets", add to board assets
+            if (currentAssetIsAllAssets) {
+                const board = boardManager.currentBoard;
+                const boardAssets = board.assets || [];
+                const existsInBoard = boardAssets.some(a => a.name === currentAssetInModal.name && a.src === currentAssetInModal.src);
+                if (!existsInBoard) {
+                    boardAssets.push({
+                        id: currentAssetInModal.id,
+                        name: currentAssetInModal.name,
+                        src: currentAssetInModal.src,
+                        tags: currentAssetInModal.tags || [],
+                        metadata: currentAssetInModal.metadata || {}
+                    });
+                    await boardManager.updateBoard(currentBoardId, { assets: boardAssets });
+                }
+            }
+
+            // Close modal
+            overlay.style.display = 'none';
+            currentAssetInModal = null;
+        };
+        imgElement.src = currentAssetInModal.src;
+    });
+
+    // Delete asset
+    deleteBtn.addEventListener('click', async () => {
+        if (!currentAssetInModal) return;
+
+        showDeleteConfirm(currentAssetInModal.name, async () => {
+            if (currentAssetIsAllAssets) {
+                await boardManager.deleteFromAllAssets(currentAssetInModal.id);
+            } else {
+                await boardManager.deleteBoardAsset(currentBoardId, currentAssetInModal.id);
+            }
+            overlay.style.display = 'none';
+            currentAssetInModal = null;
+            loadAssetsLibrary();
+        });
+    });
+
+    // Add tag
+    const addTag = async () => {
+        const tagText = tagInput.value.trim();
+        if (!tagText || !currentAssetInModal) return;
+
+        if (!currentAssetInModal.tags) {
+            currentAssetInModal.tags = [];
+        }
+
+        if (!currentAssetInModal.tags.includes(tagText)) {
+            currentAssetInModal.tags.push(tagText);
+            await saveAssetChanges();
+            await saveTagToPresets(tagText);
+            renderAssetModalTags();
+        }
+
+        tagInput.value = '';
+        hideTagPresets();
+    };
+
+    addTagBtn.addEventListener('click', addTag);
+    tagInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            addTag();
+        }
+    });
+
+    // Show tag presets on focus
+    tagInput.addEventListener('focus', () => {
+        renderTagPresets();
+    });
+
+    tagInput.addEventListener('input', () => {
+        renderTagPresets(tagInput.value);
+    });
+
+    // Hide presets when clicking outside
+    document.addEventListener('click', (e) => {
+        const presetsContainer = document.getElementById('asset-tag-presets');
+        if (!tagInput.contains(e.target) && !presetsContainer.contains(e.target)) {
+            hideTagPresets();
+        }
+    });
+
+    // Save name on blur
+    nameInput.addEventListener('blur', async () => {
+        if (currentAssetInModal) {
+            currentAssetInModal.name = nameInput.value;
+            await saveAssetChanges();
+        }
+    });
+}
+
+async function showAssetModal(asset, isAllAssets) {
+    // Load fresh asset data from storage to ensure we have the latest tags
+    let freshAsset = asset;
+
+    if (isAllAssets) {
+        const allAssets = await boardManager.getAllAssets();
+        const found = allAssets.find(a => a.id === asset.id);
+        if (found) freshAsset = found;
+    } else {
+        const board = boardManager.currentBoard;
+        if (board.assets) {
+            const found = board.assets.find(a => a.id === asset.id);
+            if (found) freshAsset = found;
+        }
+    }
+
+    currentAssetInModal = freshAsset;
+    currentAssetIsAllAssets = isAllAssets;
+
+    const overlay = document.getElementById('asset-modal-overlay');
+    const preview = document.getElementById('asset-modal-preview');
+    const nameInput = document.getElementById('asset-modal-name');
+
+    // Set preview image
+    preview.src = freshAsset.src;
+
+    // Set name
+    nameInput.value = freshAsset.name || '';
+
+    // Render tags
+    renderAssetModalTags();
+
+    // Render metadata
+    renderAssetModalMetadata();
+
+    // Show modal
+    overlay.style.display = 'flex';
+}
+
+function renderAssetModalTags() {
+    const tagsContainer = document.getElementById('asset-modal-tags');
+    tagsContainer.innerHTML = '';
+
+    if (!currentAssetInModal || !currentAssetInModal.tags || currentAssetInModal.tags.length === 0) {
+        return;
+    }
+
+    currentAssetInModal.tags.forEach(tag => {
+        const tagElement = document.createElement('div');
+        tagElement.className = 'asset-tag';
+        tagElement.innerHTML = `
+            ${tag}
+            <button class="asset-tag-remove">×</button>
+        `;
+
+        const removeBtn = tagElement.querySelector('.asset-tag-remove');
+        removeBtn.addEventListener('click', async () => {
+            currentAssetInModal.tags = currentAssetInModal.tags.filter(t => t !== tag);
+            await saveAssetChanges();
+            renderAssetModalTags();
+        });
+
+        tagsContainer.appendChild(tagElement);
+    });
+}
+
+function renderAssetModalMetadata() {
+    const metadataContainer = document.getElementById('asset-modal-metadata');
+
+    if (!currentAssetInModal) return;
+
+    // Create metadata if it doesn't exist
+    if (!currentAssetInModal.metadata) {
+        currentAssetInModal.metadata = {};
+    }
+
+    // Add created date if not exists
+    if (!currentAssetInModal.metadata.created) {
+        currentAssetInModal.metadata.created = currentAssetInModal.id || Date.now();
+    }
+
+    const metadata = currentAssetInModal.metadata;
+    const created = new Date(metadata.created);
+
+    metadataContainer.innerHTML = `
+        <div class="asset-modal-metadata-item">
+            <span class="asset-modal-metadata-label">Created</span>
+            <span class="asset-modal-metadata-value">${created.toLocaleDateString()}</span>
+        </div>
+        <div class="asset-modal-metadata-item">
+            <span class="asset-modal-metadata-label">ID</span>
+            <span class="asset-modal-metadata-value">${currentAssetInModal.id}</span>
+        </div>
+    `;
+
+    // Add size if available
+    const img = new Image();
+    img.onload = () => {
+        const sizeItem = document.createElement('div');
+        sizeItem.className = 'asset-modal-metadata-item';
+        sizeItem.innerHTML = `
+            <span class="asset-modal-metadata-label">Dimensions</span>
+            <span class="asset-modal-metadata-value">${img.width} × ${img.height}</span>
+        `;
+        metadataContainer.appendChild(sizeItem);
+    };
+    img.src = currentAssetInModal.src;
+}
+
+async function saveAssetChanges() {
+    if (!currentAssetInModal) return;
+
+    console.log('Saving asset changes:', currentAssetInModal);
+
+    // Always update in board assets if it exists there
+    const board = boardManager.currentBoard;
+    if (board.assets) {
+        const boardIndex = board.assets.findIndex(a => a.id === currentAssetInModal.id);
+        if (boardIndex !== -1) {
+            board.assets[boardIndex] = { ...currentAssetInModal };
+            console.log('Updated in board assets:', board.assets[boardIndex]);
+            await boardManager.updateBoard(currentBoardId, { assets: board.assets });
+        }
+    }
+
+    // Also update in all assets
+    let allAssets = await boardManager.getAllAssets();
+    const allIndex = allAssets.findIndex(a => a.id === currentAssetInModal.id);
+    if (allIndex !== -1) {
+        allAssets[allIndex] = { ...currentAssetInModal };
+        console.log('Updated in all assets:', allAssets[allIndex]);
+
+        if (window.__TAURI__) {
+            // Update via Tauri backend
+            try {
+                await boardManager.invoke('update_asset', { asset: currentAssetInModal });
+            } catch (e) {
+                console.error('Failed to update asset:', e);
+            }
+        } else {
+            localStorage.setItem(boardManager.ALL_ASSETS_KEY, JSON.stringify(allAssets));
+        }
+    }
+
+    // Reload library to reflect changes
+    const searchBar = document.getElementById('assets-search-bar');
+    if (searchBar) {
+        loadAssetsLibrary(searchBar.value);
+    }
+}
+
+// Tag Presets Management
+const TAG_PRESETS_KEY = 'asset_tag_presets';
+
+async function getTagPresets() {
+    if (window.__TAURI__) {
+        try {
+            return await boardManager.invoke('get_tag_presets') || [];
+        } catch (e) {
+            console.error('Failed to get tag presets:', e);
+            return [];
+        }
+    }
+    const stored = localStorage.getItem(TAG_PRESETS_KEY);
+    return stored ? JSON.parse(stored) : [];
+}
+
+async function saveTagToPresets(tag) {
+    let presets = await getTagPresets();
+    if (!presets.includes(tag)) {
+        presets.push(tag);
+        if (window.__TAURI__) {
+            try {
+                await boardManager.invoke('save_tag_presets', { presets });
+            } catch (e) {
+                console.error('Failed to save tag presets:', e);
+            }
+        } else {
+            localStorage.setItem(TAG_PRESETS_KEY, JSON.stringify(presets));
+        }
+    }
+}
+
+async function renderTagPresets(filter = '') {
+    const presetsContainer = document.getElementById('asset-tag-presets');
+    const presets = await getTagPresets();
+
+    // Filter presets based on input
+    const filteredPresets = filter.trim()
+        ? presets.filter(tag => tag.toLowerCase().includes(filter.toLowerCase()))
+        : presets;
+
+    if (filteredPresets.length === 0) {
+        presetsContainer.innerHTML = '<div class="asset-tag-preset-empty">No tag presets yet</div>';
+        presetsContainer.classList.add('show');
+        return;
+    }
+
+    presetsContainer.innerHTML = filteredPresets.map(tag => `
+        <div class="asset-tag-preset-item" data-tag="${tag}">
+            <span class="asset-tag">${tag}</span>
+        </div>
+    `).join('');
+
+    // Add click handlers to preset items
+    presetsContainer.querySelectorAll('.asset-tag-preset-item').forEach(item => {
+        item.addEventListener('click', async () => {
+            const tag = item.dataset.tag;
+            if (currentAssetInModal && !currentAssetInModal.tags?.includes(tag)) {
+                if (!currentAssetInModal.tags) {
+                    currentAssetInModal.tags = [];
+                }
+                currentAssetInModal.tags.push(tag);
+                await saveAssetChanges();
+                renderAssetModalTags();
+                hideTagPresets();
+                document.getElementById('asset-tag-input').value = '';
+            }
+        });
+    });
+
+    presetsContainer.classList.add('show');
+}
+
+function hideTagPresets() {
+    const presetsContainer = document.getElementById('asset-tag-presets');
+    presetsContainer.classList.remove('show');
+}
+
 async function exportBoard() {
     // Get EVERYTHING from canvas
     const images = canvas.getImages();
@@ -3692,12 +4297,12 @@ function showPaletteModal(paletteObj) {
     const modal = document.createElement('div');
     modal.className = 'modal-overlay';
     modal.innerHTML = `
-        <div class="modal" style="max-width: 600px;">
+        <div class="modal" style="max-width: 90vw; width: auto;">
             <div class="modal-header">
                 <h2>Color Palette</h2>
             </div>
             <div class="modal-body">
-                <div id="palette-modal-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 16px; padding: 8px;">
+                <div id="palette-modal-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); gap: 12px; padding: 8px; max-width: 100%;">
                     <!-- Colors will be populated here -->
                 </div>
             </div>
@@ -3736,9 +4341,17 @@ function showPaletteModal(paletteObj) {
         hexBtn.addEventListener('click', async () => {
             try {
                 await navigator.clipboard.writeText(hexColor.toUpperCase());
-                showToast(`Copied ${hexColor.toUpperCase()}`, 'success', 1500);
+                const originalText = hexBtn.textContent;
+                hexBtn.textContent = 'Copied!';
+                hexBtn.style.background = 'var(--accent-color)';
+                hexBtn.style.color = 'white';
+                setTimeout(() => {
+                    hexBtn.textContent = originalText;
+                    hexBtn.style.background = 'var(--bg-secondary)';
+                    hexBtn.style.color = 'var(--text-primary)';
+                }, 1000);
             } catch (err) {
-                showToast('Failed to copy', 'error', 1500);
+                console.error('Failed to copy:', err);
             }
         });
 
@@ -3749,13 +4362,27 @@ function showPaletteModal(paletteObj) {
             })();
             try {
                 await navigator.clipboard.writeText(rgbText);
-                showToast(`Copied ${rgbText}`, 'success', 1500);
+                const originalText = rgbBtn.textContent;
+                rgbBtn.textContent = 'Copied!';
+                rgbBtn.style.background = 'var(--accent-color)';
+                rgbBtn.style.color = 'white';
+                setTimeout(() => {
+                    rgbBtn.textContent = originalText;
+                    rgbBtn.style.background = 'var(--bg-secondary)';
+                    rgbBtn.style.color = 'var(--text-primary)';
+                }, 1000);
             } catch (err) {
-                showToast('Failed to copy', 'error', 1500);
+                console.error('Failed to copy:', err);
             }
         });
 
         grid.appendChild(colorItem);
+    });
+
+    // Close button
+    const closeBtn = modal.querySelector('#palette-modal-close');
+    closeBtn.addEventListener('click', () => {
+        modal.remove();
     });
 
     // Close modal on overlay click

@@ -28,11 +28,11 @@
 
 .sidebar-header {
     padding: 12px 16px;
-    border-bottom: 1px solid var(--border-color);
+    border-bottom: none;
     display: flex;
     align-items: center;
     gap: 12px;
-    background: var(--bg-tertiary);
+    background: transparent;
 }
 
 .back-arrow-btn {
@@ -162,30 +162,36 @@
 
 .sidebar-tabs {
     display: flex;
-    border-bottom: 1px solid var(--border-color);
-    background: var(--bg-tertiary);
+    flex-direction: column;
+    gap: 4px;
+    padding: 8px 12px;
+    border-bottom: none;
+    background: transparent;
 }
 
 .tab-btn {
-    flex: 1;
-    background: none;
-    border: none;
+    background: transparent;
+    border: 1px solid var(--border-color);
     padding: 10px;
     cursor: pointer;
     font-size: 12px;
     color: var(--text-secondary);
     font-weight: 500;
-    transition: all 0.1s;
-    border-bottom: 2px solid transparent;
+    transition: all 0.15s;
+    border-radius: 6px;
+    text-align: left;
 }
 
 .tab-btn:hover {
     color: var(--text-primary);
+    background: var(--bg-hover);
+    border-color: var(--border-color-hover);
 }
 
 .tab-btn.active {
     color: var(--text-primary);
-    border-bottom-color: #0d6efd;
+    background: rgba(91, 138, 197, 0.15);
+    border-color: #5B8AC5;
 }
 
 .sidebar-content {
@@ -230,8 +236,8 @@
     color: var(--text-tertiary);
     padding: 8px 12px;
     letter-spacing: 0.5px;
-    background: var(--bg-secondary);
-    border-bottom: 1px solid var(--border-color);
+    background: transparent;
+    border-bottom: none;
     margin: 0;
 }
 
@@ -239,8 +245,8 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    background: var(--bg-secondary);
-    border-bottom: 1px solid var(--border-color);
+    background: transparent;
+    border-bottom: none;
     padding: 0 12px;
 }
 
@@ -814,8 +820,8 @@
     display: flex;
     flex-direction: column;
     padding-left: 16px;
-    background: var(--bg-primary);
-    border-left: 2px solid var(--border-color);
+    background: transparent;
+    border-left: 1px solid var(--border-color);
     margin-left: 10px;
     position: relative;
 }
@@ -826,7 +832,7 @@
 
 .properties-section {
     padding: 12px;
-    border-top: 1px solid var(--border-color);
+    border-top: none;
     margin-top: auto;
 }
 
@@ -875,7 +881,7 @@
     display: flex;
     flex-direction: column;
     gap: 12px;
-    border-bottom: 1px solid var(--border-color);
+    border-bottom: none;
 }
 
 .import-btn {
@@ -1247,7 +1253,7 @@
 
 /* Right Tools Sidebar */
 .tools-sidebar {
-    width: 64px;
+    width: 56px;
     background: var(--bg-primary);
     border-left: 1px solid var(--border-color);
     display: flex;
@@ -1258,8 +1264,8 @@
 .tools-sidebar-content {
     display: flex;
     flex-direction: column;
-    gap: 12px;
-    padding: 16px 12px;
+    gap: 8px;
+    padding: 16px 8px;
 }
 
 .tool-btn {
@@ -1269,28 +1275,24 @@
     align-items: center;
     justify-content: center;
     background: transparent;
-    border: 1.5px solid var(--border-color);
-    border-radius: 8px;
+    border: none;
+    border-radius: 6px;
     cursor: pointer;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: all 0.15s ease;
     padding: 0;
     position: relative;
 }
 
 .tool-btn:hover {
     background: var(--bg-hover);
-    border-color: var(--border-color-hover);
-    transform: translateX(-2px);
 }
 
 .tool-btn.active {
-    background: rgba(91, 138, 197, 0.12);
-    border-color: #5B8AC5;
+    background: rgba(91, 138, 197, 0.15);
 }
 
 .tool-btn.active:hover {
-    background: rgba(91, 138, 197, 0.18);
-    border-color: #5B8AC5;
+    background: rgba(91, 138, 197, 0.22);
 }
 
 .tool-btn svg {
@@ -1399,7 +1401,7 @@
     flex-direction: column;
     gap: 12px;
     padding: 12px;
-    border-top: 1px solid var(--border-color);
+    border-top: none;
     flex-shrink: 0;
 }
 
