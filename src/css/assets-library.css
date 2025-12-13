@@ -195,7 +195,7 @@
 .assets-library-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-    gap: 24px;
+    gap: 0;
     padding-bottom: 32px;
 }
 
@@ -204,7 +204,7 @@
     overflow: hidden;
     cursor: pointer;
     border: 2px solid var(--border-color);
-    border-radius: 12px;
+    border-radius: 0;
     transition: all 0.2s;
     position: relative;
     background: var(--bg-secondary);
@@ -212,15 +212,18 @@
 
 .assets-library-item:hover {
     border-color: #5B8AC5;
-    transform: translateY(-4px);
-    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
 }
 
 .assets-library-item img {
     width: 100%;
     height: 100%;
     object-fit: cover;
-    border-radius: 10px;
+    border-radius: 0;
+    transition: filter 0.2s;
+}
+
+.assets-library-item:hover img {
+    filter: brightness(0.7);
 }
 
 .asset-card-info {

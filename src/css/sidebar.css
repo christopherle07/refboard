@@ -313,24 +313,10 @@
     display: block;
 }
 
-/* Show dark icons for dark themes, hide light icons */
-[data-theme="dark"] .collapse-icon-dark,
-[data-theme="midnight"] .collapse-icon-dark {
-    display: block;
-}
-
-[data-theme="dark"] .collapse-icon-light,
-[data-theme="midnight"] .collapse-icon-light {
-    display: none;
-}
-
-/* Show light icons for light theme, hide dark icons */
-[data-theme="light"] .collapse-icon-dark {
-    display: none;
-}
-
-[data-theme="light"] .collapse-icon-light {
-    display: block;
+/* Invert icons for dark themes (SVG files have black fill by default) */
+[data-theme="dark"] .collapse-icon,
+[data-theme="midnight"] .collapse-icon {
+    filter: invert(1);
 }
 
 .panel-section-content {
@@ -732,24 +718,10 @@
     display: block;
 }
 
-/* Show dark icons for dark themes, hide light icons */
-[data-theme="dark"] .group-toggle-icon-dark,
-[data-theme="midnight"] .group-toggle-icon-dark {
-    display: block;
-}
-
-[data-theme="dark"] .group-toggle-icon-light,
-[data-theme="midnight"] .group-toggle-icon-light {
-    display: none;
-}
-
-/* Show light (inverted) icons for light theme, hide dark icons */
-[data-theme="light"] .group-toggle-icon-dark {
-    display: none;
-}
-
-[data-theme="light"] .group-toggle-icon-light {
-    display: block;
+/* Invert icons for dark themes (SVG files have black fill by default) */
+[data-theme="dark"] .group-toggle-icon,
+[data-theme="midnight"] .group-toggle-icon {
+    filter: invert(1);
 }
 
 .group-visibility-btn {

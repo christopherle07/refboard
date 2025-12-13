@@ -259,6 +259,15 @@ async function initEditor() {
 
     // Sync board assets with canvas images on initial load
     syncBoardAssetsWithCanvas();
+
+    // Add dragover handler to layers list to allow drops in empty space
+    const layersList = document.getElementById('layers-list');
+    if (layersList) {
+        layersList.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+        });
+    }
 }
 
 function loadLayers(layers, viewState = null) {
@@ -461,33 +470,9 @@ function setupEventListeners() {
         content.classList.toggle('collapsed');
 
         const isCollapsed = content.classList.contains('collapsed');
-        btn.innerHTML = isCollapsed ? `
-            <svg class="collapse-icon collapse-icon-dark" width="14" height="14" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M45 33C39.4772 33 35 37.4772 35 43C35 48.5228 39.4772 53 45 53V43V33ZM114 53H124V33H114V43V53ZM45 43V53H114V43V33H45V43Z" fill="white"/>
-                <path d="M55 43C55 37.4772 50.5228 33 45 33C39.4772 33 35 37.4772 35 43H45H55ZM35 112L35 122H55L55 112H45H35ZM45 43H35V112H45H55V43H45Z" fill="white"/>
-                <path d="M214 225C219.523 225 224 220.523 224 215C224 209.477 219.523 205 214 205V215V225ZM145 205H135V225H145V215V205ZM214 215V205L145 205V215V225L214 225V215Z" fill="white"/>
-                <path d="M204 215C204 220.523 208.477 225 214 225C219.523 225 224 220.523 224 215H214H204ZM224 146L224 136H204L204 146H214H224ZM214 215H224V146H214H204V215H214Z" fill="white"/>
-            </svg>
-            <svg class="collapse-icon collapse-icon-light" width="14" height="14" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M45 33C39.4772 33 35 37.4772 35 43C35 48.5228 39.4772 53 45 53V43V33ZM114 53H124V33H114V43V53ZM45 43V53H114V43V33H45V43Z" fill="black"/>
-                <path d="M55 43C55 37.4772 50.5228 33 45 33C39.4772 33 35 37.4772 35 43H45H55ZM35 112L35 122H55L55 112H45H35ZM45 43H35V112H45H55V43H45Z" fill="black"/>
-                <path d="M214 225C219.523 225 224 220.523 224 215C224 209.477 219.523 205 214 205V215V225ZM145 205H135V225H145V215V205ZM214 215V205L145 205V215V225L214 225V215Z" fill="black"/>
-                <path d="M204 215C204 220.523 208.477 225 214 225C219.523 225 224 220.523 224 215H214H204ZM224 146L224 136H204L204 146H214H224ZM214 215H224V146H214H204V215H214Z" fill="black"/>
-            </svg>
-        ` : `
-            <svg class="collapse-icon collapse-icon-dark" width="14" height="14" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M114 122C119.523 122 124 117.523 124 112C124 106.477 119.523 102 114 102V112V122ZM45 102H35V122H45V112V102ZM114 112V102H45V112V122H114V112Z" fill="white"/>
-                <path d="M104 112C104 117.523 108.477 122 114 122C119.523 122 124 117.523 124 112H114H104ZM124 43V33H104V43H114H124ZM114 112H124V43H114H104V112H114Z" fill="white"/>
-                <path d="M145 136C139.477 136 135 140.477 135 146C135 151.523 139.477 156 145 156V146V136ZM214 156H224V136H214V146V156ZM145 146V156H214V146V136H145V146Z" fill="white"/>
-                <path d="M155 146C155 140.477 150.523 136 145 136C139.477 136 135 140.477 135 146H145H155ZM135 215V225H155V215H145H135ZM145 146H135V215H145H155V146H145Z" fill="white"/>
-            </svg>
-            <svg class="collapse-icon collapse-icon-light" width="14" height="14" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M114 122C119.523 122 124 117.523 124 112C124 106.477 119.523 102 114 102V112V122ZM45 102H35V122H45V112V102ZM114 112V102H45V112V122H114V112Z" fill="black"/>
-                <path d="M104 112C104 117.523 108.477 122 114 122C119.523 122 124 117.523 124 112H114H104ZM124 43V33H104V43H114H124ZM114 112H124V43H114H104V112H114Z" fill="black"/>
-                <path d="M145 136C139.477 136 135 140.477 135 146C135 151.523 139.477 156 145 156V146V136ZM214 156H224V136H214V146V156ZM145 146V156H214V146V136H145V146Z" fill="black"/>
-                <path d="M155 146C155 140.477 150.523 136 145 136C139.477 136 135 140.477 135 146H145H155ZM135 215V225H155V215H145H135ZM145 146H135V215H145H155V146H145Z" fill="black"/>
-            </svg>
-        `;
+        btn.innerHTML = isCollapsed
+            ? '<img src="assets/expand.svg" alt="Expand" class="collapse-icon" width="14" height="14"/>'
+            : '<img src="assets/collapse.svg" alt="Collapse" class="collapse-icon" width="14" height="14"/>';
     });
 
     const assetsViewToggle = document.getElementById('assets-view-toggle');
@@ -968,12 +953,14 @@ function createLayerItem(img, images) {
         allLayersOrder = getAllLayersForDragging();
         dragSourceIndex = allLayersOrder.findIndex(l => l.type === 'image' && l.data.id === img.id);
         layerItem.classList.add('dragging');
+        document.body.classList.add('dragging');
         e.dataTransfer.effectAllowed = 'move';
         e.dataTransfer.setData('text/plain', '');
     });
 
     layerItem.addEventListener('dragend', () => {
         isDragging = false;
+        document.body.classList.remove('dragging');
         applyLayerOrder();
 
         // Check if layer should be removed from its original group
@@ -982,21 +969,21 @@ function createLayerItem(img, images) {
             const finalIdx = allLayersOrder.findIndex(l => l.type === 'image' && l.data.id === draggedLayerId);
 
             if (finalIdx !== -1) {
-                // Check if it's still adjacent to other group members
+                // Check if it's still adjacent to other group members (excluding the dragged layer itself)
                 const groupLayerIndices = [];
                 allLayersOrder.forEach((layer, idx) => {
-                    if (layer.type === 'image' && draggedFromGroup.layerIds.includes(layer.data.id)) {
+                    if (layer.type === 'image' && draggedFromGroup.layerIds.includes(layer.data.id) && layer.data.id !== draggedLayerId) {
                         groupLayerIndices.push(idx);
                     }
                 });
 
                 // If this layer is not consecutive with at least one other group member, remove it
                 const isConsecutive = groupLayerIndices.some(idx =>
-                    idx !== finalIdx && Math.abs(idx - finalIdx) === 1
+                    Math.abs(idx - finalIdx) === 1
                 );
 
-                if (!isConsecutive && groupLayerIndices.length > 1) {
-                    // Remove from group
+                if (!isConsecutive || groupLayerIndices.length === 0) {
+                    // Remove from group if not consecutive with other members or if it's the only layer in the group
                     draggedFromGroup.layerIds = draggedFromGroup.layerIds.filter(id => id !== draggedLayerId);
                 }
             }
@@ -1020,52 +1007,6 @@ function createLayerItem(img, images) {
 
         const targetId = img.id;
         if (targetId === draggedLayerId && draggedLayerType === 'image') return;
-
-        // Check if both dragged and target are in the same group
-        const draggedGroup = draggedFromGroup || layerGroups.find(g =>
-            (draggedLayerType === 'image' && g.layerIds.includes(draggedLayerId)) ||
-            (draggedLayerType === 'object' && g.objectIds && g.objectIds.includes(draggedLayerId))
-        );
-        const targetGroup = layerGroups.find(g => g.layerIds.includes(targetId));
-
-        // If dragging within the same group, check if we're trying to escape
-        if (draggedGroup && targetGroup && draggedGroup.id === targetGroup.id && draggedLayerType !== 'group') {
-            const draggedIdx = allLayersOrder.findIndex(l =>
-                (l.type === 'image' && l.data.id === draggedLayerId) ||
-                (l.type === 'object' && l.data.id === draggedLayerId)
-            );
-            const targetIdx = allLayersOrder.findIndex(l => l.type === 'image' && l.data.id === targetId);
-
-            // Find first and last indices of group members in allLayersOrder
-            const groupIndices = [];
-            allLayersOrder.forEach((layer, idx) => {
-                if ((layer.type === 'image' && draggedGroup.layerIds.includes(layer.data.id)) ||
-                    (layer.type === 'object' && draggedGroup.objectIds && draggedGroup.objectIds.includes(layer.data.id))) {
-                    groupIndices.push(idx);
-                }
-            });
-            groupIndices.sort((a, b) => a - b);
-
-            const isFirstInGroup = draggedIdx === groupIndices[0];
-            const isLastInGroup = draggedIdx === groupIndices[groupIndices.length - 1];
-            const isTargetFirst = targetIdx === groupIndices[0];
-            const isTargetLast = targetIdx === groupIndices[groupIndices.length - 1];
-
-            // Edge detection
-            const rect = layerItem.getBoundingClientRect();
-            const midpoint = rect.top + rect.height / 2;
-            const insertBefore = e.clientY < midpoint;
-
-            // If trying to move before the first item in group while being at top, allow escape upward
-            // If trying to move after the last item in group while being at bottom, allow escape downward
-            if ((isFirstInGroup && isTargetFirst && insertBefore) ||
-                (isLastInGroup && isTargetLast && !insertBefore)) {
-                // Don't handle this - let it potentially escape the group
-                // Stop propagation so group header can handle it
-                e.stopPropagation();
-                return;
-            }
-        }
 
         // Clear all drag-over indicators first
         document.querySelectorAll('.drag-over-above, .drag-over-below').forEach(el => {
@@ -1298,12 +1239,14 @@ function createObjectLayerItem(obj, objects) {
         allLayersOrder = getAllLayersForDragging();
         dragSourceIndex = allLayersOrder.findIndex(l => l.type === 'object' && l.data.id === obj.id);
         layerItem.classList.add('dragging');
+        document.body.classList.add('dragging');
         e.dataTransfer.effectAllowed = 'move';
         e.dataTransfer.setData('text/plain', '');
     });
 
     layerItem.addEventListener('dragend', () => {
         isDragging = false;
+        document.body.classList.remove('dragging');
         applyLayerOrder();
 
         // Check if object should be removed from its original group
@@ -1312,10 +1255,10 @@ function createObjectLayerItem(obj, objects) {
             const finalIdx = allLayersOrder.findIndex(l => l.type === 'object' && l.data.id === draggedLayerId);
 
             if (finalIdx !== -1 && draggedFromGroup.objectIds) {
-                // Check if it's still adjacent to other group members
+                // Check if it's still adjacent to other group members (excluding the dragged object itself)
                 const groupLayerIndices = [];
                 allLayersOrder.forEach((layer, idx) => {
-                    if (layer.type === 'object' && draggedFromGroup.objectIds.includes(layer.data.id)) {
+                    if (layer.type === 'object' && draggedFromGroup.objectIds.includes(layer.data.id) && layer.data.id !== draggedLayerId) {
                         groupLayerIndices.push(idx);
                     } else if (layer.type === 'image' && draggedFromGroup.layerIds.includes(layer.data.id)) {
                         groupLayerIndices.push(idx);
@@ -1324,11 +1267,11 @@ function createObjectLayerItem(obj, objects) {
 
                 // If this object is not consecutive with at least one other group member, remove it
                 const isConsecutive = groupLayerIndices.some(idx =>
-                    idx !== finalIdx && Math.abs(idx - finalIdx) === 1
+                    Math.abs(idx - finalIdx) === 1
                 );
 
-                if (!isConsecutive && groupLayerIndices.length > 1) {
-                    // Remove from group
+                if (!isConsecutive || groupLayerIndices.length === 0) {
+                    // Remove from group if not consecutive with other members or if it's the only object in the group
                     draggedFromGroup.objectIds = draggedFromGroup.objectIds.filter(id => id !== draggedLayerId);
                 }
             }
@@ -1352,52 +1295,6 @@ function createObjectLayerItem(obj, objects) {
 
         const targetId = obj.id;
         if (targetId === draggedLayerId && draggedLayerType === 'object') return;
-
-        // Check if both dragged and target are in the same group
-        const draggedGroup = draggedFromGroup || layerGroups.find(g =>
-            (draggedLayerType === 'image' && g.layerIds.includes(draggedLayerId)) ||
-            (draggedLayerType === 'object' && g.objectIds && g.objectIds.includes(draggedLayerId))
-        );
-        const targetGroup = layerGroups.find(g => g.objectIds && g.objectIds.includes(targetId));
-
-        // If dragging within the same group, check if we're trying to escape
-        if (draggedGroup && targetGroup && draggedGroup.id === targetGroup.id && draggedLayerType !== 'group') {
-            const draggedIdx = allLayersOrder.findIndex(l =>
-                (l.type === 'image' && l.data.id === draggedLayerId) ||
-                (l.type === 'object' && l.data.id === draggedLayerId)
-            );
-            const targetIdx = allLayersOrder.findIndex(l => l.type === 'object' && l.data.id === targetId);
-
-            // Find first and last indices of group members in allLayersOrder
-            const groupIndices = [];
-            allLayersOrder.forEach((layer, idx) => {
-                if ((layer.type === 'image' && draggedGroup.layerIds.includes(layer.data.id)) ||
-                    (layer.type === 'object' && draggedGroup.objectIds && draggedGroup.objectIds.includes(layer.data.id))) {
-                    groupIndices.push(idx);
-                }
-            });
-            groupIndices.sort((a, b) => a - b);
-
-            const isFirstInGroup = draggedIdx === groupIndices[0];
-            const isLastInGroup = draggedIdx === groupIndices[groupIndices.length - 1];
-            const isTargetFirst = targetIdx === groupIndices[0];
-            const isTargetLast = targetIdx === groupIndices[groupIndices.length - 1];
-
-            // Edge detection
-            const rect = layerItem.getBoundingClientRect();
-            const midpoint = rect.top + rect.height / 2;
-            const insertBefore = e.clientY < midpoint;
-
-            // If trying to move before the first item in group while being at top, allow escape upward
-            // If trying to move after the last item in group while being at bottom, allow escape downward
-            if ((isFirstInGroup && isTargetFirst && insertBefore) ||
-                (isLastInGroup && isTargetLast && !insertBefore)) {
-                // Don't handle this - let it potentially escape the group
-                // Stop propagation so group header can handle it
-                e.stopPropagation();
-                return;
-            }
-        }
 
         // Clear all drag-over indicators first
         document.querySelectorAll('.drag-over-above, .drag-over-below').forEach(el => {
@@ -1602,35 +1499,11 @@ function createGroupElement(group, allLayers, images, objects) {
     collapseToggle.className = 'group-collapse-toggle';
     collapseToggle.type = 'button';
 
-    // Create icon container with both dark and light mode versions
+    // Create icon that toggles between collapse and expand
     const updateToggleIcon = (collapsed) => {
-        collapseToggle.innerHTML = collapsed ? `
-            <svg class="group-toggle-icon group-toggle-icon-dark" width="16" height="16" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M45 33C39.4772 33 35 37.4772 35 43C35 48.5228 39.4772 53 45 53V43V33ZM114 53H124V33H114V43V53ZM45 43V53H114V43V33H45V43Z" fill="white"/>
-                <path d="M55 43C55 37.4772 50.5228 33 45 33C39.4772 33 35 37.4772 35 43H45H55ZM35 112L35 122H55L55 112H45H35ZM45 43H35V112H45H55V43H45Z" fill="white"/>
-                <path d="M214 225C219.523 225 224 220.523 224 215C224 209.477 219.523 205 214 205V215V225ZM145 205H135V225H145V215V205ZM214 215V205L145 205V215V225L214 225V215Z" fill="white"/>
-                <path d="M204 215C204 220.523 208.477 225 214 225C219.523 225 224 220.523 224 215H214H204ZM224 146L224 136H204L204 146H214H224ZM214 215H224V146H214H204V215H214Z" fill="white"/>
-            </svg>
-            <svg class="group-toggle-icon group-toggle-icon-light" width="16" height="16" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M45 33C39.4772 33 35 37.4772 35 43C35 48.5228 39.4772 53 45 53V43V33ZM114 53H124V33H114V43V53ZM45 43V53H114V43V33H45V43Z" fill="black"/>
-                <path d="M55 43C55 37.4772 50.5228 33 45 33C39.4772 33 35 37.4772 35 43H45H55ZM35 112L35 122H55L55 112H45H35ZM45 43H35V112H45H55V43H45Z" fill="black"/>
-                <path d="M214 225C219.523 225 224 220.523 224 215C224 209.477 219.523 205 214 205V215V225ZM145 205H135V225H145V215V205ZM214 215V205L145 205V215V225L214 225V215Z" fill="black"/>
-                <path d="M204 215C204 220.523 208.477 225 214 225C219.523 225 224 220.523 224 215H214H204ZM224 146L224 136H204L204 146H214H224ZM214 215H224V146H214H204V215H214Z" fill="black"/>
-            </svg>
-        ` : `
-            <svg class="group-toggle-icon group-toggle-icon-dark" width="16" height="16" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M114 122C119.523 122 124 117.523 124 112C124 106.477 119.523 102 114 102V112V122ZM45 102H35V122H45V112V102ZM114 112V102H45V112V122H114V112Z" fill="white"/>
-                <path d="M104 112C104 117.523 108.477 122 114 122C119.523 122 124 117.523 124 112H114H104ZM124 43V33H104V43H114H124ZM114 112H124V43H114H104V112H114Z" fill="white"/>
-                <path d="M145 136C139.477 136 135 140.477 135 146C135 151.523 139.477 156 145 156V146V136ZM214 156H224V136H214V146V156ZM145 146V156H214V146V136H145V146Z" fill="white"/>
-                <path d="M155 146C155 140.477 150.523 136 145 136C139.477 136 135 140.477 135 146H145H155ZM135 215V225H155V215H145H135ZM145 146H135V215H145H155V146H145Z" fill="white"/>
-            </svg>
-            <svg class="group-toggle-icon group-toggle-icon-light" width="16" height="16" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M114 122C119.523 122 124 117.523 124 112C124 106.477 119.523 102 114 102V112V122ZM45 102H35V122H45V112V102ZM114 112V102H45V112V122H114V112Z" fill="black"/>
-                <path d="M104 112C104 117.523 108.477 122 114 122C119.523 122 124 117.523 124 112H114H104ZM124 43V33H104V43H114H124ZM114 112H124V43H114H104V112H114Z" fill="black"/>
-                <path d="M145 136C139.477 136 135 140.477 135 146C135 151.523 139.477 156 145 156V146V136ZM214 156H224V136H214V146V156ZM145 146V156H214V146V136H145V146Z" fill="black"/>
-                <path d="M155 146C155 140.477 150.523 136 145 136C139.477 136 135 140.477 135 146H145H155ZM135 215V225H155V215H145H135ZM145 146H135V215H145H155V146H145Z" fill="black"/>
-            </svg>
-        `;
+        collapseToggle.innerHTML = collapsed
+            ? '<img src="assets/expand.svg" alt="Expand" class="group-toggle-icon" width="16" height="16"/>'
+            : '<img src="assets/collapse.svg" alt="Collapse" class="group-toggle-icon" width="16" height="16"/>';
         collapseToggle.title = collapsed ? 'Expand group' : 'Collapse group';
     };
 
@@ -1761,12 +1634,14 @@ function createGroupElement(group, allLayers, images, objects) {
         draggedLayerType = 'group';
         allLayersOrder = getAllLayersForDragging();
         groupHeader.classList.add('dragging');
+        document.body.classList.add('dragging');
         e.dataTransfer.effectAllowed = 'move';
         e.dataTransfer.setData('text/plain', '');
     });
 
     groupHeader.addEventListener('dragend', () => {
         isDragging = false;
+        document.body.classList.remove('dragging');
         applyLayerOrder();
         groupHeader.classList.remove('dragging');
         draggedLayerId = null;
@@ -3271,6 +3146,7 @@ function setupAssetSidebar() {
             await saveAssetChanges();
             await saveTagToPresets(tagText);
             renderAssetSidebarTags();
+            await renderQuickTagPresets();
         }
 
         tagInput.value = '';
@@ -3523,8 +3399,12 @@ async function renderQuickTagPresets() {
             <span class="asset-tag-preset-delete">×</span>
         `;
 
-        // Click on tag text to add it (optimized - no await)
-        pill.querySelector('span:first-child').addEventListener('click', (e) => {
+        // Click on entire pill to add tag
+        pill.addEventListener('click', (e) => {
+            // Don't add tag if clicking the delete button
+            if (e.target.classList.contains('asset-tag-preset-delete')) {
+                return;
+            }
             e.stopPropagation();
             if (currentAssetInSidebar && !currentAssetInSidebar.tags?.includes(tag)) {
                 if (!currentAssetInSidebar.tags) {
