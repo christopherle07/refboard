@@ -2,7 +2,7 @@ const THEME_KEY = 'app_theme';
 
 const themes = {
     light: {
-        '--bg-primary': '#ffffff',
+        '--bg-primary': '#ffffffff',
         '--bg-secondary': '#f8f8f8',
         '--bg-tertiary': '#fafafa',
         '--bg-hover': 'rgba(0, 0, 0, 0.05)',
@@ -45,6 +45,21 @@ const themes = {
         '--text-disabled': '#505050',
         '--shadow': 'rgba(0, 0, 0, 0.5)',
         '--modal-overlay': 'rgba(0, 0, 0, 0.8)'
+    },
+    charcoal: {
+        '--bg-primary': '#262b30',
+        '--bg-secondary': '#1e2226',
+        '--bg-tertiary': '#191c1f',
+        '--bg-hover': '#333a41',
+        '--bg-active': '#535e68',
+        '--border-color': '#333a41',
+        '--border-color-hover': '#535e68',
+        '--text-primary': '#bcd1e4',
+        '--text-secondary': '#a0c4ff',
+        '--text-tertiary': '#535e68',
+        '--text-disabled': '#535e68',
+        '--shadow': 'rgba(0, 0, 0, 0.4)',
+        '--modal-overlay': 'rgba(0, 0, 0, 0.75)'
     }
 };
 

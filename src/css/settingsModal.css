@@ -237,13 +237,18 @@
     background: #1a1a1a;
 }
 
+.theme-preview-charcoal {
+    background: #262b30;
+}
+
 .preview-bar {
     height: 20px;
     background: rgba(0, 0, 0, 0.1);
 }
 
 .theme-preview-dark .preview-bar,
-.theme-preview-midnight .preview-bar {
+.theme-preview-midnight .preview-bar,
+.theme-preview-charcoal .preview-bar {
     background: rgba(255, 255, 255, 0.05);
 }
 

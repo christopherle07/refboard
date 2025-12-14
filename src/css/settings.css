@@ -139,6 +139,15 @@
     background: #1a1a1a;
 }
 
+.theme-preview-charcoal .preview-bar {
+    background: #1e2226;
+    border-bottom-color: rgba(188, 209, 228, 0.2);
+}
+
+.theme-preview-charcoal .preview-content {
+    background: #262b30;
+}
+
 .theme-name {
     font-size: 12px;
     font-weight: 500;

@@ -96,6 +96,11 @@ body {
     filter: invert(1);
 }
 
+/* Charcoal theme - invert collapse icon */
+[data-theme="charcoal"] .sidebar-collapse-icon {
+    filter: invert(1);
+}
+
 .sidebar-collapse-btn.collapsed {
     left: 48px;
 }
@@ -171,6 +176,12 @@ body {
 /* Midnight theme - invert black icons to white */
 [data-theme="midnight"] .sidebar-btn:not(.primary) .sidebar-icon,
 [data-theme="midnight"] .discord-btn .sidebar-icon {
+    filter: invert(1);
+}
+
+/* Charcoal theme - invert black icons to white */
+[data-theme="charcoal"] .sidebar-btn:not(.primary) .sidebar-icon,
+[data-theme="charcoal"] .discord-btn .sidebar-icon {
     filter: invert(1);
 }
 
@@ -603,7 +614,8 @@ body {
 
 /* Invert icon for dark themes */
 [data-theme="dark"] .floating-canvas-icon,
-[data-theme="midnight"] .floating-canvas-icon {
+[data-theme="midnight"] .floating-canvas-icon,
+[data-theme="charcoal"] .floating-canvas-icon {
     filter: invert(1) brightness(0.8);
 }
 
