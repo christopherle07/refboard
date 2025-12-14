@@ -344,6 +344,8 @@
     display: flex;
     flex-direction: column;
     padding: 4px;
+    flex: 1;
+    min-height: 0;
 }
 
 .layer-item {
@@ -1638,4 +1640,76 @@
 
 .palette-color-value:active {
     background: var(--bg-active);
+}
+
+/* Group ungroup drop zones */
+.group-ungroup-zone {
+    height: 0;
+    margin: 0;
+    padding: 0;
+    transition: all 0.2s ease;
+    position: relative;
+    opacity: 0;
+    pointer-events: none;
+}
+
+/* Hide the top drop zone - only use bottom drop zone */
+.group-ungroup-zone-above {
+    display: none !important;
+}
+
+/* Show bottom drop zone when dragging within the group */
+.dragging .group-ungroup-zone-below {
+    opacity: 1;
+    pointer-events: auto;
+    height: 8px;
+    margin: 2px 0;
+}
+
+/* Full-height drop zone for last group in hierarchy */
+.group-ungroup-zone-full-height {
+    min-height: 0;
+    height: 0;
+}
+
+.dragging .group-ungroup-zone-full-height {
+    min-height: 100px;
+    flex: 1;
+    height: auto;
+}
+
+.group-ungroup-zone.active {
+    height: 24px;
+    margin: 4px 8px;
+    background: rgba(13, 110, 253, 0.1);
+    border: 2px dashed #0d6efd;
+    border-radius: 4px;
+}
+
+/* Full-height drop zone when active */
+.group-ungroup-zone-full-height.active {
+    min-height: 200px;
+    height: auto;
+    flex: 1;
+}
+
+.group-ungroup-zone-above {
+    order: -1; /* Ensures it appears above the group header */
+}
+
+.group-ungroup-zone-below {
+    order: 999; /* Ensures it appears below the group children */
+}
+
+/* Add a visual hint */
+.group-ungroup-zone.active::before {
+    content: 'Drop here to remove from group';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 11px;
+    color: #0d6efd;
+    white-space: nowrap;
+    pointer-events: none;
 }

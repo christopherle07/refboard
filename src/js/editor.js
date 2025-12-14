@@ -25,6 +25,8 @@ let ghostElement = null;
 let lastDragOrderHash = null;
 let isDragging = false;
 let draggedFromGroup = null; // Track if dragged layer came from a group
+let draggedFromGroupBounds = null; // Track the visual boundaries of the group being dragged from
+let lastDragY = 0; // Track the last mouse Y position during drag
 
 // Layer groups
 let layerGroups = []; // Array of { id, name, layerIds: [], collapsed: false }
@@ -134,6 +136,13 @@ document.addEventListener('DOMContentLoaded', async () => {
             });
         }
     };
+
+    // Global dragover listener to track mouse position during drag (needed for dragging outside groups)
+    document.addEventListener('dragover', (e) => {
+        if (isDragging) {
+            lastDragY = e.clientY;
+        }
+    });
 
     await initEditor();
     setupEventListeners();
@@ -950,6 +959,18 @@ function createLayerItem(img, images) {
         // Track which group this layer belongs to (if any)
         draggedFromGroup = layerGroups.find(g => g.layerIds.includes(img.id)) || null;
 
+        // Capture the group's visual boundaries if dragging from a group
+        if (draggedFromGroup) {
+            const groupElement = document.querySelector(`[data-group-id="${draggedFromGroup.id}"]`);
+            if (groupElement) {
+                const rect = groupElement.getBoundingClientRect();
+                draggedFromGroupBounds = {
+                    top: rect.top,
+                    bottom: rect.bottom
+                };
+            }
+        }
+
         allLayersOrder = getAllLayersForDragging();
         dragSourceIndex = allLayersOrder.findIndex(l => l.type === 'image' && l.data.id === img.id);
         layerItem.classList.add('dragging');
@@ -963,29 +984,14 @@ function createLayerItem(img, images) {
         document.body.classList.remove('dragging');
         applyLayerOrder();
 
-        // Check if layer should be removed from its original group
-        if (draggedFromGroup && draggedLayerType === 'image') {
-            // Find where the layer ended up in the final order
-            const finalIdx = allLayersOrder.findIndex(l => l.type === 'image' && l.data.id === draggedLayerId);
+        // Check if layer should be removed from its original group based on visual area
+        if (draggedFromGroup && draggedFromGroupBounds && draggedLayerType === 'image') {
+            // Check if the drag ended outside the group's visual boundaries
+            const isOutsideGroup = lastDragY < draggedFromGroupBounds.top || lastDragY > draggedFromGroupBounds.bottom;
 
-            if (finalIdx !== -1) {
-                // Check if it's still adjacent to other group members (excluding the dragged layer itself)
-                const groupLayerIndices = [];
-                allLayersOrder.forEach((layer, idx) => {
-                    if (layer.type === 'image' && draggedFromGroup.layerIds.includes(layer.data.id) && layer.data.id !== draggedLayerId) {
-                        groupLayerIndices.push(idx);
-                    }
-                });
-
-                // If this layer is not consecutive with at least one other group member, remove it
-                const isConsecutive = groupLayerIndices.some(idx =>
-                    Math.abs(idx - finalIdx) === 1
-                );
-
-                if (!isConsecutive || groupLayerIndices.length === 0) {
-                    // Remove from group if not consecutive with other members or if it's the only layer in the group
-                    draggedFromGroup.layerIds = draggedFromGroup.layerIds.filter(id => id !== draggedLayerId);
-                }
+            if (isOutsideGroup) {
+                // Remove layer from group
+                draggedFromGroup.layerIds = draggedFromGroup.layerIds.filter(id => id !== draggedLayerId);
             }
         }
 
@@ -993,6 +999,8 @@ function createLayerItem(img, images) {
         draggedLayerType = null;
         dragSourceIndex = null;
         draggedFromGroup = null;
+        draggedFromGroupBounds = null;
+        lastDragY = 0;
         allLayersOrder = [];
         lastDragOrderHash = null;
         renderLayers();
@@ -1002,6 +1010,9 @@ function createLayerItem(img, images) {
     layerItem.addEventListener('dragover', (e) => {
         e.preventDefault();
         e.dataTransfer.dropEffect = 'move';
+
+        // Track the mouse Y position
+        lastDragY = e.clientY;
 
         if (!draggedLayerId) return;
 
@@ -1236,6 +1247,18 @@ function createObjectLayerItem(obj, objects) {
         // Track which group this object belongs to (if any)
         draggedFromGroup = layerGroups.find(g => g.objectIds && g.objectIds.includes(obj.id)) || null;
 
+        // Capture the group's visual boundaries if dragging from a group
+        if (draggedFromGroup) {
+            const groupElement = document.querySelector(`[data-group-id="${draggedFromGroup.id}"]`);
+            if (groupElement) {
+                const rect = groupElement.getBoundingClientRect();
+                draggedFromGroupBounds = {
+                    top: rect.top,
+                    bottom: rect.bottom
+                };
+            }
+        }
+
         allLayersOrder = getAllLayersForDragging();
         dragSourceIndex = allLayersOrder.findIndex(l => l.type === 'object' && l.data.id === obj.id);
         layerItem.classList.add('dragging');
@@ -1249,31 +1272,14 @@ function createObjectLayerItem(obj, objects) {
         document.body.classList.remove('dragging');
         applyLayerOrder();
 
-        // Check if object should be removed from its original group
-        if (draggedFromGroup && draggedLayerType === 'object') {
-            // Find where the object ended up in the final order
-            const finalIdx = allLayersOrder.findIndex(l => l.type === 'object' && l.data.id === draggedLayerId);
+        // Check if object should be removed from its original group based on visual area
+        if (draggedFromGroup && draggedFromGroupBounds && draggedLayerType === 'object') {
+            // Check if the drag ended outside the group's visual boundaries
+            const isOutsideGroup = lastDragY < draggedFromGroupBounds.top || lastDragY > draggedFromGroupBounds.bottom;
 
-            if (finalIdx !== -1 && draggedFromGroup.objectIds) {
-                // Check if it's still adjacent to other group members (excluding the dragged object itself)
-                const groupLayerIndices = [];
-                allLayersOrder.forEach((layer, idx) => {
-                    if (layer.type === 'object' && draggedFromGroup.objectIds.includes(layer.data.id) && layer.data.id !== draggedLayerId) {
-                        groupLayerIndices.push(idx);
-                    } else if (layer.type === 'image' && draggedFromGroup.layerIds.includes(layer.data.id)) {
-                        groupLayerIndices.push(idx);
-                    }
-                });
-
-                // If this object is not consecutive with at least one other group member, remove it
-                const isConsecutive = groupLayerIndices.some(idx =>
-                    Math.abs(idx - finalIdx) === 1
-                );
-
-                if (!isConsecutive || groupLayerIndices.length === 0) {
-                    // Remove from group if not consecutive with other members or if it's the only object in the group
-                    draggedFromGroup.objectIds = draggedFromGroup.objectIds.filter(id => id !== draggedLayerId);
-                }
+            if (isOutsideGroup && draggedFromGroup.objectIds) {
+                // Remove object from group
+                draggedFromGroup.objectIds = draggedFromGroup.objectIds.filter(id => id !== draggedLayerId);
             }
         }
 
@@ -1281,6 +1287,8 @@ function createObjectLayerItem(obj, objects) {
         draggedLayerType = null;
         dragSourceIndex = null;
         draggedFromGroup = null;
+        draggedFromGroupBounds = null;
+        lastDragY = 0;
         allLayersOrder = [];
         lastDragOrderHash = null;
         renderLayers();
@@ -1290,6 +1298,9 @@ function createObjectLayerItem(obj, objects) {
     layerItem.addEventListener('dragover', (e) => {
         e.preventDefault();
         e.dataTransfer.dropEffect = 'move';
+
+        // Track the mouse Y position
+        lastDragY = e.clientY;
 
         if (!draggedLayerId) return;
 
@@ -4082,6 +4093,21 @@ function showLayerContextMenu(x, y, layer, type) {
     currentContextLayer = layer;
     currentContextLayerType = type;
 
+    // Show/hide ungroup button based on whether the layer is in a group
+    const ungroupButton = document.getElementById('layer-context-ungroup');
+    const layerId = layer.id;
+    let isInGroup = false;
+
+    if (type === 'image') {
+        isInGroup = layerGroups.some(g => g.layerIds.includes(layerId));
+    } else if (type === 'object') {
+        isInGroup = layerGroups.some(g => g.objectIds && g.objectIds.includes(layerId));
+    }
+
+    if (ungroupButton) {
+        ungroupButton.style.display = isInGroup ? 'block' : 'none';
+    }
+
     contextMenu.style.left = `${x}px`;
     contextMenu.style.top = `${y}px`;
     contextMenu.classList.add('show');
@@ -4096,6 +4122,7 @@ function setupLayerContextMenu() {
 
     const contextMenu = document.getElementById('layer-context-menu');
     const renameItem = document.getElementById('layer-context-rename');
+    const ungroupItem = document.getElementById('layer-context-ungroup');
     const duplicateItem = document.getElementById('layer-context-duplicate');
     const deleteItem = document.getElementById('layer-context-delete');
 
@@ -4143,6 +4170,38 @@ function setupLayerContextMenu() {
             } else if (currentContextLayer.type === 'colorPalette') {
                 canvas.objectsManager.updateObject(currentContextLayer.id, { name: newName });
             }
+            renderLayers();
+            scheduleSave();
+        }
+    });
+
+    // Remove from group
+    ungroupItem.addEventListener('click', () => {
+        contextMenu.classList.remove('show');
+        if (!currentContextLayer) return;
+
+        const layerId = currentContextLayer.id;
+        let removed = false;
+
+        // Find and remove the layer from its group
+        layerGroups.forEach(group => {
+            if (currentContextLayerType === 'image' && group.layerIds.includes(layerId)) {
+                group.layerIds = group.layerIds.filter(id => id !== layerId);
+                removed = true;
+            } else if (currentContextLayerType === 'object' && group.objectIds && group.objectIds.includes(layerId)) {
+                group.objectIds = group.objectIds.filter(id => id !== layerId);
+                removed = true;
+            }
+        });
+
+        // Clean up empty groups
+        layerGroups = layerGroups.filter(group => {
+            const hasLayers = group.layerIds && group.layerIds.length > 0;
+            const hasObjects = group.objectIds && group.objectIds.length > 0;
+            return hasLayers || hasObjects;
+        });
+
+        if (removed) {
             renderLayers();
             scheduleSave();
         }
