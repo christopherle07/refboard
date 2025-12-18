@@ -1,0 +1,157 @@
+/* Tab Bar Styles */
+
+.titlebar-tabs {
+    flex: 1;
+    display: flex;
+    align-items: stretch;
+    height: 100%;
+    overflow: hidden;
+    /* Inherit drag from parent titlebar */
+    min-width: 0; /* Allow flex shrinking */
+}
+
+#tabs-container {
+    display: flex;
+    align-items: stretch;
+    height: 100%;
+    gap: 0;
+    flex: 1;
+    min-width: 0;
+}
+
+/* Individual Tab */
+.tab {
+    display: flex;
+    align-items: center;
+    height: 100%;
+    padding: 0 12px;
+    background: var(--bg-primary);
+    cursor: grab;
+    transition: background 0.15s ease, width 0.2s ease;
+    position: relative;
+    min-width: 80px;
+    max-width: 240px;
+    flex-shrink: 1;
+    -webkit-app-region: no-drag; /* Prevent window drag on tabs, allow HTML5 drag */
+    user-select: none;
+    border: none;
+    border-right: 1px solid var(--border-color);
+}
+
+/* Enable HTML5 dragging for tabs */
+.tab[draggable="true"] {
+    -webkit-user-drag: element;
+}
+
+.tab:active {
+    cursor: grabbing;
+}
+
+.tab.active {
+    background: var(--bg-secondary);
+    z-index: 2;
+}
+
+.tab:not(.active):hover {
+    background: var(--bg-active);
+}
+
+/* Tab Title */
+.tab-title {
+    flex: 1;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    user-select: none;
+    pointer-events: none;
+}
+
+.tab:not(.active) .tab-title {
+    color: var(--text-secondary);
+}
+
+/* Tab Close Button */
+.tab-close {
+    width: 16px;
+    height: 16px;
+    border-radius: 3px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-left: 8px;
+    opacity: 0;
+    transition: opacity 0.15s ease, background 0.15s ease;
+    flex-shrink: 0;
+    padding: 0;
+}
+
+.tab:hover .tab-close,
+.tab.active .tab-close {
+    opacity: 1;
+}
+
+.tab-close:hover {
+    background: var(--bg-hover);
+}
+
+.tab-close::before {
+    content: '×';
+    font-size: 16px;
+    line-height: 1;
+    color: var(--text-secondary);
+}
+
+.tab-close:hover::before {
+    color: var(--text-primary);
+}
+
+/* Hide close button on non-closeable tabs (Home tab) */
+.tab.non-closeable .tab-close {
+    display: none;
+}
+
+/* Drag & Drop States */
+.tab-drag-ghost {
+    opacity: 0.5;
+    cursor: grabbing;
+}
+
+.tab.drop-before {
+    border-left: 2px solid var(--text-primary);
+}
+
+.tab.drop-after {
+    border-right: 2px solid var(--text-primary);
+}
+
+/* Drag Region (space for window dragging) */
+.titlebar-drag-region {
+    flex: 0 0 100px;
+    height: 100%;
+    -webkit-app-region: drag;
+    /* Don't disable pointer events - this area should be draggable */
+}
+
+/* Theme-specific adjustments */
+body[data-theme="dark"] .tab.active,
+body[data-theme="midnight"] .tab.active,
+body[data-theme="charcoal"] .tab.active {
+    box-shadow: 0 -1px 3px rgba(0, 0, 0, 0.3);
+}
+
+/* Responsive tab widths */
+@media (max-width: 1200px) {
+    .tab {
+        padding: 0 8px;
+    }
+
+    .tab-title {
+        font-size: 11px;
+    }
+}

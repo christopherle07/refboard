@@ -1,0 +1,37 @@
+/* View Container Styles */
+
+.view-container {
+    display: none;
+    width: 100%;
+    height: calc(100vh - 36px); /* Full height minus titlebar */
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.view-container.active {
+    display: flex;
+}
+
+/* Home View */
+.home-view {
+    /* Inherits existing .homepage styles from main.css */
+}
+
+/* Board View */
+.board-view {
+    /* Inherits existing .editor-container styles from sidebar.css */
+}
+
+/* Smooth transitions when switching views */
+.view-container.active {
+    animation: fadeIn 0.15s ease-in;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}

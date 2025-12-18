@@ -113,17 +113,36 @@ function initTheme() {
     document.documentElement.setAttribute('data-theme', savedTheme);
 }
 
-document.addEventListener('DOMContentLoaded', async () => {
-    initTheme();
-    await boardManager.loadBoards();
-    renderCollections();
-    renderBoards();
-    setupEventListeners();
-    loadVersionInfo();
+// Export init function for ViewManager
+export async function initHomepage() {
+    console.log('[initHomepage] Starting homepage initialization...');
+    try {
+        initTheme();
+        console.log('[initHomepage] Loading boards...');
+        await boardManager.loadBoards();
+        console.log('[initHomepage] Rendering collections...');
+        renderCollections();
+        console.log('[initHomepage] Rendering boards...');
+        renderBoards();
+        console.log('[initHomepage] Setting up event listeners...');
+        setupEventListeners();
+        console.log('[initHomepage] Loading version info...');
+        loadVersionInfo();
+        console.log('[initHomepage] Homepage initialization complete!');
+    } catch (error) {
+        console.error('[initHomepage] Error during initialization:', error);
+        throw error;
+    }
+}
 
-});
+// Track if event listeners have been set up
+let eventListenersSetup = false;
 
 function setupEventListeners() {
+    // Prevent duplicate event listener setup
+    if (eventListenersSetup) return;
+    eventListenersSetup = true;
+
     // Sidebar collapse toggle
     const sidebar = document.getElementById('app-sidebar');
     const collapseBtn = document.getElementById('sidebar-collapse-btn');
@@ -312,8 +331,24 @@ async function deleteBoard(boardId) {
     renderBoards();
 }
 
-function openBoard(boardId) {
-    window.location.href = `editor.html?id=${boardId}`;
+async function openBoard(boardId) {
+    console.log('[openBoard] Opening board:', boardId);
+    // Get board name for tab title
+    const board = await boardManager.getBoard(boardId);
+    console.log('[openBoard] Board data:', board);
+
+    if (!board) {
+        console.error('[openBoard] Board not found:', boardId);
+        return;
+    }
+
+    if (!window.appInstance) {
+        console.error('[openBoard] App instance not available');
+        return;
+    }
+
+    console.log('[openBoard] Opening board tab:', boardId, board.name);
+    await window.appInstance.openBoardTab(boardId, board.name);
 }
 
 function importBoardAsNew() {
@@ -854,4 +889,40 @@ function closeShortcutsModal() {
     const overlay = document.getElementById('shortcuts-modal-overlay');
     if (!overlay) return;
     overlay.style.display = 'none';
+}
+
+// Export state management functions for ViewManager
+export function saveHomeState() {
+    return {
+        currentPage,
+        currentSort,
+        currentCollectionId,
+        scrollPosition: {
+            x: window.scrollX,
+            y: window.scrollY
+        }
+    };
+}
+
+export function restoreHomeState(state) {
+    if (!state) return;
+
+    currentPage = state.currentPage || 1;
+    currentSort = state.currentSort || 'latest';
+    currentCollectionId = state.currentCollectionId || null;
+
+    // Update UI
+    const sortFilter = document.getElementById('sort-filter');
+    if (sortFilter) {
+        sortFilter.value = currentSort;
+    }
+
+    // Re-render with saved state
+    renderCollections();
+    renderBoards();
+
+    // Restore scroll position
+    if (state.scrollPosition) {
+        window.scrollTo(state.scrollPosition.x, state.scrollPosition.y);
+    }
 }

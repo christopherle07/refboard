@@ -5,11 +5,27 @@ let isMaximized = false;
 let initAttempts = 0;
 const MAX_INIT_ATTEMPTS = 50; // 5 seconds max
 
+// Detect platform and add data attribute
+async function detectPlatform() {
+    if (window.__TAURI__?.core?.invoke) {
+        try {
+            const platform = await window.__TAURI__.core.invoke('plugin:os|platform');
+            document.body.setAttribute('data-tauri-platform', platform);
+            console.log('Platform detected:', platform);
+        } catch (err) {
+            console.error('Failed to detect platform:', err);
+        }
+    }
+}
+
 // Initialize titlebar controls
 export function initTitlebar() {
     console.log('Attempting to initialize titlebar...');
     console.log('Tauri available:', !!window.__TAURI__);
     console.log('Tauri.window available:', !!window.__TAURI__?.window);
+
+    // Detect platform first
+    detectPlatform();
 
     // Log what's actually available
     if (window.__TAURI__?.window) {

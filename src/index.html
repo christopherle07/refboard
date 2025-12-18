@@ -6,7 +6,7 @@
     <meta name="view-transition" content="same-origin">
     <title>EyeDea</title>
     <script>
-        
+
         (function() {
             const theme = localStorage.getItem('app_theme') || 'light';
             const themes = {
@@ -23,16 +23,26 @@
         })();
     </script>
     <link rel="stylesheet" href="css/main.css">
+    <link rel="stylesheet" href="css/sidebar.css">
     <link rel="stylesheet" href="css/modal.css">
     <link rel="stylesheet" href="css/settingsModal.css">
     <link rel="stylesheet" href="css/library.css">
     <link rel="stylesheet" href="css/titlebar.css">
+    <link rel="stylesheet" href="css/tabs.css">
+    <link rel="stylesheet" href="css/views.css">
+    <link rel="stylesheet" href="css/assets-library.css">
     <link rel="stylesheet" href="css/transitions.css">
 </head>
 <body>
-    <div class="custom-titlebar" data-tauri-drag-region>
+    <div class="custom-titlebar">
         <div class="titlebar-left">
-            <span class="titlebar-title">EyeDea</span>
+            <button class="home-btn" id="home-btn" title="Home">
+                <img src="assets/icons8-home-button.svg" alt="Home" class="home-icon">
+            </button>
+        </div>
+        <div class="titlebar-tabs" id="titlebar-tabs">
+            <div id="tabs-container"></div>
+            <div class="titlebar-drag-region"></div>
         </div>
         <div class="titlebar-right">
             <button class="titlebar-button minimize-btn" id="titlebar-minimize" title="Minimize"></button>
@@ -41,99 +51,552 @@
         </div>
     </div>
 
-    <div class="homepage">
-        <button class="sidebar-collapse-btn" id="sidebar-collapse-btn" title="Collapse Sidebar">
-            <img src="assets/sidebar-col.svg" alt="Collapse" class="sidebar-collapse-icon">
-        </button>
+    <!-- Home View -->
+    <div class="view-container home-view">
+        <div class="homepage">
+            <button class="sidebar-collapse-btn" id="sidebar-collapse-btn" title="Collapse Sidebar">
+                <img src="assets/sidebar-col.svg" alt="Collapse" class="sidebar-collapse-icon">
+            </button>
 
-        <aside class="app-sidebar" id="app-sidebar">
-            <div class="sidebar-section">
-                <button class="sidebar-btn primary" id="new-board-btn">
-                    <img src="assets/newboard.svg" alt="New Board" class="sidebar-icon">
-                    <span class="sidebar-text">New Board</span>
-                </button>
-            </div>
-
-            <div class="sidebar-section">
-                <button class="sidebar-btn" id="import-board-btn">
-                    <img src="assets/import.svg" alt="Import" class="sidebar-icon">
-                    <span class="sidebar-text">Import Board</span>
-                </button>
-            </div>
-
-            <div class="sidebar-section">
-                <h3>Navigate</h3>
-                <button class="sidebar-btn active" id="all-boards-btn">
-                    <img src="assets/all-boards.svg" alt="All Boards" class="sidebar-icon">
-                    <span class="sidebar-text">All Boards</span>
-                </button>
-                <button class="sidebar-btn" id="library-btn">
-                    <img src="assets/library.svg" alt="Library" class="sidebar-icon">
-                    <span class="sidebar-text">Library</span>
-                </button>
-                <button class="sidebar-btn" id="settings-btn">
-                    <img src="assets/settings.svg" alt="Settings" class="sidebar-icon">
-                    <span class="sidebar-text">Settings</span>
-                </button>
-                <button class="sidebar-btn" id="shortcuts-btn">
-                    <img src="assets/keyboardshort.svg" alt="Shortcuts" class="sidebar-icon">
-                    <span class="sidebar-text">Keyboard Shortcuts</span>
-                </button>
-            </div>
-
-            <div class="sidebar-section">
-                <div class="collections-header">
-                    <h3>Collections</h3>
-                    <button class="new-collection-btn" id="new-collection-btn" title="New Collection">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                            <line x1="12" y1="5" x2="12" y2="19"></line>
-                            <line x1="5" y1="12" x2="19" y2="12"></line>
-                        </svg>
+            <aside class="app-sidebar" id="app-sidebar">
+                <div class="sidebar-section">
+                    <button class="sidebar-btn primary" id="new-board-btn">
+                        <img src="assets/newboard.svg" alt="New Board" class="sidebar-icon">
+                        <span class="sidebar-text">New Board</span>
                     </button>
                 </div>
-                <div class="collections-list" id="collections-list">
-                    <!-- Collections will be populated here -->
-                </div>
-            </div>
 
-            <div class="sidebar-section sidebar-footer">
-                <div class="version-info" id="version-info">
-                    <span class="version-text">Loading version...</span>
+                <div class="sidebar-section">
+                    <button class="sidebar-btn" id="import-board-btn">
+                        <img src="assets/import.svg" alt="Import" class="sidebar-icon">
+                        <span class="sidebar-text">Import Board</span>
+                    </button>
+                </div>
+
+                <div class="sidebar-section">
+                    <h3>Navigate</h3>
+                    <button class="sidebar-btn active" id="all-boards-btn">
+                        <img src="assets/all-boards.svg" alt="All Boards" class="sidebar-icon">
+                        <span class="sidebar-text">All Boards</span>
+                    </button>
+                    <button class="sidebar-btn" id="library-btn">
+                        <img src="assets/library.svg" alt="Library" class="sidebar-icon">
+                        <span class="sidebar-text">Library</span>
+                    </button>
+                    <button class="sidebar-btn" id="settings-btn">
+                        <img src="assets/settings.svg" alt="Settings" class="sidebar-icon">
+                        <span class="sidebar-text">Settings</span>
+                    </button>
+                    <button class="sidebar-btn" id="shortcuts-btn">
+                        <img src="assets/keyboardshort.svg" alt="Shortcuts" class="sidebar-icon">
+                        <span class="sidebar-text">Keyboard Shortcuts</span>
+                    </button>
+                </div>
+
+                <div class="sidebar-section">
+                    <div class="collections-header">
+                        <h3>Collections</h3>
+                        <button class="new-collection-btn" id="new-collection-btn" title="New Collection">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                <line x1="12" y1="5" x2="12" y2="19"></line>
+                                <line x1="5" y1="12" x2="19" y2="12"></line>
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="collections-list" id="collections-list">
+                        <!-- Collections will be populated here -->
+                    </div>
+                </div>
+
+                <div class="sidebar-section sidebar-footer">
+                    <div class="version-info" id="version-info">
+                        <span class="version-text">Loading version...</span>
+                    </div>
+                </div>
+            </aside>
+
+            <div class="homepage-main">
+                <header class="homepage-header">
+                    <h1>Your Boards</h1>
+                    <div class="header-controls">
+                        <select id="sort-filter" class="sort-dropdown">
+                            <option value="latest">Latest</option>
+                            <option value="oldest">Oldest</option>
+                            <option value="name">A-Z</option>
+                        </select>
+                    </div>
+                </header>
+
+                <main class="homepage-content">
+                    <div class="boards-grid" id="boards-grid">
+                    </div>
+
+                    <div class="pagination" id="pagination">
+                        <button class="pagination-btn" id="prev-page" disabled>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="15 18 9 12 15 6"></polyline>
+                            </svg>
+                        </button>
+                        <span class="pagination-info" id="page-info">Page 1 of 1</span>
+                        <button class="pagination-btn" id="next-page" disabled>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="9 18 15 12 9 6"></polyline>
+                            </svg>
+                        </button>
+                    </div>
+                </main>
+            </div>
+        </div>
+    </div>
+
+    <!-- Board Editor View -->
+    <div class="view-container board-view">
+        <div class="editor-container">
+            <aside class="sidebar">
+                <div class="sidebar-header">
+                    <div class="board-name-wrapper">
+                        <h2 class="board-name" id="board-name">Untitled Board</h2>
+                        <button class="board-dropdown-btn" id="board-dropdown-btn"></button>
+                        <div class="board-dropdown-menu" id="board-dropdown-menu">
+                            <div class="dropdown-item" id="dropdown-rename">Rename Board</div>
+                            <div class="dropdown-separator"></div>
+                            <div class="dropdown-item" id="dropdown-export">Export Board</div>
+                            <div class="dropdown-item" id="dropdown-import">Import to Board</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="sidebar-tabs">
+                    <button class="tab-btn active" data-tab="layers">Board</button>
+                    <button class="tab-btn" data-tab="assets">Assets</button>
+                </div>
+
+                <div class="sidebar-content">
+                    <div class="panel-section layers-section-scrollable">
+                        <div class="panel-section-header">
+                            <h3>Layers</h3>
+                            <div class="header-actions">
+                                <button class="icon-btn" id="add-layer-btn" title="Add Layer">+</button>
+                                <button class="collapse-btn" id="collapse-layers-btn">
+                                    <img src="assets/collapse.svg" alt="Collapse" class="collapse-icon" width="14" height="14"/>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="panel-section-content" id="layers-content">
+                            <div class="layers-list" id="layers-list">
+                                <div class="empty-message">No layers yet</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="properties-section" id="default-properties">
+                        <div class="property-row">
+                            <label>Background</label>
+                            <input type="color" id="bg-color" value="#ffffff">
+                        </div>
+                    </div>
+
+                    <div class="object-properties-section" id="object-properties" style="display: none;">
+                        <div class="properties-header">
+                            <h3 id="object-properties-title">Properties</h3>
+                            <button class="close-properties-btn" id="close-properties-btn">×</button>
+                        </div>
+                        <div class="properties-content" id="properties-content">
+                            <!-- Shape properties -->
+                            <div class="shape-properties" id="shape-properties" style="display: none;">
+                                <div class="property-row">
+                                    <label>Shape Type</label>
+                                    <select id="shape-type" class="property-select">
+                                        <option value="square">Square</option>
+                                        <option value="circle">Circle</option>
+                                        <option value="triangle">Triangle</option>
+                                        <option value="line">Line</option>
+                                        <option value="arrow">Arrow</option>
+                                    </select>
+                                </div>
+                                <div class="property-row">
+                                    <label>Fill Color</label>
+                                    <input type="color" id="shape-fill-color" value="#3b82f6">
+                                </div>
+                                <div class="property-row">
+                                    <label>Stroke</label>
+                                    <label class="toggle-switch" style="margin-left: auto;">
+                                        <input type="checkbox" id="shape-has-stroke" checked>
+                                        <span class="toggle-slider"></span>
+                                    </label>
+                                </div>
+                                <div class="property-row" id="shape-stroke-color-row">
+                                    <label>Stroke Color</label>
+                                    <input type="color" id="shape-stroke-color" value="#000000">
+                                </div>
+                                <div class="property-row" id="shape-stroke-width-row">
+                                    <label>Stroke Width</label>
+                                    <input type="number" id="shape-stroke-width" min="0" max="20" value="2" class="property-input">
+                                </div>
+                                <div class="property-row" id="shape-line-color-row" style="display: none;">
+                                    <label>Line Color</label>
+                                    <input type="color" id="shape-line-color" value="#000000">
+                                </div>
+                                <div class="property-row" id="shape-line-thickness-row" style="display: none;">
+                                    <label>Line Thickness</label>
+                                    <input type="number" id="shape-line-thickness" min="1" max="50" value="5" class="property-input">
+                                </div>
+                            </div>
+
+                            <!-- Text properties -->
+                            <div class="text-properties" id="text-properties" style="display: none;">
+                                <div class="property-row">
+                                    <label>Text</label>
+                                    <textarea id="text-content" class="text-content-input" rows="3" placeholder="Enter text..."></textarea>
+                                </div>
+                                <div class="property-row">
+                                    <label>Font Size</label>
+                                    <input type="number" id="text-font-size" min="8" max="200" value="32" class="property-input">
+                                </div>
+                                <div class="property-row">
+                                    <label>Font Family</label>
+                                    <select id="text-font-family" class="property-select">
+                                        <option value="Arial">Arial</option>
+                                        <option value="Arial Black">Arial Black</option>
+                                        <option value="Bahnschrift">Bahnschrift</option>
+                                        <option value="Calibri">Calibri</option>
+                                        <option value="Cambria">Cambria</option>
+                                        <option value="Candara">Candara</option>
+                                        <option value="Century Gothic">Century Gothic</option>
+                                        <option value="Comic Sans MS">Comic Sans MS</option>
+                                        <option value="Consolas">Consolas</option>
+                                        <option value="Constantia">Constantia</option>
+                                        <option value="Corbel">Corbel</option>
+                                        <option value="Courier New">Courier New</option>
+                                        <option value="Ebrima">Ebrima</option>
+                                        <option value="Franklin Gothic Medium">Franklin Gothic Medium</option>
+                                        <option value="Gabriola">Gabriola</option>
+                                        <option value="Gadugi">Gadugi</option>
+                                        <option value="Georgia">Georgia</option>
+                                        <option value="Impact">Impact</option>
+                                        <option value="Ink Free">Ink Free</option>
+                                        <option value="Javanese Text">Javanese Text</option>
+                                        <option value="Leelawadee UI">Leelawadee UI</option>
+                                        <option value="Lucida Console">Lucida Console</option>
+                                        <option value="Lucida Sans Unicode">Lucida Sans Unicode</option>
+                                        <option value="Malgun Gothic">Malgun Gothic</option>
+                                        <option value="Microsoft Sans Serif">Microsoft Sans Serif</option>
+                                        <option value="Mongolian Baiti">Mongolian Baiti</option>
+                                        <option value="MS Gothic">MS Gothic</option>
+                                        <option value="MV Boli">MV Boli</option>
+                                        <option value="Myanmar Text">Myanmar Text</option>
+                                        <option value="Nirmala UI">Nirmala UI</option>
+                                        <option value="Palatino Linotype">Palatino Linotype</option>
+                                        <option value="Segoe Print">Segoe Print</option>
+                                        <option value="Segoe Script">Segoe Script</option>
+                                        <option value="Segoe UI">Segoe UI</option>
+                                        <option value="Segoe UI Black">Segoe UI Black</option>
+                                        <option value="Segoe UI Emoji">Segoe UI Emoji</option>
+                                        <option value="Segoe UI Historic">Segoe UI Historic</option>
+                                        <option value="Segoe UI Light">Segoe UI Light</option>
+                                        <option value="Segoe UI Semibold">Segoe UI Semibold</option>
+                                        <option value="Sitka">Sitka</option>
+                                        <option value="Sylfaen">Sylfaen</option>
+                                        <option value="Tahoma">Tahoma</option>
+                                        <option value="Times New Roman">Times New Roman</option>
+                                        <option value="Trebuchet MS">Trebuchet MS</option>
+                                        <option value="Verdana">Verdana</option>
+                                        <option value="Yu Gothic">Yu Gothic</option>
+                                    </select>
+                                </div>
+                                <div class="property-row">
+                                    <label>Text Color</label>
+                                    <input type="color" id="text-color" value="#000000">
+                                </div>
+                                <div class="property-row">
+                                    <label>Font Weight</label>
+                                    <select id="text-font-weight" class="property-select">
+                                        <option value="normal">Normal</option>
+                                        <option value="bold">Bold</option>
+                                    </select>
+                                </div>
+                                <div class="property-row">
+                                    <label>Text Align</label>
+                                    <select id="text-align" class="property-select">
+                                        <option value="left">Left</option>
+                                        <option value="center">Center</option>
+                                        <option value="right">Right</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </aside>
+
+            <main class="canvas-area">
+                <button class="floating-canvas-btn" id="open-floating-btn" title="Open Canvas Window">
+                    <img src="assets/new-window-icon.svg" alt="New Window" class="floating-canvas-icon">
+                </button>
+
+                <div class="drawing-toolbar" id="drawing-toolbar">
+                    <div class="toolbar-group">
+                        <button class="toolbar-btn" id="draw-pen-btn" title="Pen Tool">P</button>
+                        <button class="toolbar-btn" id="draw-highlighter-btn" title="Highlighter Tool">H</button>
+                        <button class="toolbar-btn" id="draw-eraser-btn" title="Eraser Tool">E</button>
+                    </div>
+                    <div class="toolbar-separator"></div>
+                    <div class="toolbar-group">
+                        <input type="color" id="draw-color-picker" class="color-picker-input" value="#000000" title="Drawing Color">
+                        <div class="size-control">
+                            <label class="size-label" id="draw-size-label">Size:</label>
+                            <div class="size-input-group">
+                                <input type="number" id="draw-size-input" class="size-input" min="1" max="500" value="2">
+                                <input type="range" id="draw-size-slider" class="size-slider" min="1" max="100" value="2">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="toolbar-separator"></div>
+                    <div class="toolbar-group">
+                        <div class="eraser-mode-toggle" id="eraser-mode-toggle" style="display: none;">
+                            <label class="toggle-label">Erase:</label>
+                            <div class="toggle-buttons">
+                                <button class="toggle-option active" data-mode="strokes">Strokes</button>
+                                <button class="toggle-option" data-mode="pixels">Pixels</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="toolbar-separator" id="clear-separator"></div>
+                    <div class="toolbar-group">
+                        <button class="toolbar-btn" id="draw-clear-btn" title="Clear All Strokes">C</button>
+                    </div>
+                </div>
+
+                <!-- Floating Text Toolbar -->
+                <div class="floating-toolbar" id="floating-text-toolbar" style="display: none;">
+                    <div class="floating-toolbar-content">
+                        <select id="floating-font-family" class="floating-select" title="Font Family" size="1">
+                            <option value="Arial">Arial</option>
+                            <option value="Arial Black">Arial Black</option>
+                            <option value="Bahnschrift">Bahnschrift</option>
+                            <option value="Calibri">Calibri</option>
+                            <option value="Cambria">Cambria</option>
+                            <option value="Candara">Candara</option>
+                            <option value="Century Gothic">Century Gothic</option>
+                            <option value="Comic Sans MS">Comic Sans MS</option>
+                            <option value="Consolas">Consolas</option>
+                            <option value="Constantia">Constantia</option>
+                            <option value="Corbel">Corbel</option>
+                            <option value="Courier New">Courier New</option>
+                            <option value="Ebrima">Ebrima</option>
+                            <option value="Franklin Gothic Medium">Franklin Gothic Medium</option>
+                            <option value="Gabriola">Gabriola</option>
+                            <option value="Gadugi">Gadugi</option>
+                            <option value="Georgia">Georgia</option>
+                            <option value="Impact">Impact</option>
+                            <option value="Ink Free">Ink Free</option>
+                            <option value="Javanese Text">Javanese Text</option>
+                            <option value="Leelawadee UI">Leelawadee UI</option>
+                            <option value="Lucida Console">Lucida Console</option>
+                            <option value="Lucida Sans Unicode">Lucida Sans Unicode</option>
+                            <option value="Malgun Gothic">Malgun Gothic</option>
+                            <option value="Microsoft Sans Serif">Microsoft Sans Serif</option>
+                            <option value="Mongolian Baiti">Mongolian Baiti</option>
+                            <option value="MS Gothic">MS Gothic</option>
+                            <option value="MV Boli">MV Boli</option>
+                            <option value="Myanmar Text">Myanmar Text</option>
+                            <option value="Nirmala UI">Nirmala UI</option>
+                            <option value="Palatino Linotype">Palatino Linotype</option>
+                            <option value="Segoe Print">Segoe Print</option>
+                            <option value="Segoe Script">Segoe Script</option>
+                            <option value="Segoe UI">Segoe UI</option>
+                            <option value="Segoe UI Black">Segoe UI Black</option>
+                            <option value="Segoe UI Emoji">Segoe UI Emoji</option>
+                            <option value="Segoe UI Historic">Segoe UI Historic</option>
+                            <option value="Segoe UI Light">Segoe UI Light</option>
+                            <option value="Segoe UI Semibold">Segoe UI Semibold</option>
+                            <option value="Sitka">Sitka</option>
+                            <option value="Sylfaen">Sylfaen</option>
+                            <option value="Tahoma">Tahoma</option>
+                            <option value="Times New Roman">Times New Roman</option>
+                            <option value="Trebuchet MS">Trebuchet MS</option>
+                            <option value="Verdana">Verdana</option>
+                            <option value="Yu Gothic">Yu Gothic</option>
+                        </select>
+                        <input type="number" id="floating-font-size" min="8" max="200" value="32" class="floating-input" title="Font Size">
+                        <button class="floating-btn" id="floating-text-bold" title="Bold"><strong>B</strong></button>
+                        <input type="color" id="floating-text-color" value="#000000" class="floating-color" title="Text Color">
+                        <div class="floating-separator"></div>
+                        <button class="floating-btn" id="floating-text-align-left" title="Align Left">
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                                <rect x="2" y="3" width="12" height="2"/>
+                                <rect x="2" y="7" width="8" height="2"/>
+                                <rect x="2" y="11" width="10" height="2"/>
+                            </svg>
+                        </button>
+                        <button class="floating-btn" id="floating-text-align-center" title="Align Center">
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                                <rect x="2" y="3" width="12" height="2"/>
+                                <rect x="4" y="7" width="8" height="2"/>
+                                <rect x="3" y="11" width="10" height="2"/>
+                            </svg>
+                        </button>
+                        <button class="floating-btn" id="floating-text-align-right" title="Align Right">
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                                <rect x="2" y="3" width="12" height="2"/>
+                                <rect x="6" y="7" width="8" height="2"/>
+                                <rect x="4" y="11" width="10" height="2"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Floating Shape Toolbar -->
+                <div class="floating-toolbar" id="floating-shape-toolbar" style="display: none;">
+                    <div class="floating-toolbar-content">
+                        <button class="floating-btn shape-btn" id="shape-btn-square" data-shape="square" title="Square">
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                                <rect x="2" y="2" width="12" height="12" rx="1"/>
+                            </svg>
+                        </button>
+                        <button class="floating-btn shape-btn" id="shape-btn-circle" data-shape="circle" title="Circle">
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                                <circle cx="8" cy="8" r="6"/>
+                            </svg>
+                        </button>
+                        <button class="floating-btn shape-btn" id="shape-btn-triangle" data-shape="triangle" title="Triangle">
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                                <path d="M8 2 L14 14 L2 14 Z"/>
+                            </svg>
+                        </button>
+                        <button class="floating-btn shape-btn" id="shape-btn-line" data-shape="line" title="Line">
+                            <svg width="16" height="16" viewBox="0 0 16 16" stroke="currentColor" stroke-width="2" fill="none">
+                                <line x1="2" y1="14" x2="14" y2="2"/>
+                            </svg>
+                        </button>
+                        <button class="floating-btn shape-btn" id="shape-btn-arrow" data-shape="arrow" title="Arrow">
+                            <svg width="16" height="16" viewBox="0 0 16 16" stroke="currentColor" stroke-width="2" fill="none">
+                                <line x1="2" y1="14" x2="14" y2="2"/>
+                                <polyline points="10,2 14,2 14,6" fill="none"/>
+                            </svg>
+                        </button>
+                        <div class="floating-separator"></div>
+                        <input type="color" id="floating-shape-fill" value="#3b82f6" class="floating-color" title="Fill Color">
+                        <div class="floating-separator"></div>
+                        <button class="floating-btn" id="floating-shape-stroke-toggle" title="Toggle Stroke"><strong>S</strong></button>
+                        <input type="color" id="floating-shape-stroke-color" value="#000000" class="floating-color" title="Stroke Color">
+                        <input type="number" id="floating-shape-stroke-width" min="0" max="20" value="2" class="floating-input-sm" title="Stroke Width">
+                    </div>
+                </div>
+
+                <div class="canvas-container" id="canvas-container">
+                    <canvas id="main-canvas"></canvas>
+                </div>
+
+                <!-- Assets Library View -->
+                <div class="assets-library-view" id="assets-library-view" style="display: none;">
+                    <div class="assets-library-header">
+                        <div class="assets-library-header-left">
+                            <button class="back-to-canvas-btn" id="back-to-canvas-btn" title="Back to Canvas">
+                                <img src="assets/backarrow.svg" alt="Back" class="back-arrow-icon theme-icon">
+                            </button>
+                            <h1>Assets Library</h1>
+                        </div>
+                        <div class="assets-library-controls">
+                            <input type="text" class="assets-search-bar" id="assets-search-bar" placeholder="Search assets...">
+                            <button class="assets-import-btn" id="assets-library-import-btn">+ Import Images</button>
+                            <div class="assets-view-buttons">
+                                <button class="assets-view-btn active" id="board-assets-btn">Board Assets</button>
+                                <button class="assets-view-btn" id="all-assets-btn">All Assets</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="assets-tag-filter-bar" id="assets-tag-filter-bar" style="display: none;">
+                        <span class="assets-tag-filter-label">Filter by tags:</span>
+                        <div class="assets-tag-filter-pills" id="assets-tag-filter-pills"></div>
+                        <button class="assets-tag-clear-btn" id="assets-tag-clear-btn">Clear All</button>
+                    </div>
+                    <div class="assets-library-content">
+                        <div class="assets-library-grid" id="assets-library-grid">
+                            <div class="empty-message">No assets yet. Click "+ Import Images" to get started.</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="canvas-context-menu" id="canvas-context-menu">
+                    <div class="context-menu-item" id="context-delete-selected" style="display: none;">Delete Selected</div>
+                    <div class="context-menu-item" id="context-deselect-all" style="display: none;">Deselect All</div>
+                    <div class="context-menu-item" id="context-enable-rotate" style="display: none;">Enable Rotate</div>
+                    <div class="context-menu-separator" id="context-separator" style="display: none;"></div>
+                    <div class="context-menu-item" id="context-recenter">Recenter View</div>
+                    <div class="context-menu-item" id="context-reset-zoom">Reset Zoom</div>
+                    <div class="context-menu-separator"></div>
+                    <div class="context-menu-item" id="context-shortcuts">Keyboard Shortcuts</div>
+                </div>
+            </main>
+
+            <!-- Right Tools Sidebar -->
+            <aside class="tools-sidebar" id="tools-sidebar">
+                <div class="tools-sidebar-content">
+                    <button class="tool-btn" id="drawing-mode-btn" title="Drawing Mode">
+                        <img src="assets/PenIcon.svg" alt="Drawing Mode" class="tool-icon theme-icon">
+                    </button>
+                    <button class="tool-btn" id="shape-tool-btn" title="Shape Tool">
+                        <img src="assets/ShapeIcon.svg" alt="Shape Tool" class="tool-icon theme-icon">
+                    </button>
+                    <button class="tool-btn" id="text-tool-btn" title="Text Tool">
+                        <img src="assets/TextIcon.svg" alt="Text Tool" class="tool-icon theme-icon">
+                    </button>
+                    <button class="tool-btn" id="color-extractor-btn" title="Color Extractor">
+                        <img src="assets/ColorPalette.svg" alt="Color Extractor" class="tool-icon theme-icon">
+                    </button>
+                </div>
+            </aside>
+        </div>
+
+        <!-- Layer context menu -->
+        <div class="layer-context-menu" id="layer-context-menu">
+            <div class="layer-context-menu-item" id="layer-context-rename">Rename</div>
+            <div class="layer-context-menu-separator"></div>
+            <div class="layer-context-menu-item" id="layer-context-ungroup" style="display: none;">Remove from Group</div>
+            <div class="layer-context-menu-item" id="layer-context-duplicate">Duplicate</div>
+            <div class="layer-context-menu-item" id="layer-context-delete">Delete</div>
+        </div>
+
+        <!-- Floating Color Palette Popup -->
+        <div class="color-palette-popup" id="color-palette-popup" style="display: none;">
+            <div class="color-palette-grid" id="color-palette-grid"></div>
+        </div>
+
+        <!-- Asset Details Sidebar -->
+        <aside class="asset-sidebar" id="asset-sidebar">
+            <div class="asset-sidebar-header">
+                <h2>Asset Details</h2>
+                <button class="asset-sidebar-close" id="asset-sidebar-close">×</button>
+            </div>
+            <div class="asset-sidebar-body">
+                <img src="" alt="Asset Preview" class="asset-sidebar-preview" id="asset-sidebar-preview">
+                <div class="asset-sidebar-section">
+                    <h3>Name</h3>
+                    <input type="text" class="asset-sidebar-input" id="asset-sidebar-name" placeholder="Asset name">
+                </div>
+                <div class="asset-sidebar-section">
+                    <h3>Tags</h3>
+                    <div class="asset-sidebar-tags" id="asset-sidebar-tags"></div>
+                    <div class="asset-tag-quick-presets" id="asset-tag-quick-presets"></div>
+                    <div class="asset-tag-input-row">
+                        <input type="text" class="asset-sidebar-input asset-tag-input" id="asset-tag-input" placeholder="Add a tag">
+                        <button class="asset-tag-add-btn" id="asset-tag-add-btn">Add</button>
+                    </div>
+                    <div class="asset-tag-presets-dropdown" id="asset-tag-presets-dropdown"></div>
+                </div>
+                <div class="asset-sidebar-section">
+                    <h3>Metadata</h3>
+                    <div class="asset-sidebar-metadata" id="asset-sidebar-metadata"></div>
+                </div>
+                <div class="asset-sidebar-section">
+                    <div class="asset-sidebar-actions">
+                        <button class="asset-sidebar-btn asset-sidebar-btn-primary" id="asset-sidebar-add-to-canvas">Add to Canvas</button>
+                        <button class="asset-sidebar-btn asset-sidebar-btn-danger" id="asset-sidebar-delete">Delete Asset</button>
+                    </div>
                 </div>
             </div>
         </aside>
-
-        <div class="homepage-main">
-            <header class="homepage-header">
-                <h1>Your Boards</h1>
-                <div class="header-controls">
-                    <select id="sort-filter" class="sort-dropdown">
-                        <option value="latest">Latest</option>
-                        <option value="oldest">Oldest</option>
-                        <option value="name">A-Z</option>
-                    </select>
-                </div>
-            </header>
-
-            <main class="homepage-content">
-                <div class="boards-grid" id="boards-grid">
-                </div>
-
-                <div class="pagination" id="pagination">
-                    <button class="pagination-btn" id="prev-page" disabled>
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <polyline points="15 18 9 12 15 6"></polyline>
-                        </svg>
-                    </button>
-                    <span class="pagination-info" id="page-info">Page 1 of 1</span>
-                    <button class="pagination-btn" id="next-page" disabled>
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <polyline points="9 18 15 12 9 6"></polyline>
-                        </svg>
-                    </button>
-                </div>
-            </main>
-        </div>
     </div>
 
     <!-- Keyboard Shortcuts Modal -->
@@ -207,7 +670,14 @@
         </div>
     </div>
 
-    <script type="module" src="js/titlebar.js"></script>
-    <script type="module" src="js/main.js"></script>
+    <script type="module">
+        import { initApp } from './js/app.js';
+        import './js/titlebar.js';
+
+        // Initialize app when DOM is ready
+        document.addEventListener('DOMContentLoaded', async () => {
+            await initApp();
+        });
+    </script>
 </body>
 </html>

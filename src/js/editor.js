@@ -5,6 +5,53 @@ import { HistoryManager } from './history-manager.js';
 import { showInputModal, showChoiceModal, showToast, showConfirmModal, showColorExtractorModal } from './modal-utils.js';
 import { updateTitlebarTitle } from './titlebar.js';
 
+// Editor instance manager - stores separate state for each board container
+const editorInstances = new Map(); // Map<container, editorState>
+let activeContainer = null; // Currently active editor container
+
+// Helper to get element from active container
+function getElement(id) {
+    if (!activeContainer) {
+        console.error('[getElement] No active container');
+        return null;
+    }
+    return activeContainer.querySelector('#' + id);
+}
+
+// Get or create editor instance for a container
+function getEditorInstance(container) {
+    if (!editorInstances.has(container)) {
+        editorInstances.set(container, {
+            canvas: null,
+            historyManager: null,
+            currentBoardId: null,
+            saveTimeout: null,
+            pendingSave: false,
+            dragSourceIndex: null,
+            currentOrder: [],
+            draggedImageId: null,
+            draggedLayerId: null,
+            draggedLayerType: null,
+            allLayersOrder: [],
+            syncChannel: null,
+            showAllAssets: false,
+            selectedTagFilters: [],
+            renderThrottle: null,
+            draggedElement: null,
+            ghostElement: null,
+            lastDragOrderHash: null,
+            isDragging: false,
+            draggedFromGroup: null,
+            draggedFromGroupBounds: null,
+            lastDragY: 0,
+            layerGroups: [],
+            nextGroupId: 1
+        });
+    }
+    return editorInstances.get(container);
+}
+
+// Legacy global variables that point to the active instance
 let canvas;
 let historyManager;
 let currentBoardId;
@@ -31,6 +78,68 @@ let lastDragY = 0; // Track the last mouse Y position during drag
 // Layer groups
 let layerGroups = []; // Array of { id, name, layerIds: [], collapsed: false }
 let nextGroupId = 1;
+
+// Update global references to point to the active instance
+function setActiveInstance(container) {
+    activeContainer = container;
+    const instance = getEditorInstance(container);
+
+    canvas = instance.canvas;
+    historyManager = instance.historyManager;
+    currentBoardId = instance.currentBoardId;
+    saveTimeout = instance.saveTimeout;
+    pendingSave = instance.pendingSave;
+    dragSourceIndex = instance.dragSourceIndex;
+    currentOrder = instance.currentOrder;
+    draggedImageId = instance.draggedImageId;
+    draggedLayerId = instance.draggedLayerId;
+    draggedLayerType = instance.draggedLayerType;
+    allLayersOrder = instance.allLayersOrder;
+    syncChannel = instance.syncChannel;
+    showAllAssets = instance.showAllAssets;
+    selectedTagFilters = instance.selectedTagFilters;
+    renderThrottle = instance.renderThrottle;
+    draggedElement = instance.draggedElement;
+    ghostElement = instance.ghostElement;
+    lastDragOrderHash = instance.lastDragOrderHash;
+    isDragging = instance.isDragging;
+    draggedFromGroup = instance.draggedFromGroup;
+    draggedFromGroupBounds = instance.draggedFromGroupBounds;
+    lastDragY = instance.lastDragY;
+    layerGroups = instance.layerGroups;
+    nextGroupId = instance.nextGroupId;
+}
+
+// Save current global state back to the active instance
+function saveActiveInstance() {
+    if (!activeContainer) return;
+    const instance = getEditorInstance(activeContainer);
+
+    instance.canvas = canvas;
+    instance.historyManager = historyManager;
+    instance.currentBoardId = currentBoardId;
+    instance.saveTimeout = saveTimeout;
+    instance.pendingSave = pendingSave;
+    instance.dragSourceIndex = dragSourceIndex;
+    instance.currentOrder = currentOrder;
+    instance.draggedImageId = draggedImageId;
+    instance.draggedLayerId = draggedLayerId;
+    instance.draggedLayerType = draggedLayerType;
+    instance.allLayersOrder = allLayersOrder;
+    instance.syncChannel = syncChannel;
+    instance.showAllAssets = showAllAssets;
+    instance.selectedTagFilters = selectedTagFilters;
+    instance.renderThrottle = renderThrottle;
+    instance.draggedElement = draggedElement;
+    instance.ghostElement = ghostElement;
+    instance.lastDragOrderHash = lastDragOrderHash;
+    instance.isDragging = isDragging;
+    instance.draggedFromGroup = draggedFromGroup;
+    instance.draggedFromGroupBounds = draggedFromGroupBounds;
+    instance.lastDragY = lastDragY;
+    instance.layerGroups = layerGroups;
+    instance.nextGroupId = nextGroupId;
+}
 
 function initTheme() {
     const THEME_KEY = 'app_theme';
@@ -108,17 +217,23 @@ function initTheme() {
     document.documentElement.setAttribute('data-theme', savedTheme);
 }
 
-document.addEventListener('DOMContentLoaded', async () => {
+// Export init function for ViewManager
+export async function initEditor(boardId, container) {
+    console.log('[initEditor] Starting editor initialization for board:', boardId, 'container:', container);
+
+    // Set this container as the active instance and load its state
+    setActiveInstance(container);
+
     initTheme();
-    
-    const params = new URLSearchParams(window.location.search);
-    currentBoardId = parseInt(params.get('id'));
-    
+
+    currentBoardId = boardId;
+
     if (!currentBoardId) {
-        window.location.href = 'index.html';
+        console.error('[initEditor] No board ID provided to initEditor');
         return;
     }
-    
+
+    console.log('[initEditor] Current board ID set to:', currentBoardId);
     syncChannel = new BroadcastChannel('board_sync_' + currentBoardId);
 
     // Handle sync requests from floating window
@@ -159,19 +274,21 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     });
 
-    await initEditor();
-    setupEventListeners();
-});
-
-async function initEditor() {
+    // Load and initialize board
+    console.log('[initEditor] Loading boards...');
     await boardManager.loadBoards();
+
+    console.log('[initEditor] Getting board data for ID:', currentBoardId);
     const board = await boardManager.getBoard(currentBoardId);
+
     if (!board) {
-        window.location.href = 'index.html';
+        console.error('[initEditor] Board not found:', currentBoardId);
         return;
     }
 
-    console.log('Board loaded from database:', {
+    console.log('[initEditor] Board loaded successfully:', {
+        id: board.id,
+        name: board.name,
         hasStrokes: !!board.strokes,
         strokesCount: board.strokes?.length || 0,
         hasObjects: !!board.objects,
@@ -182,10 +299,17 @@ async function initEditor() {
     window.currentBoardId = currentBoardId;
     window.renderAssetsCallback = renderAssets;
 
-    document.getElementById('board-name').textContent = board.name;
+    const boardNameEl = container.querySelector('#board-name');
+    if (!boardNameEl) {
+        throw new Error('Board name element not found - container may be corrupted');
+    }
+    boardNameEl.textContent = board.name;
     updateTitlebarTitle(`EyeDea - ${board.name}`);
-    
-    const canvasElement = document.getElementById('main-canvas');
+
+    const canvasElement = container.querySelector('#main-canvas');
+    if (!canvasElement) {
+        throw new Error('Canvas element not found - container may be corrupted');
+    }
     canvas = new Canvas(canvasElement);
     canvas.setBackgroundColor(board.bgColor || board.bg_color);
 
@@ -193,8 +317,10 @@ async function initEditor() {
     historyManager.setCanvas(canvas);
     canvas.setHistoryManager(historyManager);
 
-    const colorInput = document.getElementById('bg-color');
-    colorInput.value = board.bgColor || board.bg_color;
+    const colorInput = container.querySelector('#bg-color');
+    if (colorInput) {
+        colorInput.value = board.bgColor || board.bg_color;
+    }
 
     await loadLayers(board.layers, board.viewState);
 
@@ -253,7 +379,7 @@ async function initEditor() {
         if (obj.type === 'text') {
             // Focus the text content textarea
             setTimeout(() => {
-                const textContent = document.getElementById('text-content');
+                const textContent = getElement('text-content');
                 if (textContent) {
                     textContent.focus();
                     textContent.select();
@@ -268,7 +394,7 @@ async function initEditor() {
     });
     canvasElement.addEventListener('toolChanged', (e) => {
         // Update text tool button state when tool changes
-        const textToolBtn = document.getElementById('text-tool-btn');
+        const textToolBtn = getElement('text-tool-btn');
         if (textToolBtn) {
             if (e.detail.tool === 'text') {
                 textToolBtn.classList.add('active');
@@ -285,13 +411,22 @@ async function initEditor() {
     syncBoardAssetsWithCanvas();
 
     // Add dragover handler to layers list to allow drops in empty space
-    const layersList = document.getElementById('layers-list');
+    const layersList = getElement('layers-list');
     if (layersList) {
         layersList.addEventListener('dragover', (e) => {
             e.preventDefault();
             e.dataTransfer.dropEffect = 'move';
         });
     }
+
+    // Setup event listeners
+    console.log('[initEditor] Setting up event listeners...');
+    setupEventListeners(container);
+
+    // Save the instance state after initialization
+    saveActiveInstance();
+
+    console.log('[initEditor] Editor initialization complete!');
 }
 
 function loadLayers(layers, viewState = null) {
@@ -355,8 +490,11 @@ function loadLayers(layers, viewState = null) {
 }
 
 
-function setupEventListeners() {
-    document.getElementById('bg-color').addEventListener('change', (e) => {
+function setupEventListeners(container) {
+    // Helper function to get element scoped to this container
+    const $ = (id) => container.querySelector('#' + id);
+
+    $('bg-color').addEventListener('change', (e) => {
         const color = e.target.value;
         canvas.setBackgroundColor(color);
 
@@ -371,41 +509,41 @@ function setupEventListeners() {
         scheduleSave();
     });
 
-    document.getElementById('open-floating-btn').addEventListener('click', openFloatingWindow);
+    $('open-floating-btn').addEventListener('click', openFloatingWindow);
 
     // Assets library event listeners
-    document.getElementById('assets-library-import-btn').addEventListener('click', () => {
+    $('assets-library-import-btn').addEventListener('click', () => {
         importAssetsToLibrary();
     });
 
     // Assets view buttons
-    document.getElementById('board-assets-btn').addEventListener('click', () => {
+    $('board-assets-btn').addEventListener('click', () => {
         showAllAssets = false;
-        document.getElementById('board-assets-btn').classList.add('active');
-        document.getElementById('all-assets-btn').classList.remove('active');
+        $('board-assets-btn').classList.add('active');
+        $('all-assets-btn').classList.remove('active');
         loadAssetsLibrary();
     });
 
-    document.getElementById('all-assets-btn').addEventListener('click', () => {
+    $('all-assets-btn').addEventListener('click', () => {
         showAllAssets = true;
-        document.getElementById('all-assets-btn').classList.add('active');
-        document.getElementById('board-assets-btn').classList.remove('active');
+        $('all-assets-btn').classList.add('active');
+        $('board-assets-btn').classList.remove('active');
         loadAssetsLibrary();
     });
 
-    document.getElementById('back-to-canvas-btn').addEventListener('click', () => {
+    $('back-to-canvas-btn').addEventListener('click', () => {
         window.toggleAssetsLibrary();
     });
 
     // Assets search bar
-    const assetsSearchBar = document.getElementById('assets-search-bar');
+    const assetsSearchBar = $('assets-search-bar');
 
     assetsSearchBar.addEventListener('input', (e) => {
         loadAssetsLibrary(e.target.value);
     });
 
     // Tag filter clear button
-    document.getElementById('assets-tag-clear-btn').addEventListener('click', () => {
+    $('assets-tag-clear-btn').addEventListener('click', () => {
         selectedTagFilters = [];
         loadAssetsLibrary(assetsSearchBar.value);
     });
@@ -424,17 +562,17 @@ function setupEventListeners() {
 
             if (tab === 'layers') {
                 // Show canvas view
-                document.getElementById('canvas-container').style.display = 'block';
-                document.getElementById('assets-library-view').style.display = 'none';
-                const drawingToolbar = document.getElementById('drawing-toolbar');
+                $('canvas-container').style.display = 'block';
+                $('assets-library-view').style.display = 'none';
+                const drawingToolbar = $('drawing-toolbar');
                 const toolsSidebar = document.querySelector('.tools-sidebar');
                 if (drawingToolbar) drawingToolbar.style.display = 'flex';
                 if (toolsSidebar) toolsSidebar.style.display = 'flex';
             } else if (tab === 'assets') {
                 // Show assets library view
-                document.getElementById('canvas-container').style.display = 'none';
-                document.getElementById('assets-library-view').style.display = 'flex';
-                const drawingToolbar = document.getElementById('drawing-toolbar');
+                $('canvas-container').style.display = 'none';
+                $('assets-library-view').style.display = 'flex';
+                const drawingToolbar = $('drawing-toolbar');
                 const toolsSidebar = document.querySelector('.tools-sidebar');
                 if (drawingToolbar) drawingToolbar.style.display = 'none';
                 if (toolsSidebar) toolsSidebar.style.display = 'none';
@@ -447,9 +585,9 @@ function setupEventListeners() {
 
     // Assets library toggle function
     window.toggleAssetsLibrary = function() {
-        const canvasContainer = document.getElementById('canvas-container');
-        const assetsLibraryView = document.getElementById('assets-library-view');
-        const drawingToolbar = document.getElementById('drawing-toolbar');
+        const canvasContainer = $('canvas-container');
+        const assetsLibraryView = $('assets-library-view');
+        const drawingToolbar = $('drawing-toolbar');
         const toolsSidebar = document.querySelector('.tools-sidebar');
 
         const isLibraryVisible = assetsLibraryView.style.display === 'flex';
@@ -482,14 +620,9 @@ function setupEventListeners() {
 
     setupContextMenu();
     setupBoardDropdown();
-
-    document.getElementById('back-home-btn').addEventListener('click', () => {
-        saveNow();
-        window.location.href = 'index.html';
-    });
     
-    document.getElementById('collapse-layers-btn').addEventListener('click', (e) => {
-        const content = document.getElementById('layers-content');
+    $('collapse-layers-btn').addEventListener('click', (e) => {
+        const content = $('layers-content');
         const btn = e.currentTarget;
         content.classList.toggle('collapsed');
 
@@ -499,7 +632,7 @@ function setupEventListeners() {
             : '<img src="assets/collapse.svg" alt="Collapse" class="collapse-icon" width="14" height="14"/>';
     });
 
-    const assetsViewToggle = document.getElementById('assets-view-toggle');
+    const assetsViewToggle = $('assets-view-toggle');
     if (assetsViewToggle) {
         assetsViewToggle.addEventListener('change', (e) => {
             showAllAssets = e.target.checked;
@@ -568,14 +701,14 @@ function setupEventListeners() {
 }
 
 function setupDrawingToolbar() {
-    const penBtn = document.getElementById('draw-pen-btn');
-    const highlighterBtn = document.getElementById('draw-highlighter-btn');
-    const eraserBtn = document.getElementById('draw-eraser-btn');
-    const colorPicker = document.getElementById('draw-color-picker');
-    const sizeSlider = document.getElementById('draw-size-slider');
-    const sizeInput = document.getElementById('draw-size-input');
-    const clearBtn = document.getElementById('draw-clear-btn');
-    const eraserModeToggle = document.getElementById('eraser-mode-toggle');
+    const penBtn = getElement('draw-pen-btn');
+    const highlighterBtn = getElement('draw-highlighter-btn');
+    const eraserBtn = getElement('draw-eraser-btn');
+    const colorPicker = getElement('draw-color-picker');
+    const sizeSlider = getElement('draw-size-slider');
+    const sizeInput = getElement('draw-size-input');
+    const clearBtn = getElement('draw-clear-btn');
+    const eraserModeToggle = getElement('eraser-mode-toggle');
 
     let currentTool = null;
 
@@ -680,8 +813,8 @@ function setupDrawingToolbar() {
     });
 
     // Drawing mode button (in sidebar tools section)
-    const drawingModeBtn = document.getElementById('drawing-mode-btn');
-    const drawingToolbar = document.getElementById('drawing-toolbar');
+    const drawingModeBtn = getElement('drawing-mode-btn');
+    const drawingToolbar = getElement('drawing-toolbar');
 
     if (drawingModeBtn && drawingToolbar) {
         // Load saved state from localStorage
@@ -1942,7 +2075,7 @@ function showGroupContextMenu(x, y, group) {
     existingMenus.forEach(menu => menu.remove());
 
     // Also hide the layer context menu if visible
-    const layerContextMenu = document.getElementById('layer-context-menu');
+    const layerContextMenu = getElement('layer-context-menu');
     if (layerContextMenu) {
         layerContextMenu.classList.remove('show');
     }
@@ -2099,7 +2232,7 @@ function reorderLayerElementsVisually() {
     }
 
     renderThrottle = requestAnimationFrame(() => {
-        const layersList = document.getElementById('layers-list');
+        const layersList = getElement('layers-list');
         if (!layersList || allLayersOrder.length === 0) {
             renderThrottle = null;
             return;
@@ -2213,7 +2346,8 @@ function renderLayersThrottled() {
 }
 
 function renderLayers() {
-    const layersList = document.getElementById('layers-list');
+    const layersList = getElement('layers-list');
+    if (!layersList) return;
     const images = canvas.getImages();
     const objects = canvas.objectsManager.getObjects();
 
@@ -2413,7 +2547,8 @@ function highlightLayer(imageId) {
 }
 
 async function renderAssets() {
-    const assetsGrid = document.getElementById('assets-grid');
+    const assetsGrid = getElement('assets-grid');
+    if (!assetsGrid) return;
     const board = boardManager.currentBoard;
     
     let assets = [];
@@ -2501,12 +2636,12 @@ async function renderAssets() {
 }
 
 function setupContextMenu() {
-    const contextMenu = document.getElementById('canvas-context-menu');
-    const canvasContainer = document.getElementById('canvas-container');
-    const deleteSelectedItem = document.getElementById('context-delete-selected');
-    const deselectAllItem = document.getElementById('context-deselect-all');
-    const enableRotateItem = document.getElementById('context-enable-rotate');
-    const separator = document.getElementById('context-separator');
+    const contextMenu = getElement('canvas-context-menu');
+    const canvasContainer = getElement('canvas-container');
+    const deleteSelectedItem = getElement('context-delete-selected');
+    const deselectAllItem = getElement('context-deselect-all');
+    const enableRotateItem = getElement('context-enable-rotate');
+    const separator = getElement('context-separator');
 
     let contextMenuMousePos = { x: 0, y: 0 };
 
@@ -2569,26 +2704,26 @@ function setupContextMenu() {
         contextMenu.classList.remove('show');
     });
 
-    document.getElementById('context-recenter').addEventListener('click', () => {
+    getElement('context-recenter').addEventListener('click', () => {
         canvas.fitToContent();
         contextMenu.classList.remove('show');
     });
 
-    document.getElementById('context-reset-zoom').addEventListener('click', () => {
+    getElement('context-reset-zoom').addEventListener('click', () => {
         canvas.resetZoom();
         contextMenu.classList.remove('show');
     });
 
-    document.getElementById('context-shortcuts').addEventListener('click', () => {
+    getElement('context-shortcuts').addEventListener('click', () => {
         contextMenu.classList.remove('show');
         showKeyboardShortcutsModal();
     });
 }
 
 function setupBoardDropdown() {
-    const dropdownBtn = document.getElementById('board-dropdown-btn');
-    const dropdownMenu = document.getElementById('board-dropdown-menu');
-    const boardName = document.getElementById('board-name');
+    const dropdownBtn = getElement('board-dropdown-btn');
+    const dropdownMenu = getElement('board-dropdown-menu');
+    const boardName = getElement('board-name');
 
     const toggleDropdown = (e) => {
         e.stopPropagation();
@@ -2602,7 +2737,7 @@ function setupBoardDropdown() {
         dropdownMenu.classList.remove('show');
     });
 
-    document.getElementById('dropdown-rename').addEventListener('click', async () => {
+    getElement('dropdown-rename').addEventListener('click', async () => {
         dropdownMenu.classList.remove('show');
         const currentName = boardName.textContent;
         const newName = await showInputModal('Rename Board', 'Enter a new name for this board:', currentName, 'Board name');
@@ -2613,12 +2748,12 @@ function setupBoardDropdown() {
         }
     });
 
-    document.getElementById('dropdown-export').addEventListener('click', () => {
+    getElement('dropdown-export').addEventListener('click', () => {
         dropdownMenu.classList.remove('show');
         exportBoard();
     });
 
-    document.getElementById('dropdown-import').addEventListener('click', () => {
+    getElement('dropdown-import').addEventListener('click', () => {
         dropdownMenu.classList.remove('show');
         importBoard();
     });
@@ -2632,7 +2767,7 @@ function importAssets() {
 
     input.onchange = (e) => {
         const files = Array.from(e.target.files);
-        const assetsGrid = document.getElementById('assets-grid');
+        const assetsGrid = getElement('assets-grid');
 
         // Remove empty message if it exists
         const emptyMessage = assetsGrid.querySelector('.empty-message');
@@ -2770,8 +2905,8 @@ async function syncBoardAssetsWithCanvas() {
 
 // Update tag filter pills with available tags from all assets
 function updateTagFilterPills(assets) {
-    const filterBar = document.getElementById('assets-tag-filter-bar');
-    const pillsContainer = document.getElementById('assets-tag-filter-pills');
+    const filterBar = getElement('assets-tag-filter-bar');
+    const pillsContainer = getElement('assets-tag-filter-pills');
     if (!filterBar || !pillsContainer) return;
 
     // Collect all unique tags from assets
@@ -2829,7 +2964,7 @@ function updateTagFilterPills(assets) {
             }
 
             // Reload library with updated filters
-            const searchBar = document.getElementById('assets-search-bar');
+            const searchBar = getElement('assets-search-bar');
             loadAssetsLibrary(searchBar ? searchBar.value : '');
         });
 
@@ -2915,7 +3050,8 @@ function updateTagFilterPills(assets) {
 
 // Assets Library View Functions
 async function loadAssetsLibrary(searchQuery = '') {
-    const libraryGrid = document.getElementById('assets-library-grid');
+    const libraryGrid = getElement('assets-library-grid');
+    if (!libraryGrid) return;
     const showAll = showAllAssets;
 
     libraryGrid.innerHTML = '';
@@ -3094,13 +3230,13 @@ let currentAssetInSidebar = null;
 let currentAssetIsAllAssets = false;
 
 function setupAssetSidebar() {
-    const sidebar = document.getElementById('asset-sidebar');
-    const closeBtn = document.getElementById('asset-sidebar-close');
-    const addToCanvasBtn = document.getElementById('asset-sidebar-add-to-canvas');
-    const deleteBtn = document.getElementById('asset-sidebar-delete');
-    const tagInput = document.getElementById('asset-tag-input');
-    const addTagBtn = document.getElementById('asset-tag-add-btn');
-    const nameInput = document.getElementById('asset-sidebar-name');
+    const sidebar = getElement('asset-sidebar');
+    const closeBtn = getElement('asset-sidebar-close');
+    const addToCanvasBtn = getElement('asset-sidebar-add-to-canvas');
+    const deleteBtn = getElement('asset-sidebar-delete');
+    const tagInput = getElement('asset-tag-input');
+    const addTagBtn = getElement('asset-tag-add-btn');
+    const nameInput = getElement('asset-sidebar-name');
 
     // Close sidebar
     closeBtn.addEventListener('click', () => {
@@ -3189,8 +3325,8 @@ function setupAssetSidebar() {
 
     // Hide dropdown when clicking outside
     document.addEventListener('click', (e) => {
-        const dropdownContainer = document.getElementById('asset-tag-presets-dropdown');
-        const quickPresets = document.getElementById('asset-tag-quick-presets');
+        const dropdownContainer = getElement('asset-tag-presets-dropdown');
+        const quickPresets = getElement('asset-tag-quick-presets');
         if (!tagInput.contains(e.target) &&
             !dropdownContainer.contains(e.target) &&
             !quickPresets.contains(e.target)) {
@@ -3226,9 +3362,9 @@ async function showAssetSidebar(asset, isAllAssets) {
     currentAssetInSidebar = freshAsset;
     currentAssetIsAllAssets = isAllAssets;
 
-    const sidebar = document.getElementById('asset-sidebar');
-    const preview = document.getElementById('asset-sidebar-preview');
-    const nameInput = document.getElementById('asset-sidebar-name');
+    const sidebar = getElement('asset-sidebar');
+    const preview = getElement('asset-sidebar-preview');
+    const nameInput = getElement('asset-sidebar-name');
 
     // Set preview image
     preview.src = freshAsset.src;
@@ -3250,7 +3386,7 @@ async function showAssetSidebar(asset, isAllAssets) {
 }
 
 function renderAssetSidebarTags() {
-    const tagsContainer = document.getElementById('asset-sidebar-tags');
+    const tagsContainer = getElement('asset-sidebar-tags');
     tagsContainer.innerHTML = '';
 
     if (!currentAssetInSidebar || !currentAssetInSidebar.tags || currentAssetInSidebar.tags.length === 0) {
@@ -3277,7 +3413,7 @@ function renderAssetSidebarTags() {
 }
 
 function renderAssetSidebarMetadata() {
-    const metadataContainer = document.getElementById('asset-sidebar-metadata');
+    const metadataContainer = getElement('asset-sidebar-metadata');
 
     if (!currentAssetInSidebar) return;
 
@@ -3355,7 +3491,7 @@ async function saveAssetChanges() {
     }
 
     // Reload library to reflect changes
-    const searchBar = document.getElementById('assets-search-bar');
+    const searchBar = getElement('assets-search-bar');
     if (searchBar) {
         loadAssetsLibrary(searchBar.value);
     }
@@ -3399,14 +3535,14 @@ async function renderTagPresets(filter = '') {
 }
 
 function hideTagPresets() {
-    const presetsContainer = document.getElementById('asset-tag-presets-dropdown');
+    const presetsContainer = getElement('asset-tag-presets-dropdown');
     presetsContainer.classList.remove('show');
 }
 
 let tagsExpanded = false;
 
 async function renderQuickTagPresets() {
-    const quickPresetsContainer = document.getElementById('asset-tag-quick-presets');
+    const quickPresetsContainer = getElement('asset-tag-quick-presets');
     const presets = await getTagPresets();
 
     quickPresetsContainer.innerHTML = '';
@@ -3732,8 +3868,8 @@ async function openFloatingWindow() {
 
 // Property panel functions
 function showPropertiesPanel(obj) {
-    const propertiesPanel = document.getElementById('object-properties');
-    const defaultProperties = document.getElementById('default-properties');
+    const propertiesPanel = getElement('object-properties');
+    const defaultProperties = getElement('default-properties');
 
     if (!propertiesPanel) return;
 
@@ -3745,7 +3881,7 @@ function showPropertiesPanel(obj) {
     }
 
     // Close button
-    const closeBtn = document.getElementById('close-properties-btn');
+    const closeBtn = getElement('close-properties-btn');
     if (closeBtn) {
         closeBtn.onclick = () => {
             canvas.objectsManager.deselectAll();
@@ -3754,8 +3890,8 @@ function showPropertiesPanel(obj) {
 }
 
 function hidePropertiesPanel() {
-    const propertiesPanel = document.getElementById('object-properties');
-    const defaultProperties = document.getElementById('default-properties');
+    const propertiesPanel = getElement('object-properties');
+    const defaultProperties = getElement('default-properties');
 
     if (propertiesPanel) propertiesPanel.style.display = 'none';
     if (defaultProperties) defaultProperties.style.display = 'block';
@@ -3765,9 +3901,9 @@ function hidePropertiesPanel() {
 }
 
 function showFloatingToolbar(obj) {
-    const textToolbar = document.getElementById('floating-text-toolbar');
-    const shapeToolbar = document.getElementById('floating-shape-toolbar');
-    const palettePopup = document.getElementById('color-palette-popup');
+    const textToolbar = getElement('floating-text-toolbar');
+    const shapeToolbar = getElement('floating-shape-toolbar');
+    const palettePopup = getElement('color-palette-popup');
 
     // Show floating toolbars based on object type
     if (obj.type === 'text') {
@@ -3784,8 +3920,8 @@ function showFloatingToolbar(obj) {
 }
 
 function hideFloatingToolbars() {
-    const textToolbar = document.getElementById('floating-text-toolbar');
-    const shapeToolbar = document.getElementById('floating-shape-toolbar');
+    const textToolbar = getElement('floating-text-toolbar');
+    const shapeToolbar = getElement('floating-shape-toolbar');
 
     if (textToolbar) textToolbar.style.display = 'none';
     if (shapeToolbar) shapeToolbar.style.display = 'none';
@@ -3808,13 +3944,13 @@ function positionFloatingToolbar(toolbar, obj) {
 }
 
 function setupTextFloatingToolbar(obj) {
-    const fontFamily = document.getElementById('floating-font-family');
-    const fontSize = document.getElementById('floating-font-size');
-    const boldBtn = document.getElementById('floating-text-bold');
-    const colorInput = document.getElementById('floating-text-color');
-    const alignLeft = document.getElementById('floating-text-align-left');
-    const alignCenter = document.getElementById('floating-text-align-center');
-    const alignRight = document.getElementById('floating-text-align-right');
+    const fontFamily = getElement('floating-font-family');
+    const fontSize = getElement('floating-font-size');
+    const boldBtn = getElement('floating-text-bold');
+    const colorInput = getElement('floating-text-color');
+    const alignLeft = getElement('floating-text-align-left');
+    const alignCenter = getElement('floating-text-align-center');
+    const alignRight = getElement('floating-text-align-right');
 
     // Set current values
     fontFamily.value = obj.fontFamily || 'Arial';
@@ -3865,10 +4001,10 @@ function setupTextFloatingToolbar(obj) {
 
 function setupShapeFloatingToolbar(obj) {
     const shapeButtons = document.querySelectorAll('.shape-btn');
-    const fillColor = document.getElementById('floating-shape-fill');
-    const strokeToggle = document.getElementById('floating-shape-stroke-toggle');
-    const strokeColor = document.getElementById('floating-shape-stroke-color');
-    const strokeWidth = document.getElementById('floating-shape-stroke-width');
+    const fillColor = getElement('floating-shape-fill');
+    const strokeToggle = getElement('floating-shape-stroke-toggle');
+    const strokeColor = getElement('floating-shape-stroke-color');
+    const strokeWidth = getElement('floating-shape-stroke-width');
 
     // Set current values
     fillColor.value = obj.fillColor || '#3b82f6';
@@ -3912,11 +4048,11 @@ function setupShapeFloatingToolbar(obj) {
 
 
 function setupShapePropertyListeners() {
-    const shapeType = document.getElementById('shape-type');
-    const shapeFillColor = document.getElementById('shape-fill-color');
-    const shapeHasStroke = document.getElementById('shape-has-stroke');
-    const shapeStrokeColor = document.getElementById('shape-stroke-color');
-    const shapeStrokeWidth = document.getElementById('shape-stroke-width');
+    const shapeType = getElement('shape-type');
+    const shapeFillColor = getElement('shape-fill-color');
+    const shapeHasStroke = getElement('shape-has-stroke');
+    const shapeStrokeColor = getElement('shape-stroke-color');
+    const shapeStrokeWidth = getElement('shape-stroke-width');
 
     shapeType.onchange = () => {
         canvas.objectsManager.updateSelectedObject({ shapeType: shapeType.value });
@@ -3944,12 +4080,12 @@ function removeShapePropertyListeners() {
 }
 
 function setupTextPropertyListeners() {
-    const textContent = document.getElementById('text-content');
-    const textFontSize = document.getElementById('text-font-size');
-    const textFontFamily = document.getElementById('text-font-family');
-    const textColor = document.getElementById('text-color');
-    const textFontWeight = document.getElementById('text-font-weight');
-    const textAlign = document.getElementById('text-align');
+    const textContent = getElement('text-content');
+    const textFontSize = getElement('text-font-size');
+    const textFontFamily = getElement('text-font-family');
+    const textColor = getElement('text-color');
+    const textFontWeight = getElement('text-font-weight');
+    const textAlign = getElement('text-align');
 
     textContent.oninput = () => {
         canvas.objectsManager.updateSelectedObject({ text: textContent.value });
@@ -3977,7 +4113,7 @@ function setupTextPropertyListeners() {
 }
 
 function setupTextTool() {
-    const textToolBtn = document.getElementById('text-tool-btn');
+    const textToolBtn = getElement('text-tool-btn');
     if (!textToolBtn) return;
 
     textToolBtn.addEventListener('click', () => {
@@ -3987,7 +4123,7 @@ function setupTextTool() {
             textToolBtn.classList.remove('active');
         } else {
             // Deactivate other tools first
-            const shapeToolBtn = document.getElementById('shape-tool-btn');
+            const shapeToolBtn = getElement('shape-tool-btn');
             if (shapeToolBtn) {
                 shapeToolBtn.classList.remove('active');
             }
@@ -4000,22 +4136,22 @@ function setupTextTool() {
 }
 
 function setupShapeTool() {
-    const shapeToolBtn = document.getElementById('shape-tool-btn');
+    const shapeToolBtn = getElement('shape-tool-btn');
     if (!shapeToolBtn) return;
 
-    const shapeType = document.getElementById('shape-type');
-    const shapeFillColor = document.getElementById('shape-fill-color');
-    const shapeHasStroke = document.getElementById('shape-has-stroke');
-    const shapeStrokeColor = document.getElementById('shape-stroke-color');
-    const shapeStrokeWidth = document.getElementById('shape-stroke-width');
-    const shapeLineColor = document.getElementById('shape-line-color');
-    const shapeLineThickness = document.getElementById('shape-line-thickness');
-    const lineColorRow = document.getElementById('shape-line-color-row');
-    const lineThicknessRow = document.getElementById('shape-line-thickness-row');
+    const shapeType = getElement('shape-type');
+    const shapeFillColor = getElement('shape-fill-color');
+    const shapeHasStroke = getElement('shape-has-stroke');
+    const shapeStrokeColor = getElement('shape-stroke-color');
+    const shapeStrokeWidth = getElement('shape-stroke-width');
+    const shapeLineColor = getElement('shape-line-color');
+    const shapeLineThickness = getElement('shape-line-thickness');
+    const lineColorRow = getElement('shape-line-color-row');
+    const lineThicknessRow = getElement('shape-line-thickness-row');
     const fillColorRow = shapeFillColor.closest('.property-row');
     const strokeToggleRow = shapeHasStroke.closest('.property-row').parentElement;
-    const strokeColorRow = document.getElementById('shape-stroke-color-row');
-    const strokeWidthRow = document.getElementById('shape-stroke-width-row');
+    const strokeColorRow = getElement('shape-stroke-color-row');
+    const strokeWidthRow = getElement('shape-stroke-width-row');
 
     // Show/hide properties based on shape type
     function updatePropertiesVisibility() {
@@ -4068,7 +4204,7 @@ function setupShapeTool() {
             hidePropertiesPanel();
         } else {
             // Deactivate other tools first
-            const textToolBtn = document.getElementById('text-tool-btn');
+            const textToolBtn = getElement('text-tool-btn');
             if (textToolBtn) {
                 textToolBtn.classList.remove('active');
             }
@@ -4099,7 +4235,7 @@ function showLayerContextMenu(x, y, layer, type) {
     const existingGroupMenus = document.querySelectorAll('.group-context-menu');
     existingGroupMenus.forEach(menu => menu.remove());
 
-    const contextMenu = document.getElementById('layer-context-menu');
+    const contextMenu = getElement('layer-context-menu');
     if (!contextMenu) {
         console.error('Layer context menu element not found!');
         return;
@@ -4109,7 +4245,7 @@ function showLayerContextMenu(x, y, layer, type) {
     currentContextLayerType = type;
 
     // Show/hide ungroup button based on whether the layer is in a group
-    const ungroupButton = document.getElementById('layer-context-ungroup');
+    const ungroupButton = getElement('layer-context-ungroup');
     const layerId = layer.id;
     let isInGroup = false;
 
@@ -4135,11 +4271,11 @@ function setupLayerContextMenu() {
     if (layerContextMenuSetup) return;
     layerContextMenuSetup = true;
 
-    const contextMenu = document.getElementById('layer-context-menu');
-    const renameItem = document.getElementById('layer-context-rename');
-    const ungroupItem = document.getElementById('layer-context-ungroup');
-    const duplicateItem = document.getElementById('layer-context-duplicate');
-    const deleteItem = document.getElementById('layer-context-delete');
+    const contextMenu = getElement('layer-context-menu');
+    const renameItem = getElement('layer-context-rename');
+    const ungroupItem = getElement('layer-context-ungroup');
+    const duplicateItem = getElement('layer-context-duplicate');
+    const deleteItem = getElement('layer-context-delete');
 
     // Close menu when clicking outside
     document.addEventListener('click', (e) => {
@@ -4286,7 +4422,7 @@ function setupLayerContextMenu() {
 }
 
 function setupColorExtractorTool() {
-    const colorExtractorBtn = document.getElementById('color-extractor-btn');
+    const colorExtractorBtn = getElement('color-extractor-btn');
     if (!colorExtractorBtn) return;
 
     colorExtractorBtn.addEventListener('click', async () => {
@@ -4373,7 +4509,7 @@ function setupColorExtractorTool() {
 }
 
 function populateColorPalette(colors) {
-    const grid = document.getElementById('color-palette-grid');
+    const grid = getElement('color-palette-grid');
     if (!grid) return;
 
     console.log('Populating palette with colors:', colors);
@@ -4407,7 +4543,7 @@ function populateColorPalette(colors) {
 
 function showColorCopyOptions(hexColor, rgbColor, x, y) {
     // Remove any existing copy menu
-    const existingMenu = document.getElementById('color-copy-menu');
+    const existingMenu = getElement('color-copy-menu');
     if (existingMenu) existingMenu.remove();
 
     const hexText = hexColor.toUpperCase();
@@ -4588,13 +4724,13 @@ function hexToRgb(hex) {
 
 // Keyboard Shortcuts Modal
 function showKeyboardShortcutsModal() {
-    const overlay = document.getElementById('shortcuts-modal-overlay');
+    const overlay = getElement('shortcuts-modal-overlay');
     if (!overlay) return;
 
     overlay.style.display = 'flex';
 
     // Close button
-    const closeBtn = document.getElementById('shortcuts-modal-close');
+    const closeBtn = getElement('shortcuts-modal-close');
     closeBtn.onclick = () => closeShortcutsModal();
 
     // Close on overlay click
@@ -4615,8 +4751,93 @@ function showKeyboardShortcutsModal() {
 }
 
 function closeShortcutsModal() {
-    const overlay = document.getElementById('shortcuts-modal-overlay');
+    const overlay = getElement('shortcuts-modal-overlay');
     if (!overlay) return;
     overlay.style.display = 'none';
 }
 
+// Export setActiveInstance for ViewManager to use when switching tabs
+export function setActiveEditorInstance(container) {
+    if (container && editorInstances.has(container)) {
+        setActiveInstance(container);
+    }
+}
+
+// Export state management functions for ViewManager
+export function saveBoardState() {
+    if (!canvas) return {};
+
+    return {
+        zoom: canvas.zoom,
+        pan: { ...canvas.pan },
+        scrollPosition: {
+            x: window.scrollX,
+            y: window.scrollY
+        }
+    };
+}
+
+export function restoreBoardState(state) {
+    if (!state || !canvas) return;
+
+    if (state.zoom !== undefined) {
+        canvas.zoom = state.zoom;
+    }
+    if (state.pan) {
+        canvas.pan.x = state.pan.x;
+        canvas.pan.y = state.pan.y;
+    }
+
+    // Re-render canvas
+    canvas.render();
+
+    // Restore scroll position
+    if (state.scrollPosition) {
+        window.scrollTo(state.scrollPosition.x, state.scrollPosition.y);
+    }
+}
+
+export function cleanupEditor(container) {
+    // Set this as the active instance to cleanup
+    if (container && editorInstances.has(container)) {
+        setActiveInstance(container);
+
+        // Stop autosave timer
+        if (saveTimeout) {
+            clearTimeout(saveTimeout);
+            saveTimeout = null;
+        }
+
+        // Save any pending changes
+        if (pendingSave) {
+            saveNow();
+        }
+
+        // Close sync channel
+        if (syncChannel) {
+            syncChannel.close();
+            syncChannel = null;
+        }
+
+        // Cleanup canvas
+        if (canvas) {
+            canvas.destroy();
+            canvas = null;
+        }
+
+        // Clear history manager
+        if (historyManager) {
+            historyManager = null;
+        }
+
+        // Save the cleaned state back to instance
+        saveActiveInstance();
+
+        // Clear active container
+        if (activeContainer === container) {
+            activeContainer = null;
+        }
+
+        // DON'T delete from map - we need it for reinitialization
+    }
+}
