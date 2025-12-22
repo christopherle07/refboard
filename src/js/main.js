@@ -36,98 +36,17 @@ function getLayerCount(board) {
     return board.layers?.length || 0;
 }
 
-// Initialize theme
-function initTheme() {
-    const THEME_KEY = 'app_theme';
-    const savedTheme = localStorage.getItem(THEME_KEY) || 'light';
-    
-    const themes = {
-        light: {
-            '--bg-primary': '#ffffff',
-            '--bg-secondary': '#f8f8f8',
-            '--bg-tertiary': '#fafafa',
-            '--bg-hover': 'rgba(0, 0, 0, 0.05)',
-            '--bg-active': 'rgba(0, 0, 0, 0.08)',
-            '--border-color': '#e0e0e0',
-            '--border-color-hover': '#999',
-            '--text-primary': '#1a1a1a',
-            '--text-secondary': '#666',
-            '--text-tertiary': '#888',
-            '--text-disabled': '#999',
-            '--shadow': 'rgba(0, 0, 0, 0.08)',
-            '--modal-overlay': 'rgba(0, 0, 0, 0.5)'
-        },
-        dark: {
-            '--bg-primary': '#1a1a1a',
-            '--bg-secondary': '#0f0f0f',
-            '--bg-tertiary': '#151515',
-            '--bg-hover': 'rgba(255, 255, 255, 0.03)',
-            '--bg-active': 'rgba(255, 255, 255, 0.06)',
-            '--border-color': '#2a2a2a',
-            '--border-color-hover': '#444444',
-            '--text-primary': '#e0e0e0',
-            '--text-secondary': '#a0a0a0',
-            '--text-tertiary': '#707070',
-            '--text-disabled': '#505050',
-            '--shadow': 'rgba(0, 0, 0, 0.5)',
-            '--modal-overlay': 'rgba(0, 0, 0, 0.8)'
-        },
-        midnight: {
-            '--bg-primary': '#0a0a0a',
-            '--bg-secondary': '#050505',
-            '--bg-tertiary': '#0d0d0d',
-            '--bg-hover': 'rgba(255, 255, 255, 0.02)',
-            '--bg-active': 'rgba(255, 255, 255, 0.04)',
-            '--border-color': '#1a1a1a',
-            '--border-color-hover': '#333333',
-            '--text-primary': '#d0d0d0',
-            '--text-secondary': '#909090',
-            '--text-tertiary': '#606060',
-            '--text-disabled': '#404040',
-            '--shadow': 'rgba(0, 0, 0, 0.7)',
-            '--modal-overlay': 'rgba(0, 0, 0, 0.9)'
-        },
-        charcoal: {
-            '--bg-primary': '#262b30',
-            '--bg-secondary': '#1e2226',
-            '--bg-tertiary': '#191c1f',
-            '--bg-hover': '#333a41',
-            '--bg-active': '#535e68',
-            '--border-color': '#333a41',
-            '--border-color-hover': '#535e68',
-            '--text-primary': '#bcd1e4',
-            '--text-secondary': '#a0c4ff',
-            '--text-tertiary': '#535e68',
-            '--text-disabled': '#535e68',
-            '--shadow': 'rgba(0, 0, 0, 0.4)',
-            '--modal-overlay': 'rgba(0, 0, 0, 0.75)'
-        }
-    };
-    
-    const theme = themes[savedTheme] || themes.light;
-    Object.entries(theme).forEach(([property, value]) => {
-        document.documentElement.style.setProperty(property, value);
-    });
-
-    // Set data-theme attribute for CSS theme selectors
-    document.documentElement.setAttribute('data-theme', savedTheme);
-}
 
 // Export init function for ViewManager
 export async function initHomepage() {
     console.log('[initHomepage] Starting homepage initialization...');
     try {
-        initTheme();
         console.log('[initHomepage] Loading boards...');
         await boardManager.loadBoards();
-        console.log('[initHomepage] Rendering collections...');
-        renderCollections();
         console.log('[initHomepage] Rendering boards...');
         renderBoards();
         console.log('[initHomepage] Setting up event listeners...');
         setupEventListeners();
-        console.log('[initHomepage] Loading version info...');
-        loadVersionInfo();
         console.log('[initHomepage] Homepage initialization complete!');
     } catch (error) {
         console.error('[initHomepage] Error during initialization:', error);
@@ -143,54 +62,29 @@ function setupEventListeners() {
     if (eventListenersSetup) return;
     eventListenersSetup = true;
 
-    // Sidebar collapse toggle
-    const sidebar = document.getElementById('app-sidebar');
-    const collapseBtn = document.getElementById('sidebar-collapse-btn');
-
-    // Load saved sidebar state
-    const sidebarCollapsed = localStorage.getItem('sidebar_collapsed') === 'true';
-    if (sidebarCollapsed) {
-        sidebar.classList.add('collapsed');
-        collapseBtn.classList.add('collapsed');
+    // Board search
+    const searchInput = document.getElementById('board-search');
+    if (searchInput) {
+        searchInput.addEventListener('input', () => {
+            renderBoards();
+        });
     }
 
-    collapseBtn.addEventListener('click', () => {
-        sidebar.classList.toggle('collapsed');
-        collapseBtn.classList.toggle('collapsed');
-        const isCollapsed = sidebar.classList.contains('collapsed');
-        localStorage.setItem('sidebar_collapsed', isCollapsed);
-    });
-
-    // Sidebar new board button
-    document.getElementById('new-board-btn').addEventListener('click', () => {
-        showCreateBoardModal((name, bgColor) => {
-            createBoard(name, bgColor);
+    // New board button
+    const newBoardBtn = document.getElementById('new-board-btn');
+    if (newBoardBtn) {
+        newBoardBtn.addEventListener('click', () => {
+            showCreateBoardModal((name, bgColor) => {
+                createBoard(name, bgColor);
+            });
         });
-    });
+    }
 
-    document.getElementById('sort-filter').addEventListener('change', (e) => {
-        currentSort = e.target.value;
-        currentPage = 1;
-        renderBoards();
-    });
-
-    document.getElementById('prev-page').addEventListener('click', () => {
-        if (currentPage > 1) {
-            currentPage--;
-            renderBoards();
-        }
-    });
-
-    document.getElementById('next-page').addEventListener('click', () => {
-        const boards = boardManager.getAllBoards();
-        const totalPages = Math.ceil(boards.length / BOARDS_PER_PAGE);
-        if (currentPage < totalPages) {
-            currentPage++;
-            renderBoards();
-        }
-    });
-
-    document.getElementById('import-board-btn').addEventListener('click', importBoardAsNew);
+    // Import board button
+    const importBtn = document.getElementById('import-board-btn');
+    if (importBtn) {
+        importBtn.addEventListener('click', importBoardAsNew);
+    }
 
     // Library button
     const libraryBtn = document.getElementById('library-btn');
@@ -207,40 +101,30 @@ function setupEventListeners() {
             showSettingsModal();
         });
     }
-
-    // Keyboard Shortcuts button
-    const shortcutsBtn = document.getElementById('shortcuts-btn');
-    if (shortcutsBtn) {
-        shortcutsBtn.addEventListener('click', () => {
-            showKeyboardShortcutsModal();
-        });
-    }
-
-
-    // All Boards button - clear collection filter
-    document.getElementById('all-boards-btn').addEventListener('click', () => {
-        currentCollectionId = null;
-        currentPage = 1;
-        updateActiveNavigationButton('all-boards-btn');
-        renderCollections(); // Re-render to clear active states
-        renderBoards();
-    });
-
-    // New Collection button
-    document.getElementById('new-collection-btn').addEventListener('click', () => {
-        showCreateCollectionModal();
-    });
-
 }
 
 function renderBoards() {
     let boards = [...boardManager.getAllBoards()];
+    console.log('[renderBoards] Total boards:', boards.length);
+
+    // Filter by search query
+    const searchInput = document.getElementById('board-search');
+    if (searchInput) {
+        const searchQuery = searchInput.value.toLowerCase().trim();
+        if (searchQuery) {
+            boards = boards.filter(board =>
+                board.name.toLowerCase().includes(searchQuery)
+            );
+            console.log('[renderBoards] After search filter:', boards.length);
+        }
+    }
 
     // Filter by collection if one is selected
     if (currentCollectionId) {
         const collection = collectionManager.getCollection(currentCollectionId);
         if (collection) {
             boards = boards.filter(board => collection.boardIds.includes(board.id));
+            console.log('[renderBoards] After collection filter:', boards.length);
         }
     }
 
@@ -251,57 +135,56 @@ function renderBoards() {
     } else if (currentSort === 'name') {
         boards.sort((a, b) => a.name.localeCompare(b.name));
     }
-    
-    const grid = document.getElementById('boards-grid');
-    grid.innerHTML = '';
-    
-    const startIdx = (currentPage - 1) * BOARDS_PER_PAGE;
-    const endIdx = startIdx + BOARDS_PER_PAGE;
-    const paginatedBoards = boards.slice(startIdx, endIdx);
 
-    // Show empty state message if viewing an empty collection
-    if (currentCollectionId && boards.length === 0) {
+    const grid = document.getElementById('boards-grid');
+    if (!grid) {
+        console.error('[renderBoards] boards-grid element not found!');
+        return;
+    }
+    grid.innerHTML = '';
+    console.log('[renderBoards] Rendering', boards.length, 'boards');
+
+    // Show empty state if no boards
+    if (boards.length === 0) {
         const emptyState = document.createElement('div');
-        emptyState.className = 'empty-collection-message';
+        emptyState.className = 'empty-boards-state';
         emptyState.innerHTML = `
-            <h3>This collection is empty</h3>
-            <p>Go to <strong>All Boards</strong> and right-click on any board to add it to this collection.</p>
+            <h3>No boards found</h3>
+            <p>Click the + button to create your first board</p>
         `;
         grid.appendChild(emptyState);
         return;
     }
 
-    paginatedBoards.forEach(board => {
+    boards.forEach(board => {
         const card = document.createElement('div');
         card.className = 'board-card';
 
         const timestamp = board.updatedAt || board.updated_at || board.createdAt || board.created_at || Date.now();
         const lastModified = formatTimeAgo(timestamp);
-        const bgColor = board.bgColor || board.bg_color || '#f0f0f0';
+        const layerCount = getLayerCount(board);
 
         card.innerHTML = `
-            <div class="board-card-thumbnail">
-                <button class="board-delete-btn" title="Delete Board">×</button>
-            </div>
-            <div class="board-card-metadata">
-                <div class="board-card-name">${board.name}</div>
-                <div class="board-card-info">
-                    <span class="board-card-modified">${lastModified}</span>
+            <div class="board-card-thumbnail"></div>
+            <div class="board-card-content">
+                <div class="board-card-title">${board.name}</div>
+                <div class="board-card-meta">
+                    <span class="board-card-layers">${layerCount} layers</span>
+                    <span class="board-card-date">${lastModified}</span>
                 </div>
             </div>
         `;
 
         const thumbnailDiv = card.querySelector('.board-card-thumbnail');
         if (board.thumbnail) {
-            thumbnailDiv.style.backgroundImage = `url(${board.thumbnail})`;
+            const img = document.createElement('img');
+            img.src = board.thumbnail;
+            img.alt = board.name;
+            thumbnailDiv.appendChild(img);
         } else {
+            const bgColor = board.bgColor || board.bg_color || '#f0f0f0';
             thumbnailDiv.style.backgroundColor = bgColor;
         }
-        
-        card.querySelector('.board-delete-btn').addEventListener('click', (e) => {
-            e.stopPropagation();
-            showDeleteConfirm(board.name, () => deleteBoard(board.id));
-        });
 
         card.addEventListener('click', () => openBoard(board.id));
 
@@ -313,11 +196,6 @@ function renderBoards() {
 
         grid.appendChild(card);
     });
-    
-    const totalPages = Math.ceil(boards.length / BOARDS_PER_PAGE) || 1;
-    document.getElementById('page-info').textContent = `Page ${currentPage} of ${totalPages}`;
-    document.getElementById('prev-page').disabled = currentPage === 1;
-    document.getElementById('next-page').disabled = currentPage >= totalPages;
 }
 
 async function createBoard(name, bgColor) {
@@ -333,7 +211,7 @@ async function deleteBoard(boardId) {
 
 async function openBoard(boardId) {
     console.log('[openBoard] Opening board:', boardId);
-    // Get board name for tab title
+    // Get board name for breadcrumb
     const board = await boardManager.getBoard(boardId);
     console.log('[openBoard] Board data:', board);
 
@@ -347,8 +225,8 @@ async function openBoard(boardId) {
         return;
     }
 
-    console.log('[openBoard] Opening board tab:', boardId, board.name);
-    await window.appInstance.openBoardTab(boardId, board.name);
+    console.log('[openBoard] Opening board:', boardId, board.name);
+    await window.appInstance.openBoard(boardId, board.name);
 }
 
 function importBoardAsNew() {
@@ -413,6 +291,7 @@ function importBoardAsNew() {
 
 function renderCollections() {
     const collectionsContainer = document.getElementById('collections-list');
+    if (!collectionsContainer) return; // Skip if element doesn't exist (new homepage design)
     collectionsContainer.innerHTML = '';
 
     const collections = collectionManager.getAllCollections();

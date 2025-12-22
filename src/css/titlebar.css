@@ -88,7 +88,8 @@ body[data-tauri-platform="macos"] .titlebar-left {
     padding-left: 70px;
 }
 
-.titlebar-button {
+/* Old titlebar button styles - overridden by browser-homepage.css for new unified titlebar */
+.custom-titlebar .titlebar-button {
     width: 46px;
     height: 100%;
     border: none;
@@ -102,35 +103,16 @@ body[data-tauri-platform="macos"] .titlebar-left {
     color: var(--text-primary);
 }
 
-.titlebar-button:hover {
+.custom-titlebar .titlebar-button:hover {
     background: var(--bg-hover);
 }
 
-.close-btn:hover {
+.custom-titlebar .close-btn:hover {
     background: #e81123;
     color: white;
 }
 
-/* Button icons */
-.minimize-btn::before {
-    content: '';
-    width: 10px;
-    height: 1px;
-    background: currentColor;
-}
-
-.maximize-btn::before {
-    content: '';
-    width: 10px;
-    height: 10px;
-    border: 1px solid currentColor;
-}
-
-.close-btn::before {
-    content: '\00D7';
-    font-size: 20px;
-    line-height: 1;
-}
+/* Button icons removed - now using SVG icons in browser-homepage.css */
 
 /* Theme-specific adjustments */
 body[data-theme="dark"] .custom-titlebar,

@@ -5,23 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="view-transition" content="same-origin">
     <title>EyeDea</title>
-    <script>
-
-        (function() {
-            const theme = localStorage.getItem('app_theme') || 'light';
-            const themes = {
-                light: { '--bg-primary': '#ffffff', '--bg-secondary': '#f5f5f5', '--bg-tertiary': '#e8e8e8', '--bg-hover': '#ececec', '--bg-active': '#d4d4d4', '--border-color': '#d0d0d0', '--border-color-hover': '#a0a0a0', '--text-primary': '#1a1a1a', '--text-secondary': '#666', '--text-tertiary': '#888', '--text-disabled': '#999', '--shadow': 'rgba(0, 0, 0, 0.08)', '--modal-overlay': 'rgba(0, 0, 0, 0.5)' },
-                dark: { '--bg-primary': '#1a1a1a', '--bg-secondary': '#0f0f0f', '--bg-tertiary': '#151515', '--bg-hover': 'rgba(255, 255, 255, 0.03)', '--bg-active': 'rgba(255, 255, 255, 0.06)', '--border-color': '#2a2a2a', '--border-color-hover': '#444444', '--text-primary': '#e0e0e0', '--text-secondary': '#a0a0a0', '--text-tertiary': '#707070', '--text-disabled': '#505050', '--shadow': 'rgba(0, 0, 0, 0.5)', '--modal-overlay': 'rgba(0, 0, 0, 0.8)' },
-                midnight: { '--bg-primary': '#0a0a0a', '--bg-secondary': '#050505', '--bg-tertiary': '#0d0d0d', '--bg-hover': 'rgba(255, 255, 255, 0.02)', '--bg-active': 'rgba(255, 255, 255, 0.04)', '--border-color': '#1a1a1a', '--border-color-hover': '#333333', '--text-primary': '#d0d0d0', '--text-secondary': '#909090', '--text-tertiary': '#606060', '--text-disabled': '#404040', '--shadow': 'rgba(0, 0, 0, 0.7)', '--modal-overlay': 'rgba(0, 0, 0, 0.9)' },
-                charcoal: { '--bg-primary': '#262b30', '--bg-secondary': '#1e2226', '--bg-tertiary': '#191c1f', '--bg-hover': '#333a41', '--bg-active': '#535e68', '--border-color': '#333a41', '--border-color-hover': '#535e68', '--text-primary': '#bcd1e4', '--text-secondary': '#a0c4ff', '--text-tertiary': '#535e68', '--text-disabled': '#535e68', '--shadow': 'rgba(0, 0, 0, 0.4)', '--modal-overlay': 'rgba(0, 0, 0, 0.75)' }
-            };
-            const colors = themes[theme] || themes.light;
-            for (const [key, value] of Object.entries(colors)) {
-                document.documentElement.style.setProperty(key, value);
-            }
-            document.documentElement.setAttribute('data-theme', theme);
-        })();
-    </script>
+    <link rel="stylesheet" href="css/base.css">
+    <link rel="stylesheet" href="css/browser-homepage.css">
     <link rel="stylesheet" href="css/main.css">
     <link rel="stylesheet" href="css/sidebar.css">
     <link rel="stylesheet" href="css/modal.css">
@@ -34,117 +19,74 @@
     <link rel="stylesheet" href="css/transitions.css">
 </head>
 <body>
-    <div class="custom-titlebar">
-        <div class="titlebar-left">
-            <button class="home-btn" id="home-btn" title="Home">
-                <img src="assets/icons8-home-button.svg" alt="Home" class="home-icon">
+    <!-- Unified Titlebar/Nav Bar -->
+    <div class="unified-titlebar" data-tauri-drag-region>
+        <div class="titlebar-window-controls">
+            <button class="titlebar-button minimize-btn" id="titlebar-minimize" title="Minimize">
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                    <line x1="0" y1="6" x2="12" y2="6" stroke="currentColor" stroke-width="1"/>
+                </svg>
+            </button>
+            <button class="titlebar-button maximize-btn" id="titlebar-maximize" title="Maximize">
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                    <rect x="1" y="1" width="10" height="10" stroke="currentColor" stroke-width="1" fill="none"/>
+                </svg>
+            </button>
+            <button class="titlebar-button close-btn" id="titlebar-close" title="Close">
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                    <line x1="1" y1="1" x2="11" y2="11" stroke="currentColor" stroke-width="1"/>
+                    <line x1="11" y1="1" x2="1" y2="11" stroke="currentColor" stroke-width="1"/>
+                </svg>
             </button>
         </div>
-        <div class="titlebar-tabs" id="titlebar-tabs">
-            <div id="tabs-container"></div>
-            <div class="titlebar-drag-region"></div>
+        <div class="titlebar-nav-container">
+            <button class="refresh-board-btn" id="refresh-board-btn" title="Refresh Board" style="display: none;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
+                </svg>
+            </button>
+            <div class="nav-breadcrumb" id="nav-breadcrumb">
+                <span class="breadcrumb-item active">All Boards</span>
+            </div>
+            <button class="new-board-btn" id="new-board-btn" title="New Board">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+            </button>
         </div>
-        <div class="titlebar-right">
-            <button class="titlebar-button minimize-btn" id="titlebar-minimize" title="Minimize"></button>
-            <button class="titlebar-button maximize-btn" id="titlebar-maximize" title="Maximize"></button>
-            <button class="titlebar-button close-btn" id="titlebar-close" title="Close"></button>
+        <div class="titlebar-actions">
+            <button class="toolbar-icon-btn" id="library-btn" title="Library">
+                <img src="assets/library.svg" alt="Library" class="toolbar-icon">
+            </button>
+            <button class="toolbar-icon-btn" id="import-board-btn" title="Import Board">
+                <img src="assets/import.svg" alt="Import" class="toolbar-icon">
+            </button>
+            <button class="toolbar-icon-btn" id="settings-btn" title="Settings">
+                <img src="assets/settings.svg" alt="Settings" class="toolbar-icon">
+            </button>
         </div>
     </div>
 
     <!-- Home View -->
     <div class="view-container home-view">
-        <div class="homepage">
-            <button class="sidebar-collapse-btn" id="sidebar-collapse-btn" title="Collapse Sidebar">
-                <img src="assets/sidebar-col.svg" alt="Collapse" class="sidebar-collapse-icon">
-            </button>
+        <div class="browser-homepage">
 
-            <aside class="app-sidebar" id="app-sidebar">
-                <div class="sidebar-section">
-                    <button class="sidebar-btn primary" id="new-board-btn">
-                        <img src="assets/newboard.svg" alt="New Board" class="sidebar-icon">
-                        <span class="sidebar-text">New Board</span>
-                    </button>
+            <!-- Center Content -->
+            <div class="browser-content">
+                <div class="search-container">
+                    <input
+                        type="text"
+                        class="board-search"
+                        id="board-search"
+                        placeholder="Search boards..."
+                        autocomplete="off"
+                    >
                 </div>
 
-                <div class="sidebar-section">
-                    <button class="sidebar-btn" id="import-board-btn">
-                        <img src="assets/import.svg" alt="Import" class="sidebar-icon">
-                        <span class="sidebar-text">Import Board</span>
-                    </button>
+                <div class="boards-grid" id="boards-grid">
+                    <!-- Board cards will be populated here -->
                 </div>
-
-                <div class="sidebar-section">
-                    <h3>Navigate</h3>
-                    <button class="sidebar-btn active" id="all-boards-btn">
-                        <img src="assets/all-boards.svg" alt="All Boards" class="sidebar-icon">
-                        <span class="sidebar-text">All Boards</span>
-                    </button>
-                    <button class="sidebar-btn" id="library-btn">
-                        <img src="assets/library.svg" alt="Library" class="sidebar-icon">
-                        <span class="sidebar-text">Library</span>
-                    </button>
-                    <button class="sidebar-btn" id="settings-btn">
-                        <img src="assets/settings.svg" alt="Settings" class="sidebar-icon">
-                        <span class="sidebar-text">Settings</span>
-                    </button>
-                    <button class="sidebar-btn" id="shortcuts-btn">
-                        <img src="assets/keyboardshort.svg" alt="Shortcuts" class="sidebar-icon">
-                        <span class="sidebar-text">Keyboard Shortcuts</span>
-                    </button>
-                </div>
-
-                <div class="sidebar-section">
-                    <div class="collections-header">
-                        <h3>Collections</h3>
-                        <button class="new-collection-btn" id="new-collection-btn" title="New Collection">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                                <line x1="12" y1="5" x2="12" y2="19"></line>
-                                <line x1="5" y1="12" x2="19" y2="12"></line>
-                            </svg>
-                        </button>
-                    </div>
-                    <div class="collections-list" id="collections-list">
-                        <!-- Collections will be populated here -->
-                    </div>
-                </div>
-
-                <div class="sidebar-section sidebar-footer">
-                    <div class="version-info" id="version-info">
-                        <span class="version-text">Loading version...</span>
-                    </div>
-                </div>
-            </aside>
-
-            <div class="homepage-main">
-                <header class="homepage-header">
-                    <h1>Your Boards</h1>
-                    <div class="header-controls">
-                        <select id="sort-filter" class="sort-dropdown">
-                            <option value="latest">Latest</option>
-                            <option value="oldest">Oldest</option>
-                            <option value="name">A-Z</option>
-                        </select>
-                    </div>
-                </header>
-
-                <main class="homepage-content">
-                    <div class="boards-grid" id="boards-grid">
-                    </div>
-
-                    <div class="pagination" id="pagination">
-                        <button class="pagination-btn" id="prev-page" disabled>
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <polyline points="15 18 9 12 15 6"></polyline>
-                            </svg>
-                        </button>
-                        <span class="pagination-info" id="page-info">Page 1 of 1</span>
-                        <button class="pagination-btn" id="next-page" disabled>
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <polyline points="9 18 15 12 9 6"></polyline>
-                            </svg>
-                        </button>
-                    </div>
-                </main>
             </div>
         </div>
     </div>

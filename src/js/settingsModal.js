@@ -1,68 +1,4 @@
-const THEME_KEY = 'app_theme';
 const SETTINGS_KEY = 'canvas_settings';
-
-const themes = {
-    light: {
-        '--bg-primary': '#ffffff',
-        '--bg-secondary': '#f5f5f5',
-        '--bg-tertiary': '#e8e8e8',
-        '--bg-hover': '#ececec',
-        '--bg-active': '#d4d4d4',
-        '--border-color': '#d0d0d0',
-        '--border-color-hover': '#a0a0a0',
-        '--text-primary': '#1a1a1a',
-        '--text-secondary': '#666',
-        '--text-tertiary': '#888',
-        '--text-disabled': '#999',
-        '--shadow': 'rgba(0, 0, 0, 0.08)',
-        '--modal-overlay': 'rgba(0, 0, 0, 0.5)'
-    },
-    dark: {
-        '--bg-primary': '#1a1a1a',
-        '--bg-secondary': '#0f0f0f',
-        '--bg-tertiary': '#151515',
-        '--bg-hover': 'rgba(255, 255, 255, 0.03)',
-        '--bg-active': 'rgba(255, 255, 255, 0.06)',
-        '--border-color': '#2a2a2a',
-        '--border-color-hover': '#444444',
-        '--text-primary': '#e0e0e0',
-        '--text-secondary': '#a0a0a0',
-        '--text-tertiary': '#707070',
-        '--text-disabled': '#505050',
-        '--shadow': 'rgba(0, 0, 0, 0.5)',
-        '--modal-overlay': 'rgba(0, 0, 0, 0.8)'
-    },
-    midnight: {
-        '--bg-primary': '#0a0a0a',
-        '--bg-secondary': '#050505',
-        '--bg-tertiary': '#0d0d0d',
-        '--bg-hover': 'rgba(255, 255, 255, 0.02)',
-        '--bg-active': 'rgba(255, 255, 255, 0.04)',
-        '--border-color': '#1a1a1a',
-        '--border-color-hover': '#333333',
-        '--text-primary': '#d0d0d0',
-        '--text-secondary': '#909090',
-        '--text-tertiary': '#606060',
-        '--text-disabled': '#404040',
-        '--shadow': 'rgba(0, 0, 0, 0.7)',
-        '--modal-overlay': 'rgba(0, 0, 0, 0.9)'
-    },
-    charcoal: {
-        '--bg-primary': '#262b30',
-        '--bg-secondary': '#1e2226',
-        '--bg-tertiary': '#191c1f',
-        '--bg-hover': '#333a41',
-        '--bg-active': '#535e68',
-        '--border-color': '#333a41',
-        '--border-color-hover': '#535e68',
-        '--text-primary': '#bcd1e4',
-        '--text-secondary': '#a0c4ff',
-        '--text-tertiary': '#535e68',
-        '--text-disabled': '#535e68',
-        '--shadow': 'rgba(0, 0, 0, 0.4)',
-        '--modal-overlay': 'rgba(0, 0, 0, 0.75)'
-    }
-};
 
 const defaultSettings = {
     showGrid: false,
@@ -74,20 +10,6 @@ const defaultSettings = {
     autosaveInterval: 2000,
     thumbnailQuality: 0.6
 };
-
-function applyTheme(themeName) {
-    const theme = themes[themeName] || themes.light;
-    Object.entries(theme).forEach(([property, value]) => {
-        document.documentElement.style.setProperty(property, value);
-    });
-    document.documentElement.setAttribute('data-theme', themeName);
-    document.body.dataset.theme = themeName;
-    localStorage.setItem(THEME_KEY, themeName);
-}
-
-function getCurrentTheme() {
-    return localStorage.getItem(THEME_KEY) || 'light';
-}
 
 function loadSettings() {
     const saved = localStorage.getItem(SETTINGS_KEY);
@@ -109,7 +31,6 @@ export function showSettingsModal() {
     const modal = document.createElement('div');
     modal.className = 'settings-modal-overlay';
 
-    const currentTheme = getCurrentTheme();
     const settings = loadSettings();
 
     modal.innerHTML = `
@@ -125,55 +46,13 @@ export function showSettingsModal() {
                     </button>
                 </div>
                 <nav class="settings-nav">
-                    <button class="settings-nav-item active" data-section="appearance">Appearance</button>
-                    <button class="settings-nav-item" data-section="canvas">Canvas</button>
+                    <button class="settings-nav-item active" data-section="canvas">Canvas</button>
                     <button class="settings-nav-item" data-section="about">About</button>
                 </nav>
             </div>
 
             <div class="settings-modal-content">
-                <div class="settings-section active" data-section="appearance">
-                    <h3>Appearance</h3>
-
-                    <div class="setting-group">
-                        <label class="setting-label">Theme</label>
-                        <div class="theme-options">
-                            <div class="theme-option ${currentTheme === 'light' ? 'active' : ''}" data-theme="light">
-                                <div class="theme-preview theme-preview-light">
-                                    <div class="preview-bar"></div>
-                                    <div class="preview-content"></div>
-                                </div>
-                                <span class="theme-name">Light</span>
-                            </div>
-
-                            <div class="theme-option ${currentTheme === 'dark' ? 'active' : ''}" data-theme="dark">
-                                <div class="theme-preview theme-preview-dark">
-                                    <div class="preview-bar"></div>
-                                    <div class="preview-content"></div>
-                                </div>
-                                <span class="theme-name">Dark</span>
-                            </div>
-
-                            <div class="theme-option ${currentTheme === 'midnight' ? 'active' : ''}" data-theme="midnight">
-                                <div class="theme-preview theme-preview-midnight">
-                                    <div class="preview-bar"></div>
-                                    <div class="preview-content"></div>
-                                </div>
-                                <span class="theme-name">Midnight</span>
-                            </div>
-
-                            <div class="theme-option ${currentTheme === 'charcoal' ? 'active' : ''}" data-theme="charcoal">
-                                <div class="theme-preview theme-preview-charcoal">
-                                    <div class="preview-bar"></div>
-                                    <div class="preview-content"></div>
-                                </div>
-                                <span class="theme-name">Charcoal</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="settings-section" data-section="canvas">
+                <div class="settings-section active" data-section="canvas">
                     <h3>Canvas</h3>
 
                     <div class="setting-group">
@@ -301,16 +180,6 @@ export function showSettingsModal() {
         });
     });
 
-    // Theme selection
-    modal.querySelectorAll('.theme-option').forEach(option => {
-        option.addEventListener('click', () => {
-            const theme = option.dataset.theme;
-            modal.querySelectorAll('.theme-option').forEach(opt => opt.classList.remove('active'));
-            option.classList.add('active');
-            applyTheme(theme);
-        });
-    });
-
     // Settings controls
     const showGridCheckbox = modal.querySelector('#show-grid');
     const gridSizeSelect = modal.querySelector('#grid-size');
@@ -318,30 +187,74 @@ export function showSettingsModal() {
     const snapThresholdSelect = modal.querySelector('#snap-threshold');
 
     if (showGridCheckbox) {
-        showGridCheckbox.addEventListener('change', (e) => {
+        showGridCheckbox.addEventListener('change', async (e) => {
             settings.showGrid = e.target.checked;
             saveSettings(settings);
+
+            // Update active canvas if in board editor
+            try {
+                const { getActiveCanvas } = await import('./editor.js');
+                const canvas = getActiveCanvas();
+                if (canvas) {
+                    canvas.updateSettings(settings);
+                }
+            } catch (err) {
+                // Canvas might not be loaded yet, that's ok
+            }
         });
     }
 
     if (gridSizeSelect) {
-        gridSizeSelect.addEventListener('change', (e) => {
+        gridSizeSelect.addEventListener('change', async (e) => {
             settings.gridSize = parseInt(e.target.value);
             saveSettings(settings);
+
+            // Update active canvas if in board editor
+            try {
+                const { getActiveCanvas } = await import('./editor.js');
+                const canvas = getActiveCanvas();
+                if (canvas) {
+                    canvas.updateSettings(settings);
+                }
+            } catch (err) {
+                // Canvas might not be loaded yet, that's ok
+            }
         });
     }
 
     if (enableSnappingCheckbox) {
-        enableSnappingCheckbox.addEventListener('change', (e) => {
+        enableSnappingCheckbox.addEventListener('change', async (e) => {
             settings.enableSnapping = e.target.checked;
             saveSettings(settings);
+
+            // Update active canvas if in board editor
+            try {
+                const { getActiveCanvas } = await import('./editor.js');
+                const canvas = getActiveCanvas();
+                if (canvas) {
+                    canvas.updateSettings(settings);
+                }
+            } catch (err) {
+                // Canvas might not be loaded yet, that's ok
+            }
         });
     }
 
     if (snapThresholdSelect) {
-        snapThresholdSelect.addEventListener('change', (e) => {
+        snapThresholdSelect.addEventListener('change', async (e) => {
             settings.snapThreshold = parseInt(e.target.value);
             saveSettings(settings);
+
+            // Update active canvas if in board editor
+            try {
+                const { getActiveCanvas } = await import('./editor.js');
+                const canvas = getActiveCanvas();
+                if (canvas) {
+                    canvas.updateSettings(settings);
+                }
+            } catch (err) {
+                // Canvas might not be loaded yet, that's ok
+            }
         });
     }
 

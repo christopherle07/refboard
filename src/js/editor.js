@@ -141,81 +141,6 @@ function saveActiveInstance() {
     instance.nextGroupId = nextGroupId;
 }
 
-function initTheme() {
-    const THEME_KEY = 'app_theme';
-    const savedTheme = localStorage.getItem(THEME_KEY) || 'light';
-    
-    const themes = {
-        light: {
-            '--bg-primary': '#ffffff',
-            '--bg-secondary': '#f8f8f8',
-            '--bg-tertiary': '#fafafa',
-            '--bg-hover': 'rgba(0, 0, 0, 0.05)',
-            '--bg-active': 'rgba(0, 0, 0, 0.08)',
-            '--border-color': '#e0e0e0',
-            '--border-color-hover': '#999',
-            '--text-primary': '#1a1a1a',
-            '--text-secondary': '#666',
-            '--text-tertiary': '#888',
-            '--text-disabled': '#999',
-            '--shadow': 'rgba(0, 0, 0, 0.08)',
-            '--modal-overlay': 'rgba(0, 0, 0, 0.5)'
-        },
-        dark: {
-            '--bg-primary': '#1a1a1a',
-            '--bg-secondary': '#0f0f0f',
-            '--bg-tertiary': '#151515',
-            '--bg-hover': 'rgba(255, 255, 255, 0.03)',
-            '--bg-active': 'rgba(255, 255, 255, 0.06)',
-            '--border-color': '#2a2a2a',
-            '--border-color-hover': '#444444',
-            '--text-primary': '#e0e0e0',
-            '--text-secondary': '#a0a0a0',
-            '--text-tertiary': '#707070',
-            '--text-disabled': '#505050',
-            '--shadow': 'rgba(0, 0, 0, 0.5)',
-            '--modal-overlay': 'rgba(0, 0, 0, 0.8)'
-        },
-        midnight: {
-            '--bg-primary': '#0a0a0a',
-            '--bg-secondary': '#050505',
-            '--bg-tertiary': '#0d0d0d',
-            '--bg-hover': 'rgba(255, 255, 255, 0.02)',
-            '--bg-active': 'rgba(255, 255, 255, 0.04)',
-            '--border-color': '#1a1a1a',
-            '--border-color-hover': '#333333',
-            '--text-primary': '#d0d0d0',
-            '--text-secondary': '#909090',
-            '--text-tertiary': '#606060',
-            '--text-disabled': '#404040',
-            '--shadow': 'rgba(0, 0, 0, 0.7)',
-            '--modal-overlay': 'rgba(0, 0, 0, 0.9)'
-        },
-        charcoal: {
-            '--bg-primary': '#262b30',
-            '--bg-secondary': '#1e2226',
-            '--bg-tertiary': '#191c1f',
-            '--bg-hover': '#333a41',
-            '--bg-active': '#535e68',
-            '--border-color': '#333a41',
-            '--border-color-hover': '#535e68',
-            '--text-primary': '#bcd1e4',
-            '--text-secondary': '#a0c4ff',
-            '--text-tertiary': '#535e68',
-            '--text-disabled': '#535e68',
-            '--shadow': 'rgba(0, 0, 0, 0.4)',
-            '--modal-overlay': 'rgba(0, 0, 0, 0.75)'
-        }
-    };
-    
-    const theme = themes[savedTheme] || themes.light;
-    Object.entries(theme).forEach(([property, value]) => {
-        document.documentElement.style.setProperty(property, value);
-    });
-
-    // Set theme attribute for icon filtering
-    document.documentElement.setAttribute('data-theme', savedTheme);
-}
 
 // Export init function for ViewManager
 export async function initEditor(boardId, container) {
@@ -223,8 +148,6 @@ export async function initEditor(boardId, container) {
 
     // Set this container as the active instance and load its state
     setActiveInstance(container);
-
-    initTheme();
 
     currentBoardId = boardId;
 
@@ -2721,42 +2644,67 @@ function setupContextMenu() {
 }
 
 function setupBoardDropdown() {
+    console.log('[setupBoardDropdown] Setting up, activeContainer:', !!activeContainer);
+
     const dropdownBtn = getElement('board-dropdown-btn');
     const dropdownMenu = getElement('board-dropdown-menu');
     const boardName = getElement('board-name');
 
+    console.log('[setupBoardDropdown] Found elements:', {
+        dropdownBtn: !!dropdownBtn,
+        dropdownMenu: !!dropdownMenu,
+        boardName: !!boardName
+    });
+
+    if (!dropdownBtn || !dropdownMenu || !boardName) {
+        console.error('[setupBoardDropdown] Missing elements - aborting');
+        return;
+    }
+
     const toggleDropdown = (e) => {
         e.stopPropagation();
+        console.log('[toggleDropdown] Toggling dropdown, currently has show:', dropdownMenu.classList.contains('show'));
         dropdownMenu.classList.toggle('show');
     };
 
     dropdownBtn.addEventListener('click', toggleDropdown);
     boardName.addEventListener('click', toggleDropdown);
+    console.log('[setupBoardDropdown] Event listeners attached');
 
     document.addEventListener('click', () => {
         dropdownMenu.classList.remove('show');
     });
 
-    getElement('dropdown-rename').addEventListener('click', async () => {
-        dropdownMenu.classList.remove('show');
-        const currentName = boardName.textContent;
-        const newName = await showInputModal('Rename Board', 'Enter a new name for this board:', currentName, 'Board name');
-        if (newName && newName !== currentName) {
-            await boardManager.updateBoard(currentBoardId, { name: newName });
-            boardName.textContent = newName;
-            showToast('Board renamed successfully', 'success');
-        }
-    });
+    const renameItem = getElement('dropdown-rename');
+    const exportItem = getElement('dropdown-export');
+    const importItem = getElement('dropdown-import');
 
-    getElement('dropdown-export').addEventListener('click', () => {
-        dropdownMenu.classList.remove('show');
-        exportBoard();
-    });
+    if (renameItem) {
+        renameItem.addEventListener('click', async () => {
+            dropdownMenu.classList.remove('show');
+            const currentName = boardName.textContent;
+            const newName = await showInputModal('Rename Board', 'Enter a new name for this board:', currentName, 'Board name');
+            if (newName && newName !== currentName) {
+                await boardManager.updateBoard(currentBoardId, { name: newName });
+                boardName.textContent = newName;
+                showToast('Board renamed successfully', 'success');
+            }
+        });
+    }
 
-    getElement('dropdown-import').addEventListener('click', () => {
-        dropdownMenu.classList.remove('show');
-        importBoard();
-    });
+    if (exportItem) {
+        exportItem.addEventListener('click', () => {
+            dropdownMenu.classList.remove('show');
+            exportBoard();
+        });
+    }
+
+    if (importItem) {
+        importItem.addEventListener('click', () => {
+            dropdownMenu.classList.remove('show');
+            importBoard();
+        });
+    }
 }
 
 function importAssets() {
@@ -4761,6 +4709,10 @@ export function setActiveEditorInstance(container) {
     if (container && editorInstances.has(container)) {
         setActiveInstance(container);
     }
+}
+
+export function getActiveCanvas() {
+    return canvas;
 }
 
 // Export state management functions for ViewManager

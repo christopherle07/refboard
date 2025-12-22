@@ -93,10 +93,66 @@ export class Canvas {
         
         this.showGrid = settings.showGrid;
         this.gridSize = settings.gridSize;
-        this.gridColor = 'rgba(0, 0, 0, 0.05)';
         this.enableSnapping = settings.enableSnapping;
         this.snapThreshold = settings.snapThreshold;
         this.thumbnailQuality = settings.thumbnailQuality;
+        this.updateGridColor();
+    }
+
+    updateSettings(settings) {
+        this.showGrid = settings.showGrid;
+        this.gridSize = settings.gridSize;
+        this.enableSnapping = settings.enableSnapping;
+        this.snapThreshold = settings.snapThreshold;
+        this.thumbnailQuality = settings.thumbnailQuality;
+        this.updateGridColor();
+        this.render(); // Re-render to show/hide grid
+    }
+
+    /**
+     * Calculate adaptive grid color based on background brightness
+     */
+    updateGridColor() {
+        const brightness = this.getColorBrightness(this.bgColor);
+        // If background is dark (brightness < 128), use white grid lines
+        // Otherwise use black grid lines
+        if (brightness < 128) {
+            this.gridColor = 'rgba(255, 255, 255, 0.15)';
+        } else {
+            this.gridColor = 'rgba(0, 0, 0, 0.08)';
+        }
+    }
+
+    /**
+     * Get brightness of a color (0-255)
+     */
+    getColorBrightness(color) {
+        // Convert hex to RGB
+        let r, g, b;
+
+        if (color.startsWith('#')) {
+            const hex = color.replace('#', '');
+            if (hex.length === 3) {
+                r = parseInt(hex[0] + hex[0], 16);
+                g = parseInt(hex[1] + hex[1], 16);
+                b = parseInt(hex[2] + hex[2], 16);
+            } else {
+                r = parseInt(hex.substr(0, 2), 16);
+                g = parseInt(hex.substr(2, 2), 16);
+                b = parseInt(hex.substr(4, 2), 16);
+            }
+        } else if (color.startsWith('rgb')) {
+            const matches = color.match(/\d+/g);
+            r = parseInt(matches[0]);
+            g = parseInt(matches[1]);
+            b = parseInt(matches[2]);
+        } else {
+            // Default to white if can't parse
+            return 255;
+        }
+
+        // Calculate perceived brightness using standard formula
+        return (r * 299 + g * 587 + b * 114) / 1000;
     }
 
     showToast(message, duration = 5000) {
@@ -2222,6 +2278,7 @@ export class Canvas {
     setBackgroundColor(color, skipHistory = false) {
         const oldColor = this.bgColor;
         this.bgColor = color;
+        this.updateGridColor(); // Recalculate grid color for new background
         this.needsRender = true;
 
         if (this.historyManager && !skipHistory && oldColor !== color) {

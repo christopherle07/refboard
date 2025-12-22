@@ -1,0 +1,323 @@
+/* Browser-Style Homepage */
+
+.browser-homepage {
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - 48px); /* Account for unified titlebar */
+    background: #ffffff;
+}
+
+/* Unified Titlebar - combines window controls with navigation */
+.unified-titlebar {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    height: 48px;
+    padding: 0 16px;
+    background: #ffffff;
+    border-bottom: 1px solid #e8e8e8;
+    -webkit-app-region: drag;
+}
+
+/* Window Controls on Left */
+.titlebar-window-controls {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    -webkit-app-region: no-drag;
+}
+
+.titlebar-nav-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    -webkit-app-region: no-drag;
+}
+
+.nav-breadcrumb {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 16px;
+    background: #f5f5f5;
+    border-radius: 20px;
+    font-size: 14px;
+    color: #5f6368;
+    min-width: 400px;
+    max-width: 600px;
+    min-height: 32px;
+    cursor: pointer;
+    transition: background-color 0.15s;
+}
+
+.nav-breadcrumb:hover {
+    background: #e8eaed;
+}
+
+.breadcrumb-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: #5f6368;
+}
+
+.breadcrumb-item.active {
+    color: #202124;
+    font-weight: 500;
+}
+
+.refresh-board-btn,
+.new-board-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    background: transparent;
+    border: none;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: background-color 0.15s;
+}
+
+.refresh-board-btn svg,
+.new-board-btn svg {
+    stroke: #5f6368;
+}
+
+.refresh-board-btn:hover,
+.new-board-btn:hover {
+    background: #f1f3f4;
+}
+
+.refresh-board-btn:active,
+.new-board-btn:active {
+    background: #e8eaed;
+}
+
+/* Titlebar Actions */
+.titlebar-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    -webkit-app-region: no-drag;
+}
+
+.toolbar-icon-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    background: transparent;
+    border: none;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: background-color 0.15s;
+}
+
+.toolbar-icon {
+    width: 18px;
+    height: 18px;
+    filter: brightness(0) saturate(100%) invert(44%) sepia(6%) saturate(369%) hue-rotate(185deg) brightness(93%) contrast(87%);
+}
+
+.toolbar-icon-btn:hover {
+    background: #f1f3f4;
+}
+
+.toolbar-icon-btn:active {
+    background: #e8eaed;
+}
+
+/* Window Control Buttons */
+.titlebar-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    background: transparent;
+    border: none;
+    border-radius: 50%;
+    color: #5f6368;
+    cursor: pointer;
+    transition: background-color 0.15s;
+}
+
+.titlebar-button svg {
+    stroke: #5f6368;
+}
+
+.titlebar-button:hover {
+    background: #f1f3f4;
+}
+
+.titlebar-button.close-btn:hover {
+    background: #e81123;
+}
+
+.titlebar-button.close-btn:hover svg {
+    stroke: #ffffff;
+}
+
+/* Center Content */
+.browser-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 120px 24px 48px;
+    flex: 1;
+    overflow-y: auto;
+}
+
+/* Search Container */
+.search-container {
+    width: 100%;
+    max-width: 600px;
+    margin-bottom: 48px;
+}
+
+.board-search {
+    width: 100%;
+    padding: 14px 20px;
+    font-size: 16px;
+    border: 1px solid #dfe1e5;
+    border-radius: 24px;
+    outline: none;
+    transition: all 0.2s;
+    background: #ffffff;
+    color: #202124;
+}
+
+.board-search::placeholder {
+    color: #9aa0a6;
+}
+
+.board-search:hover {
+    border-color: #d0d0d0;
+    box-shadow: 0 1px 6px rgba(32, 33, 36, 0.08);
+}
+
+.board-search:focus {
+    border-color: #d0d0d0;
+    box-shadow: 0 1px 6px rgba(32, 33, 36, 0.16);
+}
+
+/* Boards Grid */
+.boards-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 24px;
+    width: 100%;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+/* Board Card */
+.board-card {
+    display: flex;
+    flex-direction: column;
+    background: #ffffff;
+    border: 1px solid #e8e8e8;
+    border-radius: 12px;
+    overflow: hidden;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.board-card:hover {
+    border-color: #d0d0d0;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    transform: translateY(-2px);
+}
+
+.board-card-thumbnail {
+    width: 100%;
+    height: 180px;
+    background: #f8f9fa;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+
+.board-card-thumbnail img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.board-card-content {
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.board-card-title {
+    font-size: 15px;
+    font-weight: 500;
+    color: #202124;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.board-card-meta {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 13px;
+    color: #5f6368;
+}
+
+.board-card-layers {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.board-card-date {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+/* Empty State */
+.empty-boards-state {
+    text-align: center;
+    padding: 60px 24px;
+    color: #5f6368;
+}
+
+.empty-boards-state h3 {
+    font-size: 18px;
+    font-weight: 400;
+    margin: 0 0 8px;
+    color: #202124;
+}
+
+.empty-boards-state p {
+    font-size: 14px;
+    margin: 0;
+}
+
+/* Scrollbar Styling */
+.browser-content::-webkit-scrollbar {
+    width: 8px;
+}
+
+.browser-content::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.browser-content::-webkit-scrollbar-thumb {
+    background: #dadce0;
+    border-radius: 4px;
+}
+
+.browser-content::-webkit-scrollbar-thumb:hover {
+    background: #bdc1c6;
+}

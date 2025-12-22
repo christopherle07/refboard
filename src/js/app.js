@@ -1,17 +1,14 @@
 /**
  * App - Main application coordinator
- * Initializes and coordinates TabManager, ViewManager, and TabBar
+ * Simplified without tabs - just switches between home and board views
  */
 
-import { TabManager } from './tab-manager.js';
 import { ViewManager } from './view-manager.js';
-import { TabBar } from './tab-bar.js';
 
 class App {
     constructor() {
         this.viewManager = null;
-        this.tabBar = null;
-        this.tabManager = null;
+        this.currentBoardId = null;
     }
 
     /**
@@ -20,77 +17,120 @@ class App {
     async init() {
         console.log('Initializing EyeDea app...');
 
-        // Create managers
+        // Create view manager
         this.viewManager = new ViewManager();
-        this.tabBar = new TabBar(null); // Will set tabManager reference after creation
-        this.tabManager = new TabManager(this.viewManager, this.tabBar);
 
-        // Link tabBar to tabManager
-        this.tabBar.tabManager = this.tabManager;
+        // Show home view by default
+        await this.showHome();
 
-        // Initialize with Home tab
-        this.tabManager.init();
+        // Setup breadcrumb navigation
+        this.setupBreadcrumbNavigation();
 
-        // Activate home view
-        await this.viewManager.activateView(this.tabManager.homeTabId);
-
-        // Setup keyboard shortcuts
-        this.setupKeyboardShortcuts();
+        // Setup refresh button
+        this.setupRefreshButton();
 
         console.log('EyeDea app initialized');
     }
 
     /**
-     * Open a board in a new tab
+     * Show home view
      */
-    async openBoardTab(boardId, boardName) {
-        return await this.tabManager.openBoardTab(boardId, boardName);
+    async showHome() {
+        this.currentBoardId = null;
+        await this.viewManager.showHome();
+        this.updateBreadcrumb('All Boards');
+        this.hideRefreshButton();
     }
 
     /**
-     * Switch to home tab
+     * Open a board
      */
-    switchToHomeTab() {
-        this.tabManager.switchToHomeTab();
+    async openBoard(boardId, boardName) {
+        this.currentBoardId = boardId;
+        await this.viewManager.showBoard(boardId);
+        this.updateBreadcrumb(`All Boards > ${boardName}`);
+        this.showRefreshButton();
     }
 
     /**
-     * Setup keyboard shortcuts
+     * Refresh current board
      */
-    setupKeyboardShortcuts() {
-        document.addEventListener('keydown', (e) => {
-            // Ctrl+W: Close current tab
-            if (e.ctrlKey && e.key === 'w') {
-                e.preventDefault();
-                this.tabManager.closeTab(this.tabManager.activeTabId);
-            }
-
-            // Ctrl+Tab: Next tab
-            if (e.ctrlKey && e.key === 'Tab' && !e.shiftKey) {
-                e.preventDefault();
-                this.tabManager.switchToNextTab();
-            }
-
-            // Ctrl+Shift+Tab: Previous tab
-            if (e.ctrlKey && e.key === 'Tab' && e.shiftKey) {
-                e.preventDefault();
-                this.tabManager.switchToPreviousTab();
-            }
-
-            // Ctrl+1-9: Switch to tab by index
-            if (e.ctrlKey && e.key >= '1' && e.key <= '9') {
-                e.preventDefault();
-                const index = parseInt(e.key) - 1;
-                this.tabManager.switchToTabByIndex(index);
-            }
-        });
+    async refreshBoard() {
+        if (this.currentBoardId) {
+            await this.viewManager.showBoard(this.currentBoardId);
+            console.log('Board refreshed');
+        }
     }
 
     /**
-     * Get tab manager instance
+     * Get current board name from breadcrumb
      */
-    getTabManager() {
-        return this.tabManager;
+    getBoardName() {
+        const breadcrumb = document.getElementById('nav-breadcrumb');
+        if (breadcrumb) {
+            const text = breadcrumb.textContent;
+            const parts = text.split('/').map(p => p.trim());
+            return parts.length > 1 ? parts[1] : 'Board';
+        }
+        return 'Board';
+    }
+
+    /**
+     * Update breadcrumb navigation
+     */
+    updateBreadcrumb(text) {
+        const breadcrumb = document.getElementById('nav-breadcrumb');
+        if (breadcrumb) {
+            // Replace > with /
+            const formattedText = text.replace(/>/g, '/');
+            breadcrumb.innerHTML = `<span class="breadcrumb-item active">${formattedText}</span>`;
+        }
+    }
+
+    /**
+     * Setup breadcrumb click to go home
+     */
+    setupBreadcrumbNavigation() {
+        const breadcrumb = document.getElementById('nav-breadcrumb');
+        if (breadcrumb) {
+            breadcrumb.addEventListener('click', () => {
+                if (this.currentBoardId) {
+                    this.showHome();
+                }
+            });
+        }
+    }
+
+    /**
+     * Setup refresh button
+     */
+    setupRefreshButton() {
+        const refreshBtn = document.getElementById('refresh-board-btn');
+        if (refreshBtn) {
+            refreshBtn.addEventListener('click', () => {
+                this.refreshBoard();
+            });
+        }
+    }
+
+    /**
+     * Show refresh button (when in board view)
+     */
+    showRefreshButton() {
+        const refreshBtn = document.getElementById('refresh-board-btn');
+        if (refreshBtn) {
+            refreshBtn.style.display = 'flex';
+        }
+    }
+
+    /**
+     * Hide refresh button (when in home view)
+     */
+    hideRefreshButton() {
+        const refreshBtn = document.getElementById('refresh-board-btn');
+        if (refreshBtn) {
+            refreshBtn.style.display = 'none';
+        }
     }
 
     /**
