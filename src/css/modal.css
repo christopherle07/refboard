@@ -146,7 +146,7 @@
 }
 
 .modal-input:focus {
-    border-color: #5B8AC5;
+    border-color: var(--accent-primary-hover);
     background: var(--bg-primary);
     box-shadow: 0 0 0 4px rgba(91, 138, 197, 0.1);
 }
@@ -179,7 +179,7 @@
 }
 
 .form-group input[type="text"]:focus {
-    border-color: #0066ff;
+    border-color: var(--accent-secondary);
 }
 
 .form-group input[type="color"] {
@@ -242,7 +242,7 @@
 }
 
 .modal-btn-primary {
-    background: linear-gradient(135deg, #5B8AC5 0%, #4A7AB4 100%);
+    background: linear-gradient(135deg, var(--accent-primary-hover) 0%, var(--accent-primary-active) 100%);
     color: white;
     border: 2px solid transparent;
     box-shadow: 0 2px 8px rgba(91, 138, 197, 0.3);
@@ -254,9 +254,9 @@
 }
 
 .modal-btn-danger {
-    background: #d32f2f;
+    background: var(--accent-danger);
     color: white;
-    border: 1px solid #d32f2f;
+    border: 1px solid var(--accent-danger);
 }
 
 .modal-btn-danger:hover {
@@ -326,9 +326,9 @@
 }
 
 .modal-btn-merge {
-    background: #2196f3;
+    background: var(--accent-secondary);
     color: white;
-    border: 2px solid #2196f3;
+    border: 2px solid var(--accent-secondary);
 }
 
 .modal-btn-merge:hover {
@@ -339,9 +339,9 @@
 }
 
 .modal-btn-override {
-    background: #ff9800;
+    background: var(--accent-warning);
     color: white;
-    border: 2px solid #ff9800;
+    border: 2px solid var(--accent-warning);
 }
 
 .modal-btn-override:hover {
@@ -417,11 +417,11 @@
 }
 
 .toast-info .toast-icon {
-    color: #2196f3;
+    color: var(--accent-secondary);
 }
 
 .toast-warning .toast-icon {
-    color: #ff9800;
+    color: var(--accent-warning);
 }
 
 .toast-content {
@@ -477,7 +477,7 @@
 }
 
 .add-board-item:hover {
-    border-color: #5B8AC5;
+    border-color: var(--accent-primary-hover);
     transform: translateY(-2px);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
@@ -523,7 +523,7 @@
 }
 
 .add-board-item-btn:hover {
-    background: #5B8AC5;
+    background: var(--accent-primary-hover);
     transform: scale(1.1);
 }
 

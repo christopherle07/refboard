@@ -1,18 +1,4 @@
-:root {
-    --bg-primary: #ffffff;
-    --bg-secondary: #f8f8f8;
-    --bg-tertiary: #fafafa;
-    --bg-hover: rgba(0, 0, 0, 0.05);
-    --bg-active: rgba(0, 0, 0, 0.08);
-    --border-color: #e0e0e0;
-    --border-color-hover: #999;
-    --text-primary: #1a1a1a;
-    --text-secondary: #666;
-    --text-tertiary: #888;
-    --text-disabled: #999;
-    --shadow: rgba(0, 0, 0, 0.08);
-    --modal-overlay: rgba(0, 0, 0, 0.5);
-}
+/* CSS variables are defined in base.css */
 
 * {
     margin: 0;

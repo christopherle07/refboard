@@ -4,6 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Board Editor</title>
+    <script>
+        // Apply theme IMMEDIATELY before any CSS loads
+        (function() {
+            const savedSettings = JSON.parse(localStorage.getItem('canvas_settings') || '{}');
+            const theme = savedSettings.theme || 'light';
+            document.documentElement.setAttribute('data-theme', theme);
+        })();
+    </script>
     <link rel="stylesheet" href="css/main.css">
     <link rel="stylesheet" href="css/sidebar.css">
     <link rel="stylesheet" href="css/modal.css">

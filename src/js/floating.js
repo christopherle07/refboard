@@ -155,16 +155,16 @@ function setupDragAndDrop() {
                     canvas.addImage(img, x, y, file.name);
                     
                     const board = await boardManager.getBoard(currentBoardId);
-                    if (!board.assets) board.assets = [];
-                    
-                    const assetExists = board.assets.some(a => a.name === file.name);
+                    const currentAssets = board.assets || [];
+
+                    const assetExists = currentAssets.some(a => a.name === file.name);
                     if (!assetExists) {
-                        board.assets.push({
+                        const updatedAssets = [...currentAssets, {
                             id: Date.now() + Math.random(),
                             src: event.target.result,
                             name: file.name
-                        });
-                        await boardManager.updateBoard(currentBoardId, { assets: board.assets });
+                        }];
+                        await boardManager.updateBoard(currentBoardId, { assets: updatedAssets });
                         await boardManager.addToAllAssets(file.name, event.target.result);
                     }
                 };

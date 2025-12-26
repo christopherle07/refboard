@@ -8,7 +8,8 @@ const defaultSettings = {
     defaultBgColor: '#ffffff',
     showDeleteConfirm: true,
     autosaveInterval: 2000,
-    thumbnailQuality: 0.6
+    thumbnailQuality: 0.6,
+    theme: 'light'
 };
 
 function loadSettings() {
@@ -25,6 +26,15 @@ function loadSettings() {
 
 function saveSettings(settings) {
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+}
+
+function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+}
+
+function getTheme() {
+    const settings = loadSettings();
+    return settings.theme || 'light';
 }
 
 function setupNavigation() {
@@ -84,7 +94,19 @@ function setupNavigation() {
 
 function setupSettingsControls() {
     const settings = loadSettings();
-    
+
+    // Theme selector
+    const themeSelect = document.getElementById('theme-select');
+    if (themeSelect) {
+        themeSelect.value = settings.theme || 'light';
+        applyTheme(settings.theme || 'light');
+        themeSelect.addEventListener('change', (e) => {
+            settings.theme = e.target.value;
+            saveSettings(settings);
+            applyTheme(e.target.value);
+        });
+    }
+
     const showGridCheckbox = document.getElementById('show-grid');
     const gridSizeSelect = document.getElementById('grid-size');
     
@@ -161,6 +183,10 @@ function setupSettingsControls() {
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
+    // Apply theme immediately
+    const theme = getTheme();
+    applyTheme(theme);
+
     setupNavigation();
     setupSettingsControls();
 

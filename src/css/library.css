@@ -469,5 +469,5 @@
 }
 
 .download-toast-error {
-    background: #ef4444;
+    background: var(--accent-danger);
 }

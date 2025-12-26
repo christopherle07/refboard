@@ -972,20 +972,20 @@ export class Canvas {
     addToAssets(img, src, name) {
         const board = window.boardManagerInstance?.currentBoard;
         if (!board) return;
-        
-        if (!board.assets) board.assets = [];
-        
-        const assetExists = board.assets.some(a => a.name === name);
+
+        const currentAssets = board.assets || [];
+
+        const assetExists = currentAssets.some(a => a.name === name);
         if (assetExists) return;
-        
-        board.assets.push({
+
+        const updatedAssets = [...currentAssets, {
             id: Date.now() + Math.random(),
             src: src,
             name: name
-        });
-        
+        }];
+
         if (window.boardManagerInstance && window.currentBoardId) {
-            window.boardManagerInstance.updateBoard(window.currentBoardId, { assets: board.assets });
+            window.boardManagerInstance.updateBoard(window.currentBoardId, { assets: updatedAssets });
         }
         
         if (window.renderAssetsCallback) {

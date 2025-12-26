@@ -90,7 +90,7 @@ body {
 
 .titlebar-btn.pinned {
     background: rgba(0, 102, 255, 0.15);
-    color: #0066ff;
+    color: var(--accent-secondary);
 }
 
 .floating-container {
@@ -166,8 +166,8 @@ body {
 }
 
 .toolbar-btn.active {
-    background: #4771e6;
-    border-color: #4771e6;
+    background: var(--accent-primary);
+    border-color: var(--accent-primary);
     color: white;
 }
 
@@ -227,7 +227,7 @@ body {
 
 .size-input:focus {
     outline: none;
-    border-color: #4771e6;
+    border-color: var(--accent-primary);
 }
 
 .size-slider {
@@ -245,20 +245,20 @@ body {
     appearance: none;
     width: 14px;
     height: 14px;
-    background: #4771e6;
+    background: var(--accent-primary);
     border-radius: 50%;
     cursor: pointer;
     transition: background 0.15s;
 }
 
 .size-slider::-webkit-slider-thumb:hover {
-    background: #0b5ed7;
+    background: var(--accent-primary-hover);
 }
 
 .size-slider::-moz-range-thumb {
     width: 14px;
     height: 14px;
-    background: #4771e6;
+    background: var(--accent-primary);
     border-radius: 50%;
     cursor: pointer;
     border: none;
@@ -266,7 +266,7 @@ body {
 }
 
 .size-slider::-moz-range-thumb:hover {
-    background: #0b5ed7;
+    background: var(--accent-primary-hover);
 }
 
 /* Eraser Mode Toggle */
@@ -308,13 +308,13 @@ body {
 }
 
 .toggle-option.active {
-    background: #4771e6;
+    background: var(--accent-primary);
     color: white;
 }
 
 .titlebar-btn.active {
     background: rgba(13, 110, 253, 0.15);
-    color: #4771e6;
+    color: var(--accent-primary);
 }
 
 /* Background-adaptive icon coloring */

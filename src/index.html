@@ -5,6 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="view-transition" content="same-origin">
     <title>EyeDea</title>
+    <script>
+        // Apply theme IMMEDIATELY before any CSS loads
+        (function() {
+            const savedSettings = JSON.parse(localStorage.getItem('canvas_settings') || '{}');
+            const theme = savedSettings.theme || 'light';
+            document.documentElement.setAttribute('data-theme', theme);
+        })();
+    </script>
     <link rel="stylesheet" href="css/base.css">
     <link rel="stylesheet" href="css/browser-homepage.css">
     <link rel="stylesheet" href="css/main.css">
@@ -74,6 +82,8 @@
 
             <!-- Center Content -->
             <div class="browser-content">
+                <h1 class="home-welcome">EyeDea | Welcome!</h1>
+
                 <div class="search-container">
                     <input
                         type="text"
@@ -82,6 +92,17 @@
                         placeholder="Search boards..."
                         autocomplete="off"
                     >
+                    <div class="search-actions">
+                        <button class="search-action-btn" id="new-board-btn-search" title="New Board">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="12" y1="5" x2="12" y2="19"></line>
+                                <line x1="5" y1="12" x2="19" y2="12"></line>
+                            </svg>
+                        </button>
+                        <button class="search-action-btn" id="import-board-btn-search" title="Import Board">
+                            <img src="assets/import.svg" alt="Import" class="search-action-icon">
+                        </button>
+                    </div>
                 </div>
 
                 <div class="boards-grid" id="boards-grid">

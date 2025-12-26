@@ -66,7 +66,7 @@
 
 .assets-search-bar:focus {
     outline: none;
-    border-color: #5B8AC5;
+    border-color: var(--accent-primary-hover);
     box-shadow: 0 0 0 3px rgba(91, 138, 197, 0.1);
 }
 
@@ -134,14 +134,14 @@
 }
 
 .assets-tag-filter-pill:hover {
-    border-color: #5B8AC5;
+    border-color: var(--accent-primary-hover);
     color: var(--text-primary);
     background: var(--bg-hover);
 }
 
 .assets-tag-filter-pill.active {
-    background: linear-gradient(135deg, #5B8AC5 0%, #4A7AB4 100%);
-    border-color: #5B8AC5;
+    background: linear-gradient(135deg, var(--accent-primary-hover) 0%, var(--accent-primary-active) 100%);
+    border-color: var(--accent-primary-hover);
     color: white;
     font-weight: 500;
 }
@@ -170,7 +170,7 @@
 
 .assets-import-btn {
     padding: 10px 20px;
-    background: linear-gradient(135deg, #5B8AC5 0%, #4A7AB4 100%);
+    background: linear-gradient(135deg, var(--accent-primary-hover) 0%, var(--accent-primary-active) 100%);
     color: white;
     border: none;
     border-radius: 8px;
@@ -211,7 +211,7 @@
 }
 
 .assets-library-item:hover {
-    border-color: #5B8AC5;
+    border-color: var(--accent-primary-hover);
 }
 
 .assets-library-item img {
@@ -297,7 +297,7 @@
 }
 
 .assets-library-item-delete:hover {
-    background: #d32f2f;
+    background: var(--accent-danger);
 }
 
 /* Empty state */
@@ -676,8 +676,8 @@
 }
 
 .asset-sidebar-btn-danger:hover {
-    color: #d32f2f;
-    border-color: #d32f2f;
+    color: var(--accent-danger);
+    border-color: var(--accent-danger);
     background: var(--bg-secondary);
 }
 

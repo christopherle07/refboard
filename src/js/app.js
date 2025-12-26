@@ -93,9 +93,11 @@ class App {
     setupBreadcrumbNavigation() {
         const breadcrumb = document.getElementById('nav-breadcrumb');
         if (breadcrumb) {
-            breadcrumb.addEventListener('click', () => {
+            breadcrumb.addEventListener('click', async () => {
                 if (this.currentBoardId) {
-                    this.showHome();
+                    console.log('[Breadcrumb] Navigating to home...');
+                    await this.showHome();
+                    console.log('[Breadcrumb] Navigation complete');
                 }
             });
         }
@@ -107,8 +109,8 @@ class App {
     setupRefreshButton() {
         const refreshBtn = document.getElementById('refresh-board-btn');
         if (refreshBtn) {
-            refreshBtn.addEventListener('click', () => {
-                this.refreshBoard();
+            refreshBtn.addEventListener('click', async () => {
+                await this.refreshBoard();
             });
         }
     }

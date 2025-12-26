@@ -5,6 +5,13 @@ import CollectionManager from './collection-manager.js';
 import { showSettingsModal } from './settingsModal.js';
 import { showLibraryModal } from './library.js';
 
+// Apply theme on page load
+const savedSettings = JSON.parse(localStorage.getItem('canvas_settings') || '{}');
+const theme = savedSettings.theme || 'light';
+document.documentElement.setAttribute('data-theme', theme);
+document.body.setAttribute('data-theme', theme);
+console.log('Applied theme on load:', theme);
+
 let currentPage = 1;
 const BOARDS_PER_PAGE = 14;
 let currentSort = 'latest';
@@ -70,7 +77,7 @@ function setupEventListeners() {
         });
     }
 
-    // New board button
+    // New board button (titlebar)
     const newBoardBtn = document.getElementById('new-board-btn');
     if (newBoardBtn) {
         newBoardBtn.addEventListener('click', () => {
@@ -80,10 +87,26 @@ function setupEventListeners() {
         });
     }
 
-    // Import board button
+    // New board button (search area)
+    const newBoardBtnSearch = document.getElementById('new-board-btn-search');
+    if (newBoardBtnSearch) {
+        newBoardBtnSearch.addEventListener('click', () => {
+            showCreateBoardModal((name, bgColor) => {
+                createBoard(name, bgColor);
+            });
+        });
+    }
+
+    // Import board button (titlebar)
     const importBtn = document.getElementById('import-board-btn');
     if (importBtn) {
         importBtn.addEventListener('click', importBoardAsNew);
+    }
+
+    // Import board button (search area)
+    const importBtnSearch = document.getElementById('import-board-btn-search');
+    if (importBtnSearch) {
+        importBtnSearch.addEventListener('click', importBoardAsNew);
     }
 
     // Library button
@@ -162,14 +185,12 @@ function renderBoards() {
 
         const timestamp = board.updatedAt || board.updated_at || board.createdAt || board.created_at || Date.now();
         const lastModified = formatTimeAgo(timestamp);
-        const layerCount = getLayerCount(board);
 
         card.innerHTML = `
             <div class="board-card-thumbnail"></div>
             <div class="board-card-content">
                 <div class="board-card-title">${board.name}</div>
                 <div class="board-card-meta">
-                    <span class="board-card-layers">${layerCount} layers</span>
                     <span class="board-card-date">${lastModified}</span>
                 </div>
             </div>
@@ -185,6 +206,21 @@ function renderBoards() {
             const bgColor = board.bgColor || board.bg_color || '#f0f0f0';
             thumbnailDiv.style.backgroundColor = bgColor;
         }
+
+        // Add delete button after thumbnail content
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'board-delete-btn';
+        deleteBtn.title = 'Delete board';
+        deleteBtn.textContent = '×';
+        deleteBtn.addEventListener('click', async (e) => {
+            e.preventDefault();
+            e.stopPropagation(); // Prevent opening the board
+
+            showDeleteConfirm(`board "${board.name}"`, async () => {
+                await deleteBoard(board.id);
+            });
+        });
+        thumbnailDiv.appendChild(deleteBtn);
 
         card.addEventListener('click', () => openBoard(board.id));
 
@@ -205,8 +241,13 @@ async function createBoard(name, bgColor) {
 }
 
 async function deleteBoard(boardId) {
+    console.log('[deleteBoard] Starting delete for board:', boardId);
+    console.log('[deleteBoard] Boards before delete:', boardManager.getAllBoards().length);
     await boardManager.deleteBoard(boardId);
+    console.log('[deleteBoard] Boards after delete:', boardManager.getAllBoards().length);
+    console.log('[deleteBoard] Calling renderBoards...');
     renderBoards();
+    console.log('[deleteBoard] renderBoards complete');
 }
 
 async function openBoard(boardId) {

@@ -28,7 +28,9 @@ export class ViewManager {
         // Cleanup board if it was active
         if (this.currentView === 'board' && this.currentBoardId) {
             try {
-                cleanupEditor(this.boardContainer);
+                console.log('[ViewManager] Cleaning up board before showing home...');
+                await cleanupEditor(this.boardContainer);
+                console.log('[ViewManager] Board cleanup complete');
             } catch (err) {
                 console.error('Error cleaning up board:', err);
             }
@@ -57,7 +59,9 @@ export class ViewManager {
         // Cleanup previous board if switching boards
         if (this.currentView === 'board' && this.currentBoardId !== boardId) {
             try {
-                cleanupEditor(this.boardContainer);
+                console.log('[ViewManager] Cleaning up previous board...');
+                await cleanupEditor(this.boardContainer);
+                console.log('[ViewManager] Previous board cleanup complete');
             } catch (err) {
                 console.error('Error cleaning up previous board:', err);
             }
@@ -75,7 +79,7 @@ export class ViewManager {
         } catch (err) {
             console.error('Error initializing board:', err);
             // Fall back to home
-            this.showHome();
+            await this.showHome();
         }
     }
 }

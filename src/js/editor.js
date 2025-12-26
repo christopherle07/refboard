@@ -5,6 +5,13 @@ import { HistoryManager } from './history-manager.js';
 import { showInputModal, showChoiceModal, showToast, showConfirmModal, showColorExtractorModal } from './modal-utils.js';
 import { updateTitlebarTitle } from './titlebar.js';
 
+// Apply theme on page load
+const savedSettings = JSON.parse(localStorage.getItem('canvas_settings') || '{}');
+const theme = savedSettings.theme || 'light';
+document.documentElement.setAttribute('data-theme', theme);
+document.body.setAttribute('data-theme', theme);
+console.log('Applied theme on load:', theme);
+
 // Editor instance manager - stores separate state for each board container
 const editorInstances = new Map(); // Map<container, editorState>
 let activeContainer = null; // Currently active editor container
@@ -79,8 +86,25 @@ let lastDragY = 0; // Track the last mouse Y position during drag
 let layerGroups = []; // Array of { id, name, layerIds: [], collapsed: false }
 let nextGroupId = 1;
 
+// Save current global state back to the instance
+function saveInstanceState() {
+    if (activeContainer && editorInstances.has(activeContainer)) {
+        const instance = editorInstances.get(activeContainer);
+        instance.canvas = canvas;
+        instance.historyManager = historyManager;
+        instance.currentBoardId = currentBoardId;
+        instance.saveTimeout = saveTimeout;
+        instance.pendingSave = pendingSave;
+        instance.dragSourceIndex = dragSourceIndex;
+        instance.currentOrder = currentOrder;
+    }
+}
+
 // Update global references to point to the active instance
 function setActiveInstance(container) {
+    // Save current instance state before switching
+    saveInstanceState();
+
     activeContainer = container;
     const instance = getEditorInstance(container);
 
@@ -189,6 +213,15 @@ export async function initEditor(boardId, container) {
             });
         }
     };
+
+    // Prevent default drag/drop behavior on document to avoid browser navigation
+    const preventDefaultDrag = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+    };
+
+    document.addEventListener('dragover', preventDefaultDrag);
+    document.addEventListener('drop', preventDefaultDrag);
 
     // Global dragover listener to track mouse position during drag (needed for dragging outside groups)
     document.addEventListener('dragover', (e) => {
@@ -849,7 +882,7 @@ function scheduleSave() {
     }, 2000);
 }
 
-function saveNow() {
+async function saveNow() {
     if (!pendingSave) return;
     pendingSave = false;
     if (saveTimeout) {
@@ -885,10 +918,11 @@ function saveNow() {
         objectIds: g.objectIds || [],
         collapsed: g.collapsed || false
     }));
-    console.log('Saving board:', { layersCount: layers.length, strokesCount: strokes.length, objectsCount: objects.length, groupsCount: groups.length, objects, viewState });
-    console.log('Layers zIndex:', layers.map(l => ({ id: l.id, name: l.name, zIndex: l.zIndex })));
-    console.log('Objects zIndex:', objects.map(o => ({ id: o.id, type: o.type, zIndex: o.zIndex })));
-    boardManager.updateBoard(currentBoardId, { layers, bgColor, viewState, strokes, objects, groups, thumbnail });
+    console.log('[saveNow] Saving board:', { layersCount: layers.length, strokesCount: strokes.length, objectsCount: objects.length, groupsCount: groups.length, objects, viewState });
+    console.log('[saveNow] Layers zIndex:', layers.map(l => ({ id: l.id, name: l.name, zIndex: l.zIndex })));
+    console.log('[saveNow] Objects zIndex:', objects.map(o => ({ id: o.id, type: o.type, zIndex: o.zIndex })));
+    await boardManager.updateBoard(currentBoardId, { layers, bgColor, viewState, strokes, objects, groups, thumbnail });
+    console.log('[saveNow] Save complete');
 }
 
 function createLayerItem(img, images) {
@@ -2537,17 +2571,19 @@ async function renderAssets() {
             imgElement.onload = async () => {
                 canvas.addImage(imgElement, 100, 100, asset.name);
                 renderLayers();
-                
+
                 if (showAllAssets) {
-                    const boardAssets = board.assets || [];
+                    // Get fresh board reference to avoid stale data
+                    const currentBoard = boardManager.currentBoard;
+                    const boardAssets = currentBoard.assets || [];
                     const existsInBoard = boardAssets.some(a => a.name === asset.name && a.src === asset.src);
                     if (!existsInBoard) {
-                        boardAssets.push({
+                        const updatedAssets = [...boardAssets, {
                             id: asset.id,
                             name: asset.name,
                             src: asset.src
-                        });
-                        await boardManager.updateBoard(currentBoardId, { assets: boardAssets });
+                        }];
+                        await boardManager.updateBoard(currentBoardId, { assets: updatedAssets });
                     }
                 }
             };
@@ -2727,19 +2763,19 @@ function importAssets() {
             const reader = new FileReader();
             reader.onload = async (event) => {
                 const board = boardManager.currentBoard;
-                if (!board.assets) board.assets = [];
+                const currentAssets = board.assets || [];
 
-                const existsInBoard = board.assets.some(a => a.name === file.name);
+                const existsInBoard = currentAssets.some(a => a.name === file.name);
                 if (!existsInBoard) {
                     const newAsset = {
                         id: Date.now() + Math.random(),
                         src: event.target.result,
                         name: file.name
                     };
-                    board.assets.push(newAsset);
+                    const updatedAssets = [...currentAssets, newAsset];
 
                     // Update backend
-                    await boardManager.updateBoard(currentBoardId, { assets: board.assets });
+                    await boardManager.updateBoard(currentBoardId, { assets: updatedAssets });
                     const allAsset = await boardManager.addToAllAssets(file.name, event.target.result);
 
                     // Add to DOM immediately - use the asset from "All Assets" if available
@@ -2806,12 +2842,12 @@ function appendAssetToDOM(asset, container) {
                 const boardAssets = board.assets || [];
                 const existsInBoard = boardAssets.some(a => a.name === asset.name && a.src === asset.src);
                 if (!existsInBoard) {
-                    boardAssets.push({
+                    const updatedAssets = [...boardAssets, {
                         id: asset.id,
                         name: asset.name,
                         src: asset.src
-                    });
-                    await boardManager.updateBoard(currentBoardId, { assets: boardAssets });
+                    }];
+                    await boardManager.updateBoard(currentBoardId, { assets: updatedAssets });
                 }
             }
         };
@@ -3130,9 +3166,9 @@ function importAssetsToLibrary() {
             const reader = new FileReader();
             reader.onload = async (event) => {
                 const board = boardManager.currentBoard;
-                if (!board.assets) board.assets = [];
+                const currentAssets = board.assets || [];
 
-                const existsInBoard = board.assets.some(a => a.name === file.name);
+                const existsInBoard = currentAssets.some(a => a.name === file.name);
                 if (!existsInBoard) {
                     const newAsset = {
                         id: Date.now() + Math.random(),
@@ -3143,10 +3179,10 @@ function importAssetsToLibrary() {
                             created: Date.now()
                         }
                     };
-                    board.assets.push(newAsset);
+                    const updatedAssets = [...currentAssets, newAsset];
 
                     // Update backend
-                    await boardManager.updateBoard(currentBoardId, { assets: board.assets });
+                    await boardManager.updateBoard(currentBoardId, { assets: updatedAssets });
 
                     // Add to all assets with tags and metadata
                     let allAssets = await boardManager.getAllAssets();
@@ -3208,14 +3244,14 @@ function setupAssetSidebar() {
                 const boardAssets = board.assets || [];
                 const existsInBoard = boardAssets.some(a => a.name === currentAssetInSidebar.name && a.src === currentAssetInSidebar.src);
                 if (!existsInBoard) {
-                    boardAssets.push({
+                    const updatedAssets = [...boardAssets, {
                         id: currentAssetInSidebar.id,
                         name: currentAssetInSidebar.name,
                         src: currentAssetInSidebar.src,
                         tags: currentAssetInSidebar.tags || [],
                         metadata: currentAssetInSidebar.metadata || {}
-                    });
-                    await boardManager.updateBoard(currentBoardId, { assets: boardAssets });
+                    }];
+                    await boardManager.updateBoard(currentBoardId, { assets: updatedAssets });
                 }
             }
 
@@ -4749,20 +4785,36 @@ export function restoreBoardState(state) {
     }
 }
 
-export function cleanupEditor(container) {
+export async function cleanupEditor(container) {
     // Set this as the active instance to cleanup
     if (container && editorInstances.has(container)) {
+        // If this container is currently active, save its current state first
+        if (activeContainer === container) {
+            console.log('[cleanupEditor] Container is active, saving current state');
+            saveInstanceState();
+        }
+
+        // Set as active to ensure we're working with the right instance
         setActiveInstance(container);
+
+        console.log('[cleanupEditor] pendingSave:', pendingSave, 'saveTimeout:', saveTimeout);
 
         // Stop autosave timer
         if (saveTimeout) {
             clearTimeout(saveTimeout);
             saveTimeout = null;
+            // Update instance
+            const instance = editorInstances.get(container);
+            instance.saveTimeout = null;
         }
 
         // Save any pending changes
         if (pendingSave) {
-            saveNow();
+            console.log('[cleanupEditor] Saving pending changes...');
+            await saveNow();
+            console.log('[cleanupEditor] Save complete');
+        } else {
+            console.log('[cleanupEditor] No pending changes to save');
         }
 
         // Close sync channel

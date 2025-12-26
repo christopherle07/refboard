@@ -91,7 +91,7 @@
 }
 
 .theme-option.active {
-    border-color: #0066ff;
+    border-color: var(--accent-secondary);
     background: rgba(0, 102, 255, 0.05);
 }
 
@@ -200,7 +200,7 @@
 }
 
 .setting-select:focus {
-    border-color: #0066ff;
+    border-color: var(--accent-secondary);
 }
 
 .setting-color {

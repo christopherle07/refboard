@@ -55,7 +55,7 @@
 }
 
 .toolbar-toggle-btn.active {
-    color: #4771e6;
+    color: var(--accent-primary);
     background: rgba(13, 110, 253, 0.1);
 }
 
@@ -169,7 +169,7 @@
 .tab-btn.active {
     color: var(--text-primary);
     background: rgba(91, 138, 197, 0.15);
-    border-color: #5B8AC5;
+    border-color: var(--accent-primary-hover);
 }
 
 .sidebar-content {
@@ -383,20 +383,13 @@
     object-fit: contain;
 }
 
-/* Invert white-filled icons (text, shape) to black for light mode */
+/* Light theme: invert white-filled icons to show as black */
 [data-theme="light"] .layer-icon[src*="TextIcon"],
 [data-theme="light"] .layer-icon[src*="ShapeIcon"] {
     filter: invert(1);
 }
 
-/* Adjust brightness for all icons in dark themes */
-[data-theme="dark"] .layer-icon,
-[data-theme="midnight"] .layer-icon,
-[data-theme="charcoal"] .layer-icon {
-    filter: brightness(0.8);
-}
-
-/* Invert black-filled icons (layer, folder, palette) for dark themes */
+/* Dark themes: invert black-filled icons to show as white/light, keep white icons as-is */
 [data-theme="dark"] .layer-icon[src*="layericon"],
 [data-theme="dark"] .layer-icon[src*="foldericon"],
 [data-theme="dark"] .layer-icon[src*="ColorPalette"],
@@ -406,7 +399,7 @@
 [data-theme="charcoal"] .layer-icon[src*="layericon"],
 [data-theme="charcoal"] .layer-icon[src*="foldericon"],
 [data-theme="charcoal"] .layer-icon[src*="ColorPalette"] {
-    filter: invert(1) brightness(0.8);
+    filter: invert(1);
 }
 
 .layer-drag-handle {
@@ -517,7 +510,7 @@
 
 .layer-name-input {
     width: 100%;
-    border: 1px solid #4771e6;
+    border: 1px solid var(--accent-primary);
     background: var(--bg-secondary);
     font-size: 12px;
     padding: 2px 6px;
@@ -558,7 +551,7 @@
 }
 
 .layer-btn-delete:hover {
-    color: #dc3545;
+    color: var(--accent-danger);
     background: var(--bg-hover);
 }
 
@@ -654,7 +647,7 @@
 
 .group-header.drag-over {
     background: rgba(33, 150, 243, 0.2);
-    border: 2px solid #2196f3;
+    border: 2px solid var(--accent-secondary);
 }
 
 .group-collapse-btn {
@@ -905,7 +898,7 @@
 }
 
 .asset-item:hover {
-    border-color: #4771e6;
+    border-color: var(--accent-primary);
 }
 
 .asset-item:hover .asset-delete-btn {
@@ -939,7 +932,7 @@
 }
 
 .asset-delete-btn:hover {
-    background: #d32f2f;
+    background: var(--accent-danger);
 }
 
 .empty-message {
@@ -1005,8 +998,8 @@
 }
 
 .toolbar-btn.active {
-    background: #4771e6;
-    border-color: #4771e6;
+    background: var(--accent-primary);
+    border-color: var(--accent-primary);
     color: white;
 }
 
@@ -1066,7 +1059,7 @@
 
 .size-input:focus {
     outline: none;
-    border-color: #4771e6;
+    border-color: var(--accent-primary);
 }
 
 .size-slider {
@@ -1084,20 +1077,20 @@
     appearance: none;
     width: 14px;
     height: 14px;
-    background: #4771e6;
+    background: var(--accent-primary);
     border-radius: 50%;
     cursor: pointer;
     transition: background 0.15s;
 }
 
 .size-slider::-webkit-slider-thumb:hover {
-    background: #0b5ed7;
+    background: var(--accent-primary-hover);
 }
 
 .size-slider::-moz-range-thumb {
     width: 14px;
     height: 14px;
-    background: #4771e6;
+    background: var(--accent-primary);
     border-radius: 50%;
     cursor: pointer;
     border: none;
@@ -1105,7 +1098,7 @@
 }
 
 .size-slider::-moz-range-thumb:hover {
-    background: #0b5ed7;
+    background: var(--accent-primary-hover);
 }
 
 /* Eraser Mode Toggle */
@@ -1147,7 +1140,7 @@
 }
 
 .toggle-option.active {
-    background: #4771e6;
+    background: var(--accent-primary);
     color: white;
 }
 
@@ -1399,7 +1392,7 @@
 
 .property-select:focus {
     outline: none;
-    border-color: #4771e6;
+    border-color: var(--accent-primary);
     background-color: var(--bg-secondary);
 }
 
@@ -1422,7 +1415,7 @@
 
 .property-input:focus {
     outline: none;
-    border-color: #4771e6;
+    border-color: var(--accent-primary);
 }
 
 .property-textarea {
@@ -1439,7 +1432,7 @@
 
 .property-textarea:focus {
     outline: none;
-    border-color: #4771e6;
+    border-color: var(--accent-primary);
 }
 
 .alignment-buttons {
@@ -1466,8 +1459,8 @@
 }
 
 .alignment-btn.active {
-    background: #4771e6;
-    border-color: #4771e6;
+    background: var(--accent-primary);
+    border-color: var(--accent-primary);
     color: white;
 }
 
@@ -1478,24 +1471,15 @@
     display: block;
 }
 
-/* Light theme - black icons */
-[data-theme="light"] .theme-icon {
-    filter: brightness(0) saturate(100%);
+/* Tools sidebar has light background in all themes, so invert white icons to dark */
+/* Most icons (Pen, Text, Shape) are white and need inverting */
+.theme-icon {
+    filter: invert(1);
 }
 
-/* Dark theme - white icons */
-[data-theme="dark"] .theme-icon {
-    filter: brightness(0) saturate(100%) invert(100%);
-}
-
-/* Midnight theme - light gray icons */
-[data-theme="midnight"] .theme-icon {
-    filter: brightness(0) saturate(100%) invert(85%);
-}
-
-/* Charcoal theme - light icons */
-[data-theme="charcoal"] .theme-icon {
-    filter: brightness(0) saturate(100%) invert(90%);
+/* ColorPalette is black, so don't invert it */
+.theme-icon[src*="ColorPalette"] {
+    filter: none;
 }
 
 /* Custom scrollbar for property inputs and selects */
@@ -1554,7 +1538,7 @@
 
 .text-content-input:focus {
     outline: none;
-    border-color: #4771e6;
+    border-color: var(--accent-primary);
     background-color: var(--bg-secondary);
 }
 
@@ -1671,7 +1655,7 @@
     height: 24px;
     margin: 4px 8px;
     background: rgba(13, 110, 253, 0.1);
-    border: 2px dashed #4771e6;
+    border: 2px dashed var(--accent-primary);
     border-radius: 4px;
 }
 
@@ -1698,7 +1682,7 @@
     left: 50%;
     transform: translate(-50%, -50%);
     font-size: 11px;
-    color: #4771e6;
+    color: var(--accent-primary);
     white-space: nowrap;
     pointer-events: none;
 }

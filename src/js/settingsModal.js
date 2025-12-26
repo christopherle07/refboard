@@ -8,7 +8,8 @@ const defaultSettings = {
     defaultBgColor: '#ffffff',
     showDeleteConfirm: true,
     autosaveInterval: 2000,
-    thumbnailQuality: 0.6
+    thumbnailQuality: 0.6,
+    theme: 'light'
 };
 
 function loadSettings() {
@@ -56,6 +57,17 @@ export function showSettingsModal() {
                     <h3>Canvas</h3>
 
                     <div class="setting-group">
+                        <div class="setting-row">
+                            <div class="setting-info">
+                                <span class="setting-row-label">Theme</span>
+                                <span class="setting-description">Color scheme for the app</span>
+                            </div>
+                            <select id="theme-select" class="setting-select">
+                                <option value="light" ${(settings.theme || 'light') === 'light' ? 'selected' : ''}>Light</option>
+                                <option value="dark" ${settings.theme === 'dark' ? 'selected' : ''}>Dark</option>
+                            </select>
+                        </div>
+
                         <div class="setting-row">
                             <div class="setting-info">
                                 <span class="setting-row-label">Show Grid</span>
@@ -181,10 +193,21 @@ export function showSettingsModal() {
     });
 
     // Settings controls
+    const themeSelect = modal.querySelector('#theme-select');
     const showGridCheckbox = modal.querySelector('#show-grid');
     const gridSizeSelect = modal.querySelector('#grid-size');
     const enableSnappingCheckbox = modal.querySelector('#enable-snapping');
     const snapThresholdSelect = modal.querySelector('#snap-threshold');
+
+    if (themeSelect) {
+        themeSelect.addEventListener('change', (e) => {
+            settings.theme = e.target.value;
+            saveSettings(settings);
+            document.documentElement.setAttribute('data-theme', e.target.value);
+            document.body.setAttribute('data-theme', e.target.value);
+            console.log('Theme changed to:', e.target.value);
+        });
+    }
 
     if (showGridCheckbox) {
         showGridCheckbox.addEventListener('change', async (e) => {
