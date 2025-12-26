@@ -1469,17 +1469,19 @@
     width: 24px;
     height: 24px;
     display: block;
+    transition: filter 0.2s;
 }
 
-/* Tools sidebar has light background in all themes, so invert white icons to dark */
-/* Most icons (Pen, Text, Shape) are white and need inverting */
-.theme-icon {
-    filter: invert(1);
+/* Light theme: grey icons (#5f6368) */
+[data-theme="light"] .tool-icon {
+    filter: brightness(0) saturate(100%) invert(42%) sepia(6%) saturate(473%) hue-rotate(169deg) brightness(95%) contrast(87%);
 }
 
-/* ColorPalette is black, so don't invert it */
-.theme-icon[src*="ColorPalette"] {
-    filter: none;
+/* Dark themes: purple icons (#9b7fd4) */
+[data-theme="dark"] .tool-icon,
+[data-theme="midnight"] .tool-icon,
+[data-theme="charcoal"] .tool-icon {
+    filter: brightness(0) saturate(100%) invert(65%) sepia(27%) saturate(1346%) hue-rotate(209deg) brightness(93%) contrast(90%);
 }
 
 /* Custom scrollbar for property inputs and selects */

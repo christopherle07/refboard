@@ -1,0 +1,106 @@
+/* Text Editor Overlay */
+.text-editor-overlay {
+    position: absolute;
+    pointer-events: none;
+    z-index: 1000;
+}
+
+.text-editor-input {
+    min-width: 100px;
+    min-height: 30px;
+    padding: 8px;
+    background: rgba(255, 255, 255, 0.95);
+    border: 2px solid #4a90e2;
+    border-radius: 4px;
+    outline: none;
+    pointer-events: auto;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    font-family: Arial;
+    font-size: 16px;
+    color: #000000;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+body[data-theme="dark"] .text-editor-input,
+body[data-theme="midnight"] .text-editor-input {
+    background: rgba(30, 30, 30, 0.95);
+    color: #e0e0e0;
+}
+
+/* Text Formatting Toolbar */
+.text-toolbar {
+    position: absolute;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 8px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    z-index: 1001;
+}
+
+.text-toolbar-select {
+    padding: 4px 8px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    color: var(--text-primary);
+    font-size: 13px;
+    cursor: pointer;
+    outline: none;
+}
+
+.text-toolbar-select:hover {
+    background: var(--bg-hover);
+}
+
+.text-toolbar-btn {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    border-radius: 4px;
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.text-toolbar-btn:hover {
+    background: var(--bg-hover);
+}
+
+.text-toolbar-btn.active {
+    background: var(--bg-active);
+    color: #4a90e2;
+}
+
+.text-toolbar-divider {
+    width: 1px;
+    height: 24px;
+    background: var(--border-color);
+    margin: 0 4px;
+}
+
+.text-toolbar-color {
+    width: 32px;
+    height: 32px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    cursor: pointer;
+    background: transparent;
+}
+
+.text-toolbar-color::-webkit-color-swatch-wrapper {
+    padding: 2px;
+}
+
+.text-toolbar-color::-webkit-color-swatch {
+    border: none;
+    border-radius: 2px;
+}

@@ -26,9 +26,6 @@ class App {
         // Setup breadcrumb navigation
         this.setupBreadcrumbNavigation();
 
-        // Setup refresh button
-        this.setupRefreshButton();
-
         console.log('EyeDea app initialized');
     }
 
@@ -39,7 +36,10 @@ class App {
         this.currentBoardId = null;
         await this.viewManager.showHome();
         this.updateBreadcrumb('All Boards');
-        this.hideRefreshButton();
+
+        // Hide floating window button on home
+        const floatingBtn = document.getElementById('open-floating-btn');
+        if (floatingBtn) floatingBtn.style.display = 'none';
     }
 
     /**
@@ -49,17 +49,10 @@ class App {
         this.currentBoardId = boardId;
         await this.viewManager.showBoard(boardId);
         this.updateBreadcrumb(`All Boards > ${boardName}`);
-        this.showRefreshButton();
-    }
 
-    /**
-     * Refresh current board
-     */
-    async refreshBoard() {
-        if (this.currentBoardId) {
-            await this.viewManager.showBoard(this.currentBoardId);
-            console.log('Board refreshed');
-        }
+        // Show floating window button in board view
+        const floatingBtn = document.getElementById('open-floating-btn');
+        if (floatingBtn) floatingBtn.style.display = 'flex';
     }
 
     /**
@@ -101,37 +94,59 @@ class App {
                 }
             });
         }
-    }
 
-    /**
-     * Setup refresh button
-     */
-    setupRefreshButton() {
-        const refreshBtn = document.getElementById('refresh-board-btn');
-        if (refreshBtn) {
-            refreshBtn.addEventListener('click', async () => {
-                await this.refreshBoard();
+        // Setup floating window button
+        const floatingBtn = document.getElementById('open-floating-btn');
+        if (floatingBtn) {
+            floatingBtn.addEventListener('click', () => {
+                this.openFloatingWindow();
             });
         }
     }
 
     /**
-     * Show refresh button (when in board view)
+     * Open floating window for current board
      */
-    showRefreshButton() {
-        const refreshBtn = document.getElementById('refresh-board-btn');
-        if (refreshBtn) {
-            refreshBtn.style.display = 'flex';
-        }
-    }
+    async openFloatingWindow() {
+        if (!this.currentBoardId) return;
 
-    /**
-     * Hide refresh button (when in home view)
-     */
-    hideRefreshButton() {
-        const refreshBtn = document.getElementById('refresh-board-btn');
-        if (refreshBtn) {
-            refreshBtn.style.display = 'none';
+        // Import board manager and editor module to access current board and save function
+        const { boardManager } = await import('./board-manager.js');
+
+        // Trigger save via global save function if available
+        if (window.editorSaveNow) {
+            await window.editorSaveNow();
+        }
+
+        if (!window.__TAURI__) {
+            window.open('floating.html?id=' + this.currentBoardId, '_blank', 'width=800,height=600');
+            return;
+        }
+
+        try {
+            const { WebviewWindow } = window.__TAURI__.webviewWindow;
+            const windowLabel = 'floating_' + this.currentBoardId + '_' + Date.now();
+            const currentUrl = window.location.href.split('?')[0];
+            const baseUrl = currentUrl.substring(0, currentUrl.lastIndexOf('/'));
+            const floatingUrl = `${baseUrl}/floating.html?id=${this.currentBoardId}`;
+
+            const floatingWindow = new WebviewWindow(windowLabel, {
+                url: floatingUrl,
+                title: boardManager.currentBoard?.name || 'Board',
+                width: 800,
+                height: 600,
+                alwaysOnTop: false,
+            });
+
+            floatingWindow.once('tauri://created', () => {
+                console.log('Floating window created');
+            });
+
+            floatingWindow.once('tauri://error', (e) => {
+                console.error('Error creating floating window:', e);
+            });
+        } catch (err) {
+            console.error('Error opening floating window:', err);
         }
     }
 

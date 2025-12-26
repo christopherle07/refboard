@@ -56,8 +56,8 @@ export class ViewManager {
     async showBoard(boardId) {
         console.log('[ViewManager] Showing board:', boardId);
 
-        // Cleanup previous board if switching boards
-        if (this.currentView === 'board' && this.currentBoardId !== boardId) {
+        // Cleanup previous board if already in board view (including refreshes)
+        if (this.currentView === 'board') {
             try {
                 console.log('[ViewManager] Cleaning up previous board...');
                 await cleanupEditor(this.boardContainer);

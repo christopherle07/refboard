@@ -96,6 +96,29 @@
     background: var(--bg-active);
 }
 
+/* Floating window button specific styling */
+#open-floating-btn {
+    border: 1px solid var(--border-color);
+    margin-left: 8px;
+}
+
+#open-floating-btn img {
+    display: block;
+    transition: filter 0.2s;
+}
+
+/* Light theme: grey icon (#5f6368) */
+[data-theme="light"] #open-floating-btn img {
+    filter: brightness(0) saturate(100%) invert(42%) sepia(6%) saturate(473%) hue-rotate(169deg) brightness(95%) contrast(87%);
+}
+
+/* Dark themes: purple icon (#9b7fd4) */
+[data-theme="dark"] #open-floating-btn img,
+[data-theme="midnight"] #open-floating-btn img,
+[data-theme="charcoal"] #open-floating-btn img {
+    filter: brightness(0) saturate(100%) invert(65%) sepia(27%) saturate(1346%) hue-rotate(209deg) brightness(93%) contrast(90%);
+}
+
 /* Titlebar Actions */
 .titlebar-actions {
     display: flex;
@@ -316,9 +339,13 @@ html[data-theme="dark"] .search-action-btn:hover .search-action-icon {
 }
 
 .board-card:hover {
-    border-color: var(--border-color-hover);
-    box-shadow: var(--shadow-md);
+    background: var(--bg-hover);
     transform: translateY(-2px);
+}
+
+.board-card:hover .board-delete-btn {
+    opacity: 1;
+    pointer-events: auto;
 }
 
 .board-card-thumbnail {
@@ -342,10 +369,48 @@ html[data-theme="dark"] .search-action-btn:hover .search-action-icon {
     z-index: 0;
 }
 
-/* Make delete button always visible for debugging */
 .board-delete-btn {
-    opacity: 1 !important;
-    pointer-events: auto !important;
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.9);
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: all 0.2s;
+    z-index: 10;
+}
+
+.board-delete-btn svg {
+    width: 16px;
+    height: 16px;
+    color: #4a4a4a;
+}
+
+body[data-theme="dark"] .board-delete-btn,
+body[data-theme="midnight"] .board-delete-btn {
+    background: rgba(0, 0, 0, 0.7);
+}
+
+body[data-theme="dark"] .board-delete-btn svg,
+body[data-theme="midnight"] .board-delete-btn svg {
+    color: #a855f7;
+}
+
+.board-delete-btn:hover {
+    background: rgba(232, 17, 35, 0.9);
+    transform: scale(1.1);
+}
+
+.board-delete-btn:hover svg {
+    color: white;
 }
 
 .board-card-content {

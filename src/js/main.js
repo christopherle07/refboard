@@ -211,7 +211,11 @@ function renderBoards() {
         const deleteBtn = document.createElement('button');
         deleteBtn.className = 'board-delete-btn';
         deleteBtn.title = 'Delete board';
-        deleteBtn.textContent = '×';
+        deleteBtn.innerHTML = `
+            <svg width="16" height="16" viewBox="0 0 1024 1024" fill="currentColor">
+                <path d="M170.666667 448H810.666667v448a64 64 0 0 1-64 64h-512a64 64 0 0 1-64-64V448z m-64 480c0 52.992 43.008 96 96 96h576c52.992 0 96-43.008 96-96V384h-768v544z m224-64a32 32 0 0 0 32-32v-256a32 32 0 0 0-64 0v256c0 17.664 14.336 32 32 32z m160 0a32 32 0 0 0 32-32v-256a32 32 0 0 0-64 0v256c0 17.664 14.336 32 32 32zM842.666667 256h-704a32 32 0 0 1 0-64h704a32 32 0 0 1 0 64zM394.666667 64h192a32 32 0 0 1 0 64h-192a32 32 0 0 1 0-64z m480 64H682.666667V64A64 64 0 0 0 618.666667 0h-256A64 64 0 0 0 298.666667 64v64H106.666667a64 64 0 0 0-64 64V256c0 35.328 28.672 64 64 64h768A64 64 0 0 0 938.666667 256v-64a64 64 0 0 0-64-64z m-224 736A32 32 0 0 0 682.666667 832v-256a32 32 0 0 0-64 0v256c0 17.664 14.336 32 32 32z" />
+            </svg>
+        `;
         deleteBtn.addEventListener('click', async (e) => {
             e.preventDefault();
             e.stopPropagation(); // Prevent opening the board

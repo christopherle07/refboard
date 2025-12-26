@@ -361,10 +361,11 @@ export async function initEditor(boardId, container) {
     });
 
     renderLayers();
-    renderAssets();
 
-    // Sync board assets with canvas images on initial load
-    syncBoardAssetsWithCanvas();
+    // Build board assets from canvas images on load
+    await buildBoardAssetsFromCanvas();
+
+    renderAssets();
 
     // Add dragover handler to layers list to allow drops in empty space
     const layersList = getElement('layers-list');
@@ -381,6 +382,9 @@ export async function initEditor(boardId, container) {
 
     // Save the instance state after initialization
     saveActiveInstance();
+
+    // Make save function globally accessible for app.js
+    window.editorSaveNow = saveNow;
 
     console.log('[initEditor] Editor initialization complete!');
 }
@@ -464,8 +468,6 @@ function setupEventListeners(container) {
 
         scheduleSave();
     });
-
-    $('open-floating-btn').addEventListener('click', openFloatingWindow);
 
     // Assets library event listeners
     $('assets-library-import-btn').addEventListener('click', () => {
@@ -2864,25 +2866,58 @@ function appendAssetToDOM(asset, container) {
     });
 }
 
+// Build board assets from canvas images (used on initial load)
+async function buildBoardAssetsFromCanvas() {
+    const board = boardManager.currentBoard;
+    if (!board) return;
+
+    // Get all assets from "All Assets"
+    const allAssets = await boardManager.getAllAssets();
+    const allAssetsMap = new Map(allAssets.map(a => [a.src, a]));
+
+    // Build board assets from canvas images
+    const boardAssets = canvas.images.map(img => {
+        // Try to find in all assets first
+        const existing = allAssetsMap.get(img.img.src);
+        if (existing) {
+            return {
+                id: existing.id,
+                name: img.name,
+                src: img.img.src
+            };
+        }
+        // Create new asset entry
+        return {
+            id: Date.now() + Math.random(),
+            name: img.name,
+            src: img.img.src
+        };
+    });
+
+    // Update board with these assets
+    board.assets = boardAssets;
+    await boardManager.updateBoard(currentBoardId, { assets: boardAssets });
+}
+
 // Sync board assets with actual canvas images
 async function syncBoardAssetsWithCanvas() {
     const board = boardManager.currentBoard;
-    if (!board || !board.assets) return;
+    if (!board) return;
 
     // Get all image sources currently on the canvas
     const canvasImageSources = new Set(canvas.images.map(img => img.img.src));
 
     // Filter board assets to only include those that exist on the canvas
-    const syncedAssets = board.assets.filter(asset => canvasImageSources.has(asset.src));
+    const syncedAssets = (board.assets || []).filter(asset => canvasImageSources.has(asset.src));
 
     // Only update if there's a difference
-    if (syncedAssets.length !== board.assets.length) {
+    if (syncedAssets.length !== (board.assets || []).length) {
         board.assets = syncedAssets;
         await boardManager.updateBoard(currentBoardId, { assets: syncedAssets });
 
         // Refresh the assets library if we're showing board assets
         if (!showAllAssets) {
-            loadAssetsLibrary();
+            renderAssets();
         }
     }
 }
@@ -3812,41 +3847,6 @@ function importBoard() {
     };
 
     input.click();
-}
-
-async function openFloatingWindow() {
-    saveNow();
-
-    if (!window.__TAURI__) {
-        window.open('floating.html?id=' + currentBoardId, '_blank', 'width=800,height=600');
-        return;
-    }
-
-    try {
-        const { WebviewWindow } = window.__TAURI__.webviewWindow;
-        const windowLabel = 'floating_' + currentBoardId + '_' + Date.now();
-        const currentUrl = window.location.href.split('?')[0];
-        const baseUrl = currentUrl.substring(0, currentUrl.lastIndexOf('/'));
-        const floatingUrl = `${baseUrl}/floating.html?id=${currentBoardId}`;
-
-        const floatingWindow = new WebviewWindow(windowLabel, {
-            url: floatingUrl,
-            title: boardManager.currentBoard.name,
-            width: 800,
-            height: 600,
-            alwaysOnTop: false,
-            decorations: false,
-            resizable: true,
-            center: true
-        });
-
-        floatingWindow.once('tauri://error', (e) => {
-            console.error('Error creating floating window:', e);
-        });
-    } catch (err) {
-        console.error('Error opening floating window:', err);
-        console.error('Tauri object structure:', window.__TAURI__);
-    }
 }
 
 
