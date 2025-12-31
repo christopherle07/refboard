@@ -2628,6 +2628,8 @@ function setupContextMenu() {
 
     let contextMenuMousePos = { x: 0, y: 0 };
 
+    let contextMenuJustOpened = false;
+
     canvasContainer.addEventListener('contextmenu', (e) => {
         e.preventDefault();
 
@@ -2657,10 +2659,22 @@ function setupContextMenu() {
         contextMenu.style.left = `${e.clientX}px`;
         contextMenu.style.top = `${e.clientY}px`;
         contextMenu.classList.add('show');
+
+        // Prevent click event from immediately closing the menu on macOS
+        contextMenuJustOpened = true;
+        setTimeout(() => {
+            contextMenuJustOpened = false;
+        }, 100);
     });
 
-    document.addEventListener('click', () => {
-        contextMenu.classList.remove('show');
+    document.addEventListener('click', (e) => {
+        // Don't close if menu was just opened (macOS ctrl+click issue)
+        if (contextMenuJustOpened) return;
+
+        // Don't close if clicking inside the context menu itself
+        if (!contextMenu.contains(e.target)) {
+            contextMenu.classList.remove('show');
+        }
     });
 
     deleteSelectedItem.addEventListener('click', () => {

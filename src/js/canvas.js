@@ -976,6 +976,7 @@ export class Canvas {
 
     onContextMenu(e) {
         e.preventDefault();
+        // Don't stopPropagation - let it bubble to editor.js handler
         const rect = this.canvas.getBoundingClientRect();
         const { x, y } = this.screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
 

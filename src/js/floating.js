@@ -317,18 +317,19 @@ function setupContextMenu() {
     }
     
     let clickedImageId = null;
-    
+    let contextMenuJustOpened = false;
+
     canvas.canvas.addEventListener('contextmenu', (e) => {
         e.preventDefault();
 
         hiddenLayersMenu.classList.remove('show');
-        
+
         const rect = canvas.canvas.getBoundingClientRect();
         const { x, y } = canvas.screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
         const clickedImage = canvas.getImageAtPoint(x, y);
-        
+
         contextMenu.innerHTML = '';
-        
+
         if (clickedImage) {
             clickedImageId = clickedImage.id;
             contextMenu.innerHTML = `
@@ -337,16 +338,22 @@ function setupContextMenu() {
         } else {
             clickedImageId = null;
             const hiddenImages = canvas.images.filter(img => img.visible === false);
-            
+
             contextMenu.innerHTML = `
                 <div class="context-menu-item" data-action="recenter">Recenter View</div>
                 <div class="context-menu-item ${hiddenImages.length === 0 ? 'disabled' : ''}" data-action="hidden-layers">Hidden Layers ${hiddenImages.length > 0 ? '▶' : ''}</div>
             `;
         }
-        
+
         contextMenu.style.left = e.clientX + 'px';
         contextMenu.style.top = e.clientY + 'px';
         contextMenu.classList.add('show');
+
+        // Prevent click event from immediately closing the menu on macOS
+        contextMenuJustOpened = true;
+        setTimeout(() => {
+            contextMenuJustOpened = false;
+        }, 100);
     });
     
     contextMenu.addEventListener('click', (e) => {
@@ -395,6 +402,9 @@ function setupContextMenu() {
     });
     
     document.addEventListener('click', (e) => {
+        // Don't close if menu was just opened (macOS ctrl+click issue)
+        if (contextMenuJustOpened) return;
+
         if (!contextMenu.contains(e.target) && !hiddenLayersMenu.contains(e.target) && e.target !== canvas.canvas) {
             contextMenu.classList.remove('show');
             hiddenLayersMenu.classList.remove('show');
