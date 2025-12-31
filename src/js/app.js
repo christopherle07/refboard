@@ -136,6 +136,11 @@ class App {
                 width: 800,
                 height: 600,
                 alwaysOnTop: false,
+                decorations: false,
+                titleBarStyle: 'overlay',
+                resizable: true,
+                center: true,
+                transparent: false
             });
 
             floatingWindow.once('tauri://created', () => {

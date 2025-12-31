@@ -48,6 +48,7 @@ export function showSettingsModal() {
                 </div>
                 <nav class="settings-nav">
                     <button class="settings-nav-item active" data-section="canvas">Canvas</button>
+                    <button class="settings-nav-item" data-section="themes">Themes</button>
                     <button class="settings-nav-item" data-section="about">About</button>
                 </nav>
             </div>
@@ -57,17 +58,6 @@ export function showSettingsModal() {
                     <h3>Canvas</h3>
 
                     <div class="setting-group">
-                        <div class="setting-row">
-                            <div class="setting-info">
-                                <span class="setting-row-label">Theme</span>
-                                <span class="setting-description">Color scheme for the app</span>
-                            </div>
-                            <select id="theme-select" class="setting-select">
-                                <option value="light" ${(settings.theme || 'light') === 'light' ? 'selected' : ''}>Light</option>
-                                <option value="dark" ${settings.theme === 'dark' ? 'selected' : ''}>Dark</option>
-                            </select>
-                        </div>
-
                         <div class="setting-row">
                             <div class="setting-info">
                                 <span class="setting-row-label">Show Grid</span>
@@ -120,6 +110,41 @@ export function showSettingsModal() {
                     </div>
                 </div>
 
+                <div class="settings-section" data-section="themes">
+                    <h3>Themes</h3>
+                    <p class="section-description">Choose a color scheme for the app</p>
+
+                    <div class="themes-grid">
+                        <div class="theme-card ${(settings.theme || 'light') === 'light' ? 'active' : ''}" data-theme="light">
+                            <div class="theme-preview light-preview">
+                                <div class="theme-preview-header"></div>
+                                <div class="theme-preview-body">
+                                    <div class="theme-preview-sidebar"></div>
+                                    <div class="theme-preview-content"></div>
+                                </div>
+                            </div>
+                            <div class="theme-info">
+                                <span class="theme-name">Light</span>
+                                ${(settings.theme || 'light') === 'light' ? '<span class="theme-badge">Active</span>' : ''}
+                            </div>
+                        </div>
+
+                        <div class="theme-card ${settings.theme === 'dark' ? 'active' : ''}" data-theme="dark">
+                            <div class="theme-preview dark-preview">
+                                <div class="theme-preview-header"></div>
+                                <div class="theme-preview-body">
+                                    <div class="theme-preview-sidebar"></div>
+                                    <div class="theme-preview-content"></div>
+                                </div>
+                            </div>
+                            <div class="theme-info">
+                                <span class="theme-name">Dark</span>
+                                ${settings.theme === 'dark' ? '<span class="theme-badge">Active</span>' : ''}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="settings-section" data-section="about">
                     <h3>About</h3>
 
@@ -129,11 +154,13 @@ export function showSettingsModal() {
                             <p class="about-description">A visual reference board application for organizing and managing your creative references.</p>
 
                             <div class="about-links">
-                                <a href="https://discord.gg/6EcTTFDDA3" target="_blank" class="about-link discord-link">
-                                    <svg width="20" height="20" viewBox="0 0 512 388" fill="currentColor">
+                                <a href="https://discord.gg/6EcTTFDDA3" target="_blank" class="about-icon-link discord-link" title="Join Discord Community">
+                                    <svg width="32" height="32" viewBox="0 0 512 388" fill="currentColor">
                                         <path d="M433.713 32.491A424.231 424.231 0 00328.061.005c-4.953 8.873-9.488 18.156-13.492 27.509a393.937 393.937 0 00-58.629-4.408c-19.594 0-39.284 1.489-58.637 4.37-3.952-9.33-8.543-18.581-13.525-27.476-36.435 6.212-72.045 17.196-105.676 32.555-66.867 98.92-84.988 195.368-75.928 290.446a425.967 425.967 0 00129.563 65.03c10.447-14.103 19.806-29.116 27.752-44.74a273.827 273.827 0 01-43.716-20.862c3.665-2.658 7.249-5.396 10.712-8.055 40.496 19.019 84.745 28.94 129.514 28.94 44.77 0 89.019-9.921 129.517-28.943 3.504 2.86 7.088 5.598 10.712 8.055a275.576 275.576 0 01-43.796 20.918 311.49 311.49 0 0027.752 44.705 424.235 424.235 0 00129.65-65.019l-.011.011c10.632-110.26-18.162-205.822-76.11-290.55zM170.948 264.529c-25.249 0-46.11-22.914-46.11-51.104 0-28.189 20.135-51.304 46.029-51.304 25.895 0 46.592 23.115 46.15 51.304-.443 28.19-20.336 51.104-46.069 51.104zm170.102 0c-25.29 0-46.069-22.914-46.069-51.104 0-28.189 20.135-51.304 46.069-51.304s46.472 23.115 46.029 51.304c-.443 28.19-20.296 51.104-46.029 51.104z"/>
                                     </svg>
-                                    <span>Join Discord Community</span>
+                                </a>
+                                <a href="https://x.com/eyedeaUS" target="_blank" class="about-icon-link twitter-link" title="Follow on X">
+                                    <img src="assets/x-social-media-logo-icon.svg" alt="X/Twitter" width="32" height="32">
                                 </a>
                             </div>
                         </div>
@@ -193,21 +220,40 @@ export function showSettingsModal() {
     });
 
     // Settings controls
-    const themeSelect = modal.querySelector('#theme-select');
     const showGridCheckbox = modal.querySelector('#show-grid');
     const gridSizeSelect = modal.querySelector('#grid-size');
     const enableSnappingCheckbox = modal.querySelector('#enable-snapping');
     const snapThresholdSelect = modal.querySelector('#snap-threshold');
 
-    if (themeSelect) {
-        themeSelect.addEventListener('change', (e) => {
-            settings.theme = e.target.value;
+    // Theme card selection
+    const themeCards = modal.querySelectorAll('.theme-card');
+    themeCards.forEach(card => {
+        card.addEventListener('click', () => {
+            const theme = card.dataset.theme;
+
+            // Update active state
+            themeCards.forEach(c => c.classList.remove('active'));
+            card.classList.add('active');
+
+            // Update badge
+            themeCards.forEach(c => {
+                const badge = c.querySelector('.theme-badge');
+                if (badge) badge.remove();
+            });
+            const themeName = card.querySelector('.theme-info');
+            const badge = document.createElement('span');
+            badge.className = 'theme-badge';
+            badge.textContent = 'Active';
+            themeName.appendChild(badge);
+
+            // Save and apply theme
+            settings.theme = theme;
             saveSettings(settings);
-            document.documentElement.setAttribute('data-theme', e.target.value);
-            document.body.setAttribute('data-theme', e.target.value);
-            console.log('Theme changed to:', e.target.value);
+            document.documentElement.setAttribute('data-theme', theme);
+            document.body.setAttribute('data-theme', theme);
+            console.log('Theme changed to:', theme);
         });
-    }
+    });
 
     if (showGridCheckbox) {
         showGridCheckbox.addEventListener('change', async (e) => {

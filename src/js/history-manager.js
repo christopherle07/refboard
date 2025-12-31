@@ -165,6 +165,27 @@ export class HistoryManager {
                     }
                 }
                 break;
+
+            case 'crop':
+                // Undo crop - restore original image
+                console.log('Undoing crop:', action.data);
+                const img = this.canvas.images.find(i => i.id === action.data.id);
+                console.log('Found image:', img);
+                if (img) {
+                    const oldImg = new Image();
+                    oldImg.onload = () => {
+                        console.log('Old image loaded, restoring');
+                        img.img = oldImg;
+                        img.src = action.data.oldSrc;
+                        img.x = action.data.oldX;
+                        img.y = action.data.oldY;
+                        img.width = action.data.oldWidth;
+                        img.height = action.data.oldHeight;
+                        this.canvas.needsRender = true;
+                    };
+                    oldImg.src = action.data.oldSrc;
+                }
+                break;
         }
 
         this.canvas.needsRender = true;
@@ -248,6 +269,24 @@ export class HistoryManager {
                             }
                         }
                     }
+                }
+                break;
+
+            case 'crop':
+                // Redo crop - apply cropped image
+                const img = this.canvas.images.find(i => i.id === action.data.id);
+                if (img) {
+                    const newImg = new Image();
+                    newImg.onload = () => {
+                        img.img = newImg;
+                        img.src = action.data.newSrc;
+                        img.x = action.data.newX;
+                        img.y = action.data.newY;
+                        img.width = action.data.newWidth;
+                        img.height = action.data.newHeight;
+                        this.canvas.needsRender = true;
+                    };
+                    newImg.src = action.data.newSrc;
                 }
                 break;
         }

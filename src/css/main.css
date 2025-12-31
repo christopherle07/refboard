@@ -338,8 +338,9 @@ body {
 }
 
 .board-card:hover {
-    border-color: #5B8AC5;
-    box-shadow: 0 0 0 2px #5B8AC5;
+    background: var(--bg-hover);
+    border-color: var(--border-color);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 }
 
 /* Thumbnail Section */
@@ -663,6 +664,7 @@ body {
 #main-canvas {
     display: block;
     cursor: default;
+    touch-action: none; /* Prevent browser gestures to support pen/tablet input */
 }
 
 /* Sidebar Footer */
@@ -1057,4 +1059,12 @@ body {
     height: 20px;
     background: var(--border-color);
     margin: 0 2px;
+}
+
+.floating-label {
+    font-size: 12px;
+    color: var(--text-secondary);
+    font-weight: 500;
+    white-space: nowrap;
+    user-select: none;
 }

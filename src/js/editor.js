@@ -454,57 +454,69 @@ function setupEventListeners(container) {
     // Helper function to get element scoped to this container
     const $ = (id) => container.querySelector('#' + id);
 
-    $('bg-color').addEventListener('change', (e) => {
-        const color = e.target.value;
-        canvas.setBackgroundColor(color);
+    const bgColorInput = $('bg-color');
+    if (bgColorInput) {
+        bgColorInput.addEventListener('change', (e) => {
+            const color = e.target.value;
+            canvas.setBackgroundColor(color);
 
-        // Sync background color to floating window
-        if (syncChannel) {
-            syncChannel.postMessage({
-                type: 'background_color_changed',
-                color: color
-            });
-        }
+            // Sync background color to floating window
+            if (syncChannel) {
+                syncChannel.postMessage({
+                    type: 'background_color_changed',
+                    color: color
+                });
+            }
 
-        scheduleSave();
-    });
+            scheduleSave();
+        });
+    }
 
     // Assets library event listeners
-    $('assets-library-import-btn').addEventListener('click', () => {
-        importAssetsToLibrary();
-    });
+    const assetsLibraryImportBtn = $('assets-library-import-btn');
+    if (assetsLibraryImportBtn) {
+        assetsLibraryImportBtn.addEventListener('click', () => {
+            importAssetsToLibrary();
+        });
+    }
 
     // Assets view buttons
-    $('board-assets-btn').addEventListener('click', () => {
-        showAllAssets = false;
-        $('board-assets-btn').classList.add('active');
-        $('all-assets-btn').classList.remove('active');
-        loadAssetsLibrary();
-    });
+    const boardAssetsBtn = $('board-assets-btn');
+    const allAssetsBtn = $('all-assets-btn');
+    if (boardAssetsBtn) {
+        boardAssetsBtn.addEventListener('click', () => {
+            showAllAssets = false;
+            boardAssetsBtn.classList.add('active');
+            if (allAssetsBtn) allAssetsBtn.classList.remove('active');
+            loadAssetsLibrary();
+        });
+    }
 
-    $('all-assets-btn').addEventListener('click', () => {
-        showAllAssets = true;
-        $('all-assets-btn').classList.add('active');
-        $('board-assets-btn').classList.remove('active');
-        loadAssetsLibrary();
-    });
-
-    $('back-to-canvas-btn').addEventListener('click', () => {
-        window.toggleAssetsLibrary();
-    });
+    if (allAssetsBtn) {
+        allAssetsBtn.addEventListener('click', () => {
+            showAllAssets = true;
+            allAssetsBtn.classList.add('active');
+            if (boardAssetsBtn) boardAssetsBtn.classList.remove('active');
+            loadAssetsLibrary();
+        });
+    }
 
     // Assets search bar
     const assetsSearchBar = $('assets-search-bar');
-
-    assetsSearchBar.addEventListener('input', (e) => {
-        loadAssetsLibrary(e.target.value);
-    });
+    if (assetsSearchBar) {
+        assetsSearchBar.addEventListener('input', (e) => {
+            loadAssetsLibrary(e.target.value);
+        });
+    }
 
     // Tag filter clear button
-    $('assets-tag-clear-btn').addEventListener('click', () => {
-        selectedTagFilters = [];
-        loadAssetsLibrary(assetsSearchBar.value);
-    });
+    const assetsTagClearBtn = $('assets-tag-clear-btn');
+    if (assetsTagClearBtn && assetsSearchBar) {
+        assetsTagClearBtn.addEventListener('click', () => {
+            selectedTagFilters = [];
+            loadAssetsLibrary(assetsSearchBar.value);
+        });
+    }
 
     // Asset modal event listeners
     setupAssetSidebar();
@@ -578,17 +590,27 @@ function setupEventListeners(container) {
 
     setupContextMenu();
     setupBoardDropdown();
-    
-    $('collapse-layers-btn').addEventListener('click', (e) => {
-        const content = $('layers-content');
-        const btn = e.currentTarget;
-        content.classList.toggle('collapsed');
 
-        const isCollapsed = content.classList.contains('collapsed');
-        btn.innerHTML = isCollapsed
-            ? '<img src="assets/expand.svg" alt="Expand" class="collapse-icon" width="14" height="14"/>'
-            : '<img src="assets/collapse.svg" alt="Collapse" class="collapse-icon" width="14" height="14"/>';
-    });
+    // Setup collapse button for layers sidebar
+    const collapseLayersBtn = container.querySelector('#collapse-layers-btn');
+    if (collapseLayersBtn) {
+        // Clone to remove old event listeners
+        const newCollapseBtn = collapseLayersBtn.cloneNode(true);
+        collapseLayersBtn.parentNode.replaceChild(newCollapseBtn, collapseLayersBtn);
+
+        newCollapseBtn.addEventListener('click', (e) => {
+            const content = container.querySelector('#layers-content');
+            const btn = e.currentTarget;
+            if (content) {
+                content.classList.toggle('collapsed');
+
+                const isCollapsed = content.classList.contains('collapsed');
+                btn.innerHTML = isCollapsed
+                    ? '<img src="assets/expand.svg" alt="Expand" class="collapse-icon" width="14" height="14"/>'
+                    : '<img src="assets/collapse.svg" alt="Collapse" class="collapse-icon" width="14" height="14"/>';
+            }
+        });
+    }
 
     const assetsViewToggle = $('assets-view-toggle');
     if (assetsViewToggle) {
@@ -2601,7 +2623,7 @@ function setupContextMenu() {
     const canvasContainer = getElement('canvas-container');
     const deleteSelectedItem = getElement('context-delete-selected');
     const deselectAllItem = getElement('context-deselect-all');
-    const enableRotateItem = getElement('context-enable-rotate');
+    const cropImageItem = getElement('context-crop-image');
     const separator = getElement('context-separator');
 
     let contextMenuMousePos = { x: 0, y: 0 };
@@ -2609,7 +2631,7 @@ function setupContextMenu() {
     canvasContainer.addEventListener('contextmenu', (e) => {
         e.preventDefault();
 
-        // Store mouse position in world coordinates for rotation
+        // Store mouse position in world coordinates
         const rect = canvas.canvas.getBoundingClientRect();
         const worldPos = canvas.screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
         contextMenuMousePos = worldPos;
@@ -2629,7 +2651,7 @@ function setupContextMenu() {
 
         deleteSelectedItem.style.display = hasSelection ? 'block' : 'none';
         deselectAllItem.style.display = hasSelection ? 'block' : 'none';
-        enableRotateItem.style.display = hasImageClick ? 'block' : 'none';
+        cropImageItem.style.display = hasImageClick ? 'block' : 'none';
         separator.style.display = (hasSelection || hasImageClick) ? 'block' : 'none';
 
         contextMenu.style.left = `${e.clientX}px`;
@@ -2658,9 +2680,9 @@ function setupContextMenu() {
         contextMenu.classList.remove('show');
     });
 
-    enableRotateItem.addEventListener('click', () => {
+    cropImageItem.addEventListener('click', () => {
         if (canvas.contextMenuImage) {
-            canvas.enableRotationMode(canvas.contextMenuImage, contextMenuMousePos.x, contextMenuMousePos.y);
+            canvas.enableCropMode(canvas.contextMenuImage);
         }
         contextMenu.classList.remove('show');
     });
@@ -2670,16 +2692,13 @@ function setupContextMenu() {
         contextMenu.classList.remove('show');
     });
 
-    getElement('context-reset-zoom').addEventListener('click', () => {
-        canvas.resetZoom();
-        contextMenu.classList.remove('show');
-    });
-
     getElement('context-shortcuts').addEventListener('click', () => {
         contextMenu.classList.remove('show');
         showKeyboardShortcutsModal();
     });
 }
+
+let boardDropdownSetup = false;
 
 function setupBoardDropdown() {
     console.log('[setupBoardDropdown] Setting up, activeContainer:', !!activeContainer);
@@ -2699,38 +2718,66 @@ function setupBoardDropdown() {
         return;
     }
 
+    // Remove old listeners by cloning elements (if already set up)
+    if (boardDropdownSetup) {
+        const newDropdownBtn = dropdownBtn.cloneNode(true);
+        dropdownBtn.parentNode.replaceChild(newDropdownBtn, dropdownBtn);
+        const newBoardName = boardName.cloneNode(true);
+        boardName.parentNode.replaceChild(newBoardName, boardName);
+
+        // Update references
+        const updatedBtn = getElement('board-dropdown-btn');
+        const updatedName = getElement('board-name');
+
+        if (!updatedBtn || !updatedName) return;
+    }
+
     const toggleDropdown = (e) => {
         e.stopPropagation();
         console.log('[toggleDropdown] Toggling dropdown, currently has show:', dropdownMenu.classList.contains('show'));
         dropdownMenu.classList.toggle('show');
     };
 
-    dropdownBtn.addEventListener('click', toggleDropdown);
-    boardName.addEventListener('click', toggleDropdown);
+    const currentBtn = getElement('board-dropdown-btn');
+    const currentName = getElement('board-name');
+
+    if (currentBtn) currentBtn.addEventListener('click', toggleDropdown);
+    if (currentName) currentName.addEventListener('click', toggleDropdown);
     console.log('[setupBoardDropdown] Event listeners attached');
+
+    boardDropdownSetup = true;
 
     document.addEventListener('click', () => {
         dropdownMenu.classList.remove('show');
     });
 
-    const renameItem = getElement('dropdown-rename');
-    const exportItem = getElement('dropdown-export');
-    const importItem = getElement('dropdown-import');
+    // Clone menu items to remove old event listeners
+    let renameItem = getElement('dropdown-rename');
+    let exportItem = getElement('dropdown-export');
+    let importItem = getElement('dropdown-import');
 
     if (renameItem) {
+        const newRenameItem = renameItem.cloneNode(true);
+        renameItem.parentNode.replaceChild(newRenameItem, renameItem);
+        renameItem = newRenameItem;
+
         renameItem.addEventListener('click', async () => {
             dropdownMenu.classList.remove('show');
-            const currentName = boardName.textContent;
+            const currentName = getElement('board-name').textContent;
             const newName = await showInputModal('Rename Board', 'Enter a new name for this board:', currentName, 'Board name');
             if (newName && newName !== currentName) {
                 await boardManager.updateBoard(currentBoardId, { name: newName });
-                boardName.textContent = newName;
+                getElement('board-name').textContent = newName;
                 showToast('Board renamed successfully', 'success');
             }
         });
     }
 
     if (exportItem) {
+        const newExportItem = exportItem.cloneNode(true);
+        exportItem.parentNode.replaceChild(newExportItem, exportItem);
+        exportItem = newExportItem;
+
         exportItem.addEventListener('click', () => {
             dropdownMenu.classList.remove('show');
             exportBoard();
@@ -2738,6 +2785,10 @@ function setupBoardDropdown() {
     }
 
     if (importItem) {
+        const newImportItem = importItem.cloneNode(true);
+        importItem.parentNode.replaceChild(newImportItem, importItem);
+        importItem = newImportItem;
+
         importItem.addEventListener('click', () => {
             dropdownMenu.classList.remove('show');
             importBoard();
@@ -3989,11 +4040,17 @@ function setupShapeFloatingToolbar(obj) {
     const strokeToggle = getElement('floating-shape-stroke-toggle');
     const strokeColor = getElement('floating-shape-stroke-color');
     const strokeWidth = getElement('floating-shape-stroke-width');
+    const radiusToggle = getElement('floating-shape-radius-toggle');
+    const cornerRadius = getElement('floating-shape-corner-radius');
+    const radiusSeparator = getElement('corner-radius-separator');
 
     // Set current values
     fillColor.value = obj.fillColor || '#3b82f6';
     strokeColor.value = obj.strokeColor || '#000000';
     strokeWidth.value = obj.strokeWidth || 2;
+    if (cornerRadius) {
+        cornerRadius.value = obj.cornerRadius || 0;
+    }
 
     // Update shape button states
     const currentShapeType = obj.shapeType || 'square';
@@ -4005,6 +4062,22 @@ function setupShapeFloatingToolbar(obj) {
         }
     });
 
+    // Show/hide corner radius controls based on shape type
+    const supportsCornerRadius = currentShapeType === 'square' || currentShapeType === 'rectangle';
+    if (radiusToggle && radiusSeparator) {
+        radiusToggle.style.display = supportsCornerRadius ? 'block' : 'none';
+        radiusSeparator.style.display = supportsCornerRadius ? 'block' : 'none';
+    }
+
+    // Update radius toggle state and input visibility
+    const hasRadius = obj.cornerRadius > 0;
+    if (radiusToggle) {
+        radiusToggle.classList.toggle('active', hasRadius);
+    }
+    if (cornerRadius) {
+        cornerRadius.style.display = hasRadius ? 'block' : 'none';
+    }
+
     // Update stroke toggle state
     strokeToggle.classList.toggle('active', obj.hasStroke !== false);
 
@@ -4015,6 +4088,13 @@ function setupShapeFloatingToolbar(obj) {
             canvas.objectsManager.updateSelectedObject({ shapeType: newShapeType });
             shapeButtons.forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
+
+            // Update corner radius visibility based on shape type
+            const supportsRadius = newShapeType === 'square' || newShapeType === 'rectangle';
+            if (radiusToggle && radiusSeparator) {
+                radiusToggle.style.display = supportsRadius ? 'block' : 'none';
+                radiusSeparator.style.display = supportsRadius ? 'block' : 'none';
+            }
         };
     });
 
@@ -4026,8 +4106,32 @@ function setupShapeFloatingToolbar(obj) {
         strokeToggle.classList.toggle('active');
     };
 
+    // Radius toggle button
+    if (radiusToggle && cornerRadius) {
+        radiusToggle.onclick = () => {
+            const isActive = radiusToggle.classList.contains('active');
+            if (isActive) {
+                // Turning off - set radius to 0 and hide input
+                canvas.objectsManager.updateSelectedObject({ cornerRadius: 0 });
+                cornerRadius.value = 0;
+                cornerRadius.style.display = 'none';
+                radiusToggle.classList.remove('active');
+            } else {
+                // Turning on - set default radius and show input
+                canvas.objectsManager.updateSelectedObject({ cornerRadius: 10 });
+                cornerRadius.value = 10;
+                cornerRadius.style.display = 'block';
+                radiusToggle.classList.add('active');
+            }
+        };
+    }
+
     strokeColor.oninput = () => canvas.objectsManager.updateSelectedObject({ strokeColor: strokeColor.value });
     strokeWidth.oninput = () => canvas.objectsManager.updateSelectedObject({ strokeWidth: parseInt(strokeWidth.value) });
+
+    if (cornerRadius) {
+        cornerRadius.oninput = () => canvas.objectsManager.updateSelectedObject({ cornerRadius: parseInt(cornerRadius.value) || 0 });
+    }
 }
 
 
@@ -4057,6 +4161,13 @@ function setupShapePropertyListeners() {
     shapeStrokeWidth.oninput = () => {
         canvas.objectsManager.updateSelectedObject({ strokeWidth: parseInt(shapeStrokeWidth.value) });
     };
+
+    const shapeCornerRadius = getElement('shape-corner-radius');
+    if (shapeCornerRadius) {
+        shapeCornerRadius.oninput = () => {
+            canvas.objectsManager.updateSelectedObject({ cornerRadius: parseInt(shapeCornerRadius.value) || 0 });
+        };
+    }
 }
 
 function removeShapePropertyListeners() {
@@ -4136,11 +4247,14 @@ function setupShapeTool() {
     const strokeToggleRow = shapeHasStroke.closest('.property-row').parentElement;
     const strokeColorRow = getElement('shape-stroke-color-row');
     const strokeWidthRow = getElement('shape-stroke-width-row');
+    const cornerRadiusRow = getElement('shape-corner-radius-row');
+    const shapeCornerRadius = getElement('shape-corner-radius');
 
     // Show/hide properties based on shape type
     function updatePropertiesVisibility() {
         const type = shapeType.value;
         const isLineOrArrow = type === 'line' || type === 'arrow';
+        const supportsCornerRadius = type === 'square' || type === 'rectangle' || type === 'triangle';
 
         // For lines/arrows: show line color and thickness, hide fill and stroke options
         lineColorRow.style.display = isLineOrArrow ? 'flex' : 'none';
@@ -4149,6 +4263,11 @@ function setupShapeTool() {
         strokeToggleRow.style.display = isLineOrArrow ? 'none' : 'flex';
         strokeColorRow.style.display = isLineOrArrow ? 'none' : 'flex';
         strokeWidthRow.style.display = isLineOrArrow ? 'none' : 'flex';
+
+        // Show corner radius for rectangle and triangle
+        if (cornerRadiusRow) {
+            cornerRadiusRow.style.display = supportsCornerRadius ? 'flex' : 'none';
+        }
     }
 
     // Update shape settings when properties change
@@ -4161,7 +4280,8 @@ function setupShapeTool() {
             fillColor: shapeFillColor.value,
             hasStroke: shapeHasStroke.checked,
             strokeColor: isLineOrArrow ? shapeLineColor.value : shapeStrokeColor.value,
-            strokeWidth: isLineOrArrow ? (parseInt(shapeLineThickness.value) || 5) : (parseInt(shapeStrokeWidth.value) || 2)
+            strokeWidth: isLineOrArrow ? (parseInt(shapeLineThickness.value) || 5) : (parseInt(shapeStrokeWidth.value) || 2),
+            cornerRadius: shapeCornerRadius ? (parseInt(shapeCornerRadius.value) || 0) : 0
         };
     }
 
@@ -4175,6 +4295,9 @@ function setupShapeTool() {
     shapeStrokeWidth.addEventListener('change', updateShapeSettings);
     shapeLineColor.addEventListener('change', updateShapeSettings);
     shapeLineThickness.addEventListener('change', updateShapeSettings);
+    if (shapeCornerRadius) {
+        shapeCornerRadius.addEventListener('input', updateShapeSettings);
+    }
 
     // Initialize settings
     updatePropertiesVisibility();
@@ -4708,14 +4831,16 @@ function hexToRgb(hex) {
 
 // Keyboard Shortcuts Modal
 function showKeyboardShortcutsModal() {
-    const overlay = getElement('shortcuts-modal-overlay');
+    const overlay = document.getElementById('shortcuts-modal-overlay');
     if (!overlay) return;
 
     overlay.style.display = 'flex';
 
     // Close button
-    const closeBtn = getElement('shortcuts-modal-close');
-    closeBtn.onclick = () => closeShortcutsModal();
+    const closeBtn = document.getElementById('shortcuts-modal-close');
+    if (closeBtn) {
+        closeBtn.onclick = () => closeShortcutsModal();
+    }
 
     // Close on overlay click
     overlay.onclick = (e) => {
@@ -4735,7 +4860,7 @@ function showKeyboardShortcutsModal() {
 }
 
 function closeShortcutsModal() {
-    const overlay = getElement('shortcuts-modal-overlay');
+    const overlay = document.getElementById('shortcuts-modal-overlay');
     if (!overlay) return;
     overlay.style.display = 'none';
 }

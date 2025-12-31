@@ -381,6 +381,15 @@ export class CanvasObjectsManager {
         // Store reference to editing object
         this.editingTextObject = textObj;
 
+        // Keep the object selected so properties panel stays visible
+        this.selectedObject = textObj;
+        this.selectedObjects = [textObj];
+
+        // Dispatch event to show properties panel
+        this.canvas.canvas.dispatchEvent(new CustomEvent('objectSelected', {
+            detail: textObj
+        }));
+
         // Create visible textarea for editing
         const textarea = document.createElement('textarea');
         textarea.className = 'inline-text-editor-visible';
@@ -750,6 +759,29 @@ export class CanvasObjectsManager {
         if (this.selectedObject) {
             console.log('Updating object:', this.selectedObject.id, 'with properties:', properties);
             Object.assign(this.selectedObject, properties);
+
+            // If the object is currently being edited (textarea is visible), update textarea styling
+            if (this.editingTextObject && this.editingTextObject.id === this.selectedObject.id) {
+                const textarea = document.querySelector('.inline-text-editor-visible');
+                if (textarea) {
+                    if (properties.fontSize !== undefined) {
+                        textarea.style.fontSize = `${properties.fontSize * this.canvas.zoom}px`;
+                    }
+                    if (properties.fontFamily !== undefined) {
+                        textarea.style.fontFamily = properties.fontFamily;
+                    }
+                    if (properties.fontWeight !== undefined) {
+                        textarea.style.fontWeight = properties.fontWeight;
+                    }
+                    if (properties.color !== undefined) {
+                        textarea.style.color = properties.color;
+                    }
+                    if (properties.textAlign !== undefined) {
+                        textarea.style.textAlign = properties.textAlign;
+                    }
+                }
+            }
+
             this.canvas.needsRender = true;
             this.dispatchObjectsChanged();
         }
@@ -881,9 +913,36 @@ export class CanvasObjectsManager {
         switch (shape.shapeType) {
             case 'square':
             case 'rectangle':
-                ctx.fillRect(shape.x, shape.y, shape.width, shape.height);
-                if (hasStroke && strokeWidth > 0) {
-                    ctx.strokeRect(shape.x, shape.y, shape.width, shape.height);
+                const cornerRadius = shape.cornerRadius || 0;
+                if (cornerRadius > 0) {
+                    // Draw rounded rectangle
+                    const x = shape.x;
+                    const y = shape.y;
+                    const width = shape.width;
+                    const height = shape.height;
+                    const radius = Math.min(cornerRadius, width / 2, height / 2);
+
+                    ctx.beginPath();
+                    ctx.moveTo(x + radius, y);
+                    ctx.lineTo(x + width - radius, y);
+                    ctx.arcTo(x + width, y, x + width, y + radius, radius);
+                    ctx.lineTo(x + width, y + height - radius);
+                    ctx.arcTo(x + width, y + height, x + width - radius, y + height, radius);
+                    ctx.lineTo(x + radius, y + height);
+                    ctx.arcTo(x, y + height, x, y + height - radius, radius);
+                    ctx.lineTo(x, y + radius);
+                    ctx.arcTo(x, y, x + radius, y, radius);
+                    ctx.closePath();
+                    ctx.fill();
+                    if (hasStroke && strokeWidth > 0) {
+                        ctx.stroke();
+                    }
+                } else {
+                    // Draw regular rectangle
+                    ctx.fillRect(shape.x, shape.y, shape.width, shape.height);
+                    if (hasStroke && strokeWidth > 0) {
+                        ctx.strokeRect(shape.x, shape.y, shape.width, shape.height);
+                    }
                 }
                 break;
 
@@ -891,18 +950,6 @@ export class CanvasObjectsManager {
                 const radius = Math.min(shape.width, shape.height) / 2;
                 ctx.beginPath();
                 ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
-                ctx.fill();
-                if (hasStroke && strokeWidth > 0) {
-                    ctx.stroke();
-                }
-                break;
-
-            case 'triangle':
-                ctx.beginPath();
-                ctx.moveTo(centerX, shape.y);
-                ctx.lineTo(shape.x + shape.width, shape.y + shape.height);
-                ctx.lineTo(shape.x, shape.y + shape.height);
-                ctx.closePath();
                 ctx.fill();
                 if (hasStroke && strokeWidth > 0) {
                     ctx.stroke();

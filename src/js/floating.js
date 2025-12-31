@@ -246,7 +246,6 @@ function setupContextMenu() {
     contextMenu.className = 'context-menu';
     contextMenu.innerHTML = `
         <div class="context-menu-item" data-action="recenter">Recenter View</div>
-        <div class="context-menu-item" data-action="reset">Reset Zoom</div>
     `;
     document.body.appendChild(contextMenu);
     
@@ -341,7 +340,6 @@ function setupContextMenu() {
             
             contextMenu.innerHTML = `
                 <div class="context-menu-item" data-action="recenter">Recenter View</div>
-                <div class="context-menu-item" data-action="reset">Reset Zoom</div>
                 <div class="context-menu-item ${hiddenImages.length === 0 ? 'disabled' : ''}" data-action="hidden-layers">Hidden Layers ${hiddenImages.length > 0 ? '▶' : ''}</div>
             `;
         }

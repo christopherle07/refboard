@@ -16,6 +16,7 @@ export class Canvas {
         this.isRotating = false;
         this.isPanning = false;
         this.isBoxSelecting = false;
+        this.isCropping = false;
         this.rotationStartAngle = 0;
         this.rotationStartRotation = 0;
         this.selectionBox = null;
@@ -256,13 +257,16 @@ export class Canvas {
     }
 
     setupEventListeners() {
-        this.canvas.addEventListener('mousedown', this.onMouseDown.bind(this));
-        this.canvas.addEventListener('mousemove', this.onMouseMove.bind(this));
-        this.canvas.addEventListener('mouseup', this.onMouseUp.bind(this));
-        this.canvas.addEventListener('mouseleave', this.onMouseUp.bind(this));
+        // Use pointer events (supports both mouse and pen/touch)
+        // Pointer events are more modern and handle all input types
+        this.canvas.addEventListener('pointerdown', this.onMouseDown.bind(this));
+        this.canvas.addEventListener('pointermove', this.onMouseMove.bind(this));
+        this.canvas.addEventListener('pointerup', this.onMouseUp.bind(this));
+        this.canvas.addEventListener('pointerleave', this.onMouseUp.bind(this));
         this.canvas.addEventListener('dblclick', this.onDoubleClick.bind(this));
-        // Add window mouseup to catch cases where mouse is released outside canvas
-        window.addEventListener('mouseup', this.onMouseUp.bind(this));
+        // Add window pointerup to catch cases where pointer is released outside canvas
+        window.addEventListener('pointerup', this.onMouseUp.bind(this));
+
         this.canvas.addEventListener('wheel', this.onWheel.bind(this), { passive: false });
         this.canvas.addEventListener('contextmenu', this.onContextMenu.bind(this));
         
@@ -287,6 +291,15 @@ export class Canvas {
         this.canvas.addEventListener('drop', this.onDrop.bind(this));
         
         document.addEventListener('keydown', (e) => {
+            // Handle crop mode keys
+            if (this.isCropping) {
+                if (e.key === 'Escape') {
+                    e.preventDefault();
+                    this.cancelCrop();
+                    return;
+                }
+            }
+
             // Don't prevent spacebar if editing text
             const isEditingText = this.objectsManager.editingTextObject !== null;
             if (e.key === ' ' && !this.isPanning && !e.repeat && !isEditingText) {
@@ -404,6 +417,29 @@ export class Canvas {
         const rect = this.canvas.getBoundingClientRect();
         const { x, y } = this.screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
 
+        // Handle crop mode
+        if (this.isCropping && e.button === 0) {
+            const handle = this.getCropHandle(x, y);
+
+            if (handle) {
+                // Clicked on a resize handle
+                this.cropHandle = handle;
+                this.dragStartPoint = { x, y };
+                this.cropStartRect = { ...this.cropRect };
+                return;
+            } else if (this.isPointInRect(x, y, this.cropRect)) {
+                // Clicked inside crop rect to move it
+                this.cropHandle = 'move';
+                this.dragStartPoint = { x, y };
+                this.cropStartRect = { ...this.cropRect };
+                return;
+            } else {
+                // Clicked outside crop rect, apply crop
+                this.applyCrop();
+                return;
+            }
+        }
+
         // Check if a tool is active (text or shape tool)
         if (this.objectsManager.currentTool) {
             if (this.objectsManager.handleMouseDown(e, { x, y })) {
@@ -440,8 +476,9 @@ export class Canvas {
             return;
         }
 
-        // Handle drawing mode
-        if (this.drawingMode && e.button === 0) {
+        // Handle drawing mode (support both mouse and pointer events)
+        const isPrimaryButton = e.button === 0 || (e.pointerType && e.buttons === 1);
+        if (this.drawingMode && isPrimaryButton) {
             this.startDrawing(x, y);
             return;
         }
@@ -679,6 +716,25 @@ export class Canvas {
         const rect = this.canvas.getBoundingClientRect();
         const { x, y } = this.screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
 
+        // Handle crop mode
+        if (this.isCropping) {
+            if (this.cropHandle) {
+                this.updateCrop(this.cropHandle, x, y);
+                return;
+            } else {
+                // Update cursor based on hover position
+                const handle = this.getCropHandle(x, y);
+                if (handle) {
+                    this.canvas.style.cursor = this.getCursorForHandle(handle);
+                } else if (this.isPointInRect(x, y, this.cropRect)) {
+                    this.canvas.style.cursor = 'move';
+                } else {
+                    this.canvas.style.cursor = 'crosshair';
+                }
+                return;
+            }
+        }
+
         // Handle text/shape object dragging
         this.objectsManager.handleMouseMove(e, { x, y });
 
@@ -783,6 +839,12 @@ export class Canvas {
     }
 
     onMouseUp(e) {
+        // Handle crop mode
+        if (this.isCropping && this.cropHandle) {
+            this.cropHandle = null;
+            return;
+        }
+
         // Handle text/shape objects
         const rect = this.canvas.getBoundingClientRect();
         const { x, y } = this.screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
@@ -1743,11 +1805,205 @@ export class Canvas {
         this.needsRender = true;
     }
 
+    enableCropMode(image) {
+        if (!image || image.type === 'drawing') return;
+
+        this.isCropping = true;
+        this.croppingImage = image;
+        this.cropRect = {
+            x: image.x,
+            y: image.y,
+            width: image.width,
+            height: image.height
+        };
+        this.cropStartRect = { ...this.cropRect };
+        this.canvas.style.cursor = 'crosshair';
+        this.needsRender = true;
+    }
+
+    updateCrop(handle, mouseX, mouseY) {
+        if (!this.isCropping || !this.croppingImage) return;
+
+        const img = this.croppingImage;
+        const rect = this.cropRect;
+
+        if (handle === 'move') {
+            // Move crop area
+            const dx = mouseX - this.dragStartPoint.x;
+            const dy = mouseY - this.dragStartPoint.y;
+            rect.x = Math.max(img.x, Math.min(img.x + img.width - rect.width, this.cropStartRect.x + dx));
+            rect.y = Math.max(img.y, Math.min(img.y + img.height - rect.height, this.cropStartRect.y + dy));
+        } else {
+            // Resize crop area
+            const minSize = 20;
+
+            if (handle.includes('n')) {
+                const newY = Math.max(img.y, Math.min(mouseY, rect.y + rect.height - minSize));
+                rect.height += rect.y - newY;
+                rect.y = newY;
+            }
+            if (handle.includes('s')) {
+                rect.height = Math.max(minSize, Math.min(mouseY - rect.y, img.y + img.height - rect.y));
+            }
+            if (handle.includes('w')) {
+                const newX = Math.max(img.x, Math.min(mouseX, rect.x + rect.width - minSize));
+                rect.width += rect.x - newX;
+                rect.x = newX;
+            }
+            if (handle.includes('e')) {
+                rect.width = Math.max(minSize, Math.min(mouseX - rect.x, img.x + img.width - rect.x));
+            }
+        }
+
+        this.needsRender = true;
+    }
+
+    applyCrop() {
+        if (!this.isCropping || !this.croppingImage) return;
+
+        // Prevent multiple applications - save references then exit crop mode immediately
+        const img = this.croppingImage;
+        const rect = { ...this.cropRect };
+
+        // Exit crop mode immediately to prevent multiple clicks
+        this.cancelCrop();
+
+        // Save original state for undo
+        const oldSrc = img.src || img.img.src;
+        const oldImgElement = img.img;
+        const oldX = img.x;
+        const oldY = img.y;
+        const oldWidth = img.width;
+        const oldHeight = img.height;
+
+        // Calculate crop offsets relative to original image
+        const cropX = (rect.x - oldX) / oldWidth;
+        const cropY = (rect.y - oldY) / oldHeight;
+        const cropW = rect.width / oldWidth;
+        const cropH = rect.height / oldHeight;
+
+        // Create a temporary canvas to crop the image
+        const tempCanvas = document.createElement('canvas');
+        const tempCtx = tempCanvas.getContext('2d');
+
+        tempCanvas.width = rect.width;
+        tempCanvas.height = rect.height;
+
+        // Draw the cropped portion
+        if (img.img && img.img.complete) {
+            const srcX = cropX * img.img.naturalWidth;
+            const srcY = cropY * img.img.naturalHeight;
+            const srcW = cropW * img.img.naturalWidth;
+            const srcH = cropH * img.img.naturalHeight;
+
+            tempCtx.drawImage(
+                img.img,
+                srcX, srcY, srcW, srcH,
+                0, 0, rect.width, rect.height
+            );
+
+            // Update image with cropped version
+            tempCanvas.toBlob((blob) => {
+                const url = URL.createObjectURL(blob);
+                const newImg = new Image();
+                newImg.onload = () => {
+                    // Update image properties
+                    img.img = newImg;
+                    img.src = url;
+                    img.x = rect.x;
+                    img.y = rect.y;
+                    img.width = rect.width;
+                    img.height = rect.height;
+
+                    // Save to history for undo
+                    if (this.historyManager) {
+                        console.log('Pushing crop action to history:', {
+                            id: img.id,
+                            oldSrc: oldSrc,
+                            newSrc: url
+                        });
+                        this.historyManager.pushAction({
+                            type: 'crop',
+                            data: {
+                                id: img.id,
+                                oldSrc: oldSrc,
+                                oldX: oldX,
+                                oldY: oldY,
+                                oldWidth: oldWidth,
+                                oldHeight: oldHeight,
+                                newSrc: url,
+                                newX: rect.x,
+                                newY: rect.y,
+                                newWidth: rect.width,
+                                newHeight: rect.height
+                            }
+                        });
+                        console.log('History stats:', this.historyManager.getStats());
+                    } else {
+                        console.log('No history manager available');
+                    }
+
+                    this.needsRender = true;
+                    this.notifyChange();
+                };
+                newImg.src = url;
+            });
+        }
+    }
+
+    cancelCrop() {
+        this.isCropping = false;
+        this.croppingImage = null;
+        this.cropRect = null;
+        this.cropStartRect = null;
+        this.canvas.style.cursor = 'default';
+        this.needsRender = true;
+    }
+
+    getCropHandle(x, y) {
+        if (!this.cropRect) return null;
+
+        const handleSize = 8 / this.zoom;
+        const rect = this.cropRect;
+
+        // Corner handles
+        if (Math.abs(x - rect.x) < handleSize && Math.abs(y - rect.y) < handleSize) return 'nw';
+        if (Math.abs(x - (rect.x + rect.width)) < handleSize && Math.abs(y - rect.y) < handleSize) return 'ne';
+        if (Math.abs(x - rect.x) < handleSize && Math.abs(y - (rect.y + rect.height)) < handleSize) return 'sw';
+        if (Math.abs(x - (rect.x + rect.width)) < handleSize && Math.abs(y - (rect.y + rect.height)) < handleSize) return 'se';
+
+        // Edge handles
+        if (Math.abs(x - rect.x) < handleSize && y >= rect.y && y <= rect.y + rect.height) return 'w';
+        if (Math.abs(x - (rect.x + rect.width)) < handleSize && y >= rect.y && y <= rect.y + rect.height) return 'e';
+        if (Math.abs(y - rect.y) < handleSize && x >= rect.x && x <= rect.x + rect.width) return 'n';
+        if (Math.abs(y - (rect.y + rect.height)) < handleSize && x >= rect.x && x <= rect.x + rect.width) return 's';
+
+        return null;
+    }
+
+    isPointInRect(x, y, rect) {
+        return x >= rect.x && x <= rect.x + rect.width &&
+               y >= rect.y && y <= rect.y + rect.height;
+    }
+
+    getCursorForHandle(handle) {
+        const cursors = {
+            'nw': 'nw-resize', 'ne': 'ne-resize',
+            'sw': 'sw-resize', 'se': 'se-resize',
+            'n': 'n-resize', 's': 's-resize',
+            'w': 'w-resize', 'e': 'e-resize',
+            'move': 'move'
+        };
+        return cursors[handle] || 'default';
+    }
+
     getImageAtPoint(x, y) {
         const visibleImages = this.cullImages();
-        
-        for (let i = visibleImages.length - 1; i >= 0; i--) {
-            const img = visibleImages[i];
+
+        // Sort by zIndex descending (higher zIndex = on top = checked first)
+        const sortedImages = [...visibleImages].sort((a, b) => (b.zIndex || 0) - (a.zIndex || 0));
+
+        for (const img of sortedImages) {
             if (x >= img.x && x <= img.x + img.width &&
                 y >= img.y && y <= img.y + img.height) {
                 return img;
@@ -2138,6 +2394,59 @@ export class Canvas {
             this.ctx.setLineDash([5 / this.zoom, 5 / this.zoom]);
             this.ctx.strokeRect(boxX, boxY, boxWidth, boxHeight);
             this.ctx.setLineDash([]);
+        }
+
+        // Draw crop overlay
+        if (this.isCropping && this.cropRect && this.croppingImage) {
+            const img = this.croppingImage;
+            const rect = this.cropRect;
+
+            // Darken area outside crop rect
+            this.ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+
+            // Top
+            if (rect.y > img.y) {
+                this.ctx.fillRect(img.x, img.y, img.width, rect.y - img.y);
+            }
+            // Bottom
+            if (rect.y + rect.height < img.y + img.height) {
+                this.ctx.fillRect(img.x, rect.y + rect.height, img.width, img.y + img.height - (rect.y + rect.height));
+            }
+            // Left
+            if (rect.x > img.x) {
+                this.ctx.fillRect(img.x, rect.y, rect.x - img.x, rect.height);
+            }
+            // Right
+            if (rect.x + rect.width < img.x + img.width) {
+                this.ctx.fillRect(rect.x + rect.width, rect.y, img.x + img.width - (rect.x + rect.width), rect.height);
+            }
+
+            // Draw crop rect border
+            this.ctx.strokeStyle = '#ffffff';
+            this.ctx.lineWidth = 2 / this.zoom;
+            this.ctx.strokeRect(rect.x, rect.y, rect.width, rect.height);
+
+            // Draw resize handles
+            const handleSize = 8 / this.zoom;
+            this.ctx.fillStyle = '#ffffff';
+            this.ctx.strokeStyle = '#000000';
+            this.ctx.lineWidth = 1 / this.zoom;
+
+            const handles = [
+                [rect.x, rect.y],
+                [rect.x + rect.width / 2, rect.y],
+                [rect.x + rect.width, rect.y],
+                [rect.x + rect.width, rect.y + rect.height / 2],
+                [rect.x + rect.width, rect.y + rect.height],
+                [rect.x + rect.width / 2, rect.y + rect.height],
+                [rect.x, rect.y + rect.height],
+                [rect.x, rect.y + rect.height / 2]
+            ];
+
+            for (const [hx, hy] of handles) {
+                this.ctx.fillRect(hx - handleSize / 2, hy - handleSize / 2, handleSize, handleSize);
+                this.ctx.strokeRect(hx - handleSize / 2, hy - handleSize / 2, handleSize, handleSize);
+            }
         }
 
         // Redraw the offscreen drawing layer with current pan/zoom

@@ -32,7 +32,7 @@
     align-items: center;
     justify-content: center;
     gap: 12px;
-    -webkit-app-region: no-drag;
+    -webkit-app-region: drag;
 }
 
 .nav-breadcrumb {
@@ -49,6 +49,7 @@
     min-height: 32px;
     cursor: pointer;
     transition: background-color 0.15s;
+    -webkit-app-region: no-drag;
 }
 
 .nav-breadcrumb:hover {
@@ -100,6 +101,7 @@
 #open-floating-btn {
     border: 1px solid var(--border-color);
     margin-left: 8px;
+    -webkit-app-region: no-drag;
 }
 
 #open-floating-btn img {
@@ -222,7 +224,7 @@ html[data-theme="dark"] .toolbar-icon {
     gap: 12px;
     width: 100%;
     max-width: 600px;
-    margin-bottom: 48px;
+    margin-bottom: 24px;
 }
 
 .board-search {
@@ -335,12 +337,18 @@ html[data-theme="dark"] .search-action-btn:hover .search-action-icon {
     border-radius: 12px;
     overflow: hidden;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: background-color 0.2s;
+    outline: none;
 }
 
 .board-card:hover {
     background: var(--bg-hover);
-    transform: translateY(-2px);
+    border-color: var(--border-color);
+}
+
+.board-card:focus {
+    outline: none;
+    border-color: var(--border-color);
 }
 
 .board-card:hover .board-delete-btn {
@@ -484,4 +492,186 @@ body[data-theme="midnight"] .board-delete-btn svg {
 
 .browser-content::-webkit-scrollbar-thumb:hover {
     background: #bdc1c6;
+}
+
+/* Boards Controls */
+.boards-controls {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    max-width: 1200px;
+    margin-bottom: 24px;
+}
+
+.sort-controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.sort-controls label {
+    font-size: 14px;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.sort-select {
+    padding: 8px 32px 8px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-size: 14px;
+    cursor: pointer;
+    outline: none;
+    transition: all 0.2s;
+    appearance: none;
+    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 12 12"><path fill="gray" d="M6 8L2 4h8z"/></svg>');
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+}
+
+.sort-select:hover {
+    border-color: var(--border-color-hover);
+    background-color: var(--bg-hover);
+}
+
+.view-controls {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: var(--bg-secondary);
+    padding: 4px;
+    border-radius: 8px;
+}
+
+.view-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+    color: var(--text-secondary);
+}
+
+.view-btn svg {
+    width: 20px;
+    height: 20px;
+    fill: currentColor;
+}
+
+.view-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+.view-btn.active {
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    box-shadow: var(--shadow-sm);
+}
+
+/* List View Styles */
+.boards-grid.list-view {
+    grid-template-columns: 1fr;
+    gap: 0;
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.boards-grid.list-view .board-card {
+    flex-direction: row;
+    border: none;
+    border-radius: 0;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.boards-grid.list-view .board-card:last-child {
+    border-bottom: none;
+}
+
+.boards-grid.list-view .board-card:hover {
+    transform: none;
+    background: var(--bg-hover);
+    border-color: var(--border-color);
+}
+
+.boards-grid.list-view .board-card:focus {
+    outline: none;
+    border-color: var(--border-color);
+}
+
+.boards-grid.list-view .board-card-thumbnail {
+    width: 120px;
+    height: 80px;
+    flex-shrink: 0;
+}
+
+.boards-grid.list-view .board-card-content {
+    flex: 1;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 24px;
+}
+
+.boards-grid.list-view .board-card-title {
+    font-size: 15px;
+    min-width: 200px;
+}
+
+.boards-grid.list-view .board-card-meta {
+    margin-left: auto;
+}
+
+/* Pagination Controls */
+.pagination-controls {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    margin-top: 32px;
+    padding: 16px;
+}
+
+.pagination-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+    color: var(--text-secondary);
+}
+
+.pagination-btn:hover:not(:disabled) {
+    background: var(--bg-hover);
+    border-color: var(--border-color-hover);
+}
+
+.pagination-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.pagination-btn svg {
+    stroke: currentColor;
+}
+
+.pagination-info {
+    font-size: 14px;
+    color: var(--text-secondary);
+    min-width: 100px;
+    text-align: center;
 }

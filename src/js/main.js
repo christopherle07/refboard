@@ -13,8 +13,10 @@ document.body.setAttribute('data-theme', theme);
 console.log('Applied theme on load:', theme);
 
 let currentPage = 1;
-const BOARDS_PER_PAGE = 14;
-let currentSort = 'latest';
+const BOARDS_PER_PAGE_GRID = 12; // 3 rows × 4 columns
+const BOARDS_PER_PAGE_LIST = 6;
+let currentSort = 'recent';
+let currentView = 'grid'; // 'grid' or 'list'
 let currentCollectionId = null; // null means "All Boards"
 const collectionManager = new CollectionManager();
 
@@ -64,6 +66,36 @@ export async function initHomepage() {
 // Track if event listeners have been set up
 let eventListenersSetup = false;
 
+function updatePaginationControls(currentPage, totalPages) {
+    const paginationControls = document.getElementById('pagination-controls');
+    const prevBtn = document.getElementById('prev-page-btn');
+    const nextBtn = document.getElementById('next-page-btn');
+    const paginationInfo = document.getElementById('pagination-info');
+
+    if (!paginationControls) return;
+
+    // Hide pagination if only one page or no boards
+    if (totalPages <= 1) {
+        paginationControls.style.display = 'none';
+        return;
+    }
+
+    paginationControls.style.display = 'flex';
+
+    // Update buttons
+    if (prevBtn) {
+        prevBtn.disabled = currentPage === 1;
+    }
+    if (nextBtn) {
+        nextBtn.disabled = currentPage === totalPages;
+    }
+
+    // Update info text
+    if (paginationInfo) {
+        paginationInfo.textContent = `Page ${currentPage} of ${totalPages}`;
+    }
+}
+
 function setupEventListeners() {
     // Prevent duplicate event listener setup
     if (eventListenersSetup) return;
@@ -73,7 +105,68 @@ function setupEventListeners() {
     const searchInput = document.getElementById('board-search');
     if (searchInput) {
         searchInput.addEventListener('input', () => {
+            currentPage = 1; // Reset to first page on search
             renderBoards();
+        });
+    }
+
+    // Sort dropdown
+    const sortSelect = document.getElementById('sort-select');
+    if (sortSelect) {
+        sortSelect.value = currentSort;
+        sortSelect.addEventListener('change', (e) => {
+            currentSort = e.target.value;
+            currentPage = 1; // Reset to first page on sort change
+            renderBoards();
+        });
+    }
+
+    // View mode buttons
+    const viewGridBtn = document.getElementById('view-grid-btn');
+    const viewListBtn = document.getElementById('view-list-btn');
+
+    if (viewGridBtn) {
+        viewGridBtn.addEventListener('click', () => {
+            currentView = 'grid';
+            viewGridBtn.classList.add('active');
+            viewListBtn.classList.remove('active');
+            currentPage = 1; // Reset to first page when changing view
+            renderBoards();
+        });
+    }
+
+    if (viewListBtn) {
+        viewListBtn.addEventListener('click', () => {
+            currentView = 'list';
+            viewListBtn.classList.add('active');
+            viewGridBtn.classList.remove('active');
+            currentPage = 1; // Reset to first page when changing view
+            renderBoards();
+        });
+    }
+
+    // Pagination controls
+    const prevPageBtn = document.getElementById('prev-page-btn');
+    const nextPageBtn = document.getElementById('next-page-btn');
+
+    if (prevPageBtn) {
+        prevPageBtn.addEventListener('click', () => {
+            if (currentPage > 1) {
+                currentPage--;
+                renderBoards();
+            }
+        });
+    }
+
+    if (nextPageBtn) {
+        nextPageBtn.addEventListener('click', () => {
+            const boards = boardManager.getAllBoards();
+            const boardsPerPage = currentView === 'grid' ? BOARDS_PER_PAGE_GRID : BOARDS_PER_PAGE_LIST;
+            const totalPages = Math.ceil(boards.length / boardsPerPage);
+            if (currentPage < totalPages) {
+                currentPage++;
+                renderBoards();
+            }
         });
     }
 
@@ -151,11 +244,11 @@ function renderBoards() {
         }
     }
 
-    if (currentSort === 'latest') {
+    if (currentSort === 'recent') {
         boards.sort((a, b) => (b.createdAt || b.created_at) - (a.createdAt || a.created_at));
     } else if (currentSort === 'oldest') {
         boards.sort((a, b) => (a.createdAt || a.created_at) - (b.createdAt || b.created_at));
-    } else if (currentSort === 'name') {
+    } else if (currentSort === 'alphabetical') {
         boards.sort((a, b) => a.name.localeCompare(b.name));
     }
 
@@ -164,8 +257,26 @@ function renderBoards() {
         console.error('[renderBoards] boards-grid element not found!');
         return;
     }
+
+    // Apply view mode class
+    if (currentView === 'list') {
+        grid.classList.add('list-view');
+    } else {
+        grid.classList.remove('list-view');
+    }
+
+    // Calculate pagination
+    const boardsPerPage = currentView === 'grid' ? BOARDS_PER_PAGE_GRID : BOARDS_PER_PAGE_LIST;
+    const totalPages = Math.ceil(boards.length / boardsPerPage);
+    const startIndex = (currentPage - 1) * boardsPerPage;
+    const endIndex = startIndex + boardsPerPage;
+    const paginatedBoards = boards.slice(startIndex, endIndex);
+
     grid.innerHTML = '';
-    console.log('[renderBoards] Rendering', boards.length, 'boards');
+    console.log('[renderBoards] Rendering', paginatedBoards.length, 'of', boards.length, 'boards (page', currentPage, 'of', totalPages + ')');
+
+    // Update pagination controls
+    updatePaginationControls(currentPage, totalPages);
 
     // Show empty state if no boards
     if (boards.length === 0) {
@@ -179,7 +290,7 @@ function renderBoards() {
         return;
     }
 
-    boards.forEach(board => {
+    paginatedBoards.forEach(board => {
         const card = document.createElement('div');
         card.className = 'board-card';
 

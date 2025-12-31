@@ -74,7 +74,7 @@
 
             <!-- Center Content -->
             <div class="browser-content">
-                <h1 class="home-welcome">EyeDea | Welcome!</h1>
+                <h1 class="home-welcome">Welcome to EyeDea</h1>
 
                 <div class="search-container">
                     <input
@@ -97,8 +97,50 @@
                     </div>
                 </div>
 
+                <div class="boards-controls">
+                    <div class="sort-controls">
+                        <label for="sort-select">Sort by:</label>
+                        <select id="sort-select" class="sort-select">
+                            <option value="recent">Latest</option>
+                            <option value="oldest">Oldest</option>
+                            <option value="alphabetical">Alphabetical</option>
+                        </select>
+                    </div>
+                    <div class="view-controls">
+                        <button class="view-btn active" id="view-grid-btn" title="Grid View">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                <rect x="3" y="3" width="7" height="7" rx="1"/>
+                                <rect x="14" y="3" width="7" height="7" rx="1"/>
+                                <rect x="3" y="14" width="7" height="7" rx="1"/>
+                                <rect x="14" y="14" width="7" height="7" rx="1"/>
+                            </svg>
+                        </button>
+                        <button class="view-btn" id="view-list-btn" title="List View">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                <rect x="3" y="4" width="18" height="3" rx="1"/>
+                                <rect x="3" y="10" width="18" height="3" rx="1"/>
+                                <rect x="3" y="16" width="18" height="3" rx="1"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+
                 <div class="boards-grid" id="boards-grid">
                     <!-- Board cards will be populated here -->
+                </div>
+
+                <div class="pagination-controls" id="pagination-controls">
+                    <button class="pagination-btn" id="prev-page-btn" disabled>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="15 18 9 12 15 6"></polyline>
+                        </svg>
+                    </button>
+                    <span class="pagination-info" id="pagination-info">Page 1 of 1</span>
+                    <button class="pagination-btn" id="next-page-btn" disabled>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="9 18 15 12 9 6"></polyline>
+                        </svg>
+                    </button>
                 </div>
             </div>
         </div>
@@ -131,7 +173,6 @@
                         <div class="panel-section-header">
                             <h3>Layers</h3>
                             <div class="header-actions">
-                                <button class="icon-btn" id="add-layer-btn" title="Add Layer">+</button>
                                 <button class="collapse-btn" id="collapse-layers-btn">
                                     <img src="assets/collapse.svg" alt="Collapse" class="collapse-icon" width="14" height="14"/>
                                 </button>
@@ -164,7 +205,6 @@
                                     <select id="shape-type" class="property-select">
                                         <option value="square">Square</option>
                                         <option value="circle">Circle</option>
-                                        <option value="triangle">Triangle</option>
                                         <option value="line">Line</option>
                                         <option value="arrow">Arrow</option>
                                     </select>
@@ -187,6 +227,10 @@
                                 <div class="property-row" id="shape-stroke-width-row">
                                     <label>Stroke Width</label>
                                     <input type="number" id="shape-stroke-width" min="0" max="20" value="2" class="property-input">
+                                </div>
+                                <div class="property-row" id="shape-corner-radius-row" style="display: none;">
+                                    <label>Corner Radius</label>
+                                    <input type="number" id="shape-corner-radius" min="0" max="100" value="0" class="property-input">
                                 </div>
                                 <div class="property-row" id="shape-line-color-row" style="display: none;">
                                     <label>Line Color</label>
@@ -285,10 +329,6 @@
             </aside>
 
             <main class="canvas-area">
-                <button class="floating-canvas-btn" id="open-floating-btn" title="Open Canvas Window">
-                    <img src="assets/new-window-icon.svg" alt="New Window" class="floating-canvas-icon">
-                </button>
-
                 <div class="drawing-toolbar" id="drawing-toolbar">
                     <div class="toolbar-group">
                         <button class="toolbar-btn" id="draw-pen-btn" title="Pen Tool">P</button>
@@ -414,28 +454,17 @@
                                 <circle cx="8" cy="8" r="6"/>
                             </svg>
                         </button>
-                        <button class="floating-btn shape-btn" id="shape-btn-triangle" data-shape="triangle" title="Triangle">
-                            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                                <path d="M8 2 L14 14 L2 14 Z"/>
-                            </svg>
-                        </button>
-                        <button class="floating-btn shape-btn" id="shape-btn-line" data-shape="line" title="Line">
-                            <svg width="16" height="16" viewBox="0 0 16 16" stroke="currentColor" stroke-width="2" fill="none">
-                                <line x1="2" y1="14" x2="14" y2="2"/>
-                            </svg>
-                        </button>
-                        <button class="floating-btn shape-btn" id="shape-btn-arrow" data-shape="arrow" title="Arrow">
-                            <svg width="16" height="16" viewBox="0 0 16 16" stroke="currentColor" stroke-width="2" fill="none">
-                                <line x1="2" y1="14" x2="14" y2="2"/>
-                                <polyline points="10,2 14,2 14,6" fill="none"/>
-                            </svg>
-                        </button>
                         <div class="floating-separator"></div>
                         <input type="color" id="floating-shape-fill" value="#3b82f6" class="floating-color" title="Fill Color">
                         <div class="floating-separator"></div>
                         <button class="floating-btn" id="floating-shape-stroke-toggle" title="Toggle Stroke"><strong>S</strong></button>
                         <input type="color" id="floating-shape-stroke-color" value="#000000" class="floating-color" title="Stroke Color">
                         <input type="number" id="floating-shape-stroke-width" min="0" max="20" value="2" class="floating-input-sm" title="Stroke Width">
+                        <div class="floating-separator" id="corner-radius-separator" style="display: none;"></div>
+                        <button class="floating-btn" id="floating-shape-radius-toggle" title="Toggle Corner Radius" style="display: none;">
+                            <strong>R</strong>
+                        </button>
+                        <input type="number" id="floating-shape-corner-radius" min="0" max="100" value="0" class="floating-input-sm" title="Corner Radius" style="display: none;">
                     </div>
                 </div>
 
@@ -447,9 +476,6 @@
                 <div class="assets-library-view" id="assets-library-view" style="display: none;">
                     <div class="assets-library-header">
                         <div class="assets-library-header-left">
-                            <button class="back-to-canvas-btn" id="back-to-canvas-btn" title="Back to Canvas">
-                                <img src="assets/backarrow.svg" alt="Back" class="back-arrow-icon theme-icon">
-                            </button>
                             <h1>Assets Library</h1>
                         </div>
                         <div class="assets-library-controls">
@@ -476,10 +502,9 @@
                 <div class="canvas-context-menu" id="canvas-context-menu">
                     <div class="context-menu-item" id="context-delete-selected" style="display: none;">Delete Selected</div>
                     <div class="context-menu-item" id="context-deselect-all" style="display: none;">Deselect All</div>
-                    <div class="context-menu-item" id="context-enable-rotate" style="display: none;">Enable Rotate</div>
+                    <div class="context-menu-item" id="context-crop-image" style="display: none;">Crop Image</div>
                     <div class="context-menu-separator" id="context-separator" style="display: none;"></div>
                     <div class="context-menu-item" id="context-recenter">Recenter View</div>
-                    <div class="context-menu-item" id="context-reset-zoom">Reset Zoom</div>
                     <div class="context-menu-separator"></div>
                     <div class="context-menu-item" id="context-shortcuts">Keyboard Shortcuts</div>
                 </div>
@@ -573,8 +598,16 @@
                         <span class="shortcut-desc">Redo</span>
                     </div>
                     <div class="shortcut-item">
-                        <span class="shortcut-keys"><kbd>Delete</kbd></span>
+                        <span class="shortcut-keys"><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>Z</kbd></span>
+                        <span class="shortcut-desc">Redo (Alternative)</span>
+                    </div>
+                    <div class="shortcut-item">
+                        <span class="shortcut-keys"><kbd>Delete</kbd> / <kbd>Backspace</kbd></span>
                         <span class="shortcut-desc">Delete selected layer(s)</span>
+                    </div>
+                    <div class="shortcut-item">
+                        <span class="shortcut-keys"><kbd>Escape</kbd></span>
+                        <span class="shortcut-desc">Cancel crop mode / Close modals</span>
                     </div>
                 </div>
 
