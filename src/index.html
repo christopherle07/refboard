@@ -28,7 +28,7 @@
 </head>
 <body>
     <!-- Unified Titlebar/Nav Bar -->
-    <div class="unified-titlebar" data-tauri-drag-region>
+    <div class="unified-titlebar">
         <div class="titlebar-window-controls">
             <button class="titlebar-button minimize-btn" id="titlebar-minimize" title="Minimize">
                 <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
@@ -47,7 +47,7 @@
                 </svg>
             </button>
         </div>
-        <div class="titlebar-nav-container">
+        <div class="titlebar-nav-container" data-tauri-drag-region>
             <div class="nav-breadcrumb" id="nav-breadcrumb">
                 <span class="breadcrumb-item active">All Boards</span>
             </div>
@@ -255,52 +255,31 @@
                                 <div class="property-row">
                                     <label>Font Family</label>
                                     <select id="text-font-family" class="property-select">
-                                        <option value="Arial">Arial</option>
-                                        <option value="Arial Black">Arial Black</option>
-                                        <option value="Bahnschrift">Bahnschrift</option>
-                                        <option value="Calibri">Calibri</option>
-                                        <option value="Cambria">Cambria</option>
-                                        <option value="Candara">Candara</option>
-                                        <option value="Century Gothic">Century Gothic</option>
-                                        <option value="Comic Sans MS">Comic Sans MS</option>
-                                        <option value="Consolas">Consolas</option>
-                                        <option value="Constantia">Constantia</option>
-                                        <option value="Corbel">Corbel</option>
-                                        <option value="Courier New">Courier New</option>
-                                        <option value="Ebrima">Ebrima</option>
-                                        <option value="Franklin Gothic Medium">Franklin Gothic Medium</option>
-                                        <option value="Gabriola">Gabriola</option>
-                                        <option value="Gadugi">Gadugi</option>
-                                        <option value="Georgia">Georgia</option>
-                                        <option value="Impact">Impact</option>
-                                        <option value="Ink Free">Ink Free</option>
-                                        <option value="Javanese Text">Javanese Text</option>
-                                        <option value="Leelawadee UI">Leelawadee UI</option>
-                                        <option value="Lucida Console">Lucida Console</option>
-                                        <option value="Lucida Sans Unicode">Lucida Sans Unicode</option>
-                                        <option value="Malgun Gothic">Malgun Gothic</option>
-                                        <option value="Microsoft Sans Serif">Microsoft Sans Serif</option>
-                                        <option value="Mongolian Baiti">Mongolian Baiti</option>
-                                        <option value="MS Gothic">MS Gothic</option>
-                                        <option value="MV Boli">MV Boli</option>
-                                        <option value="Myanmar Text">Myanmar Text</option>
-                                        <option value="Nirmala UI">Nirmala UI</option>
-                                        <option value="Palatino Linotype">Palatino Linotype</option>
-                                        <option value="Segoe Print">Segoe Print</option>
-                                        <option value="Segoe Script">Segoe Script</option>
-                                        <option value="Segoe UI">Segoe UI</option>
-                                        <option value="Segoe UI Black">Segoe UI Black</option>
-                                        <option value="Segoe UI Emoji">Segoe UI Emoji</option>
-                                        <option value="Segoe UI Historic">Segoe UI Historic</option>
-                                        <option value="Segoe UI Light">Segoe UI Light</option>
-                                        <option value="Segoe UI Semibold">Segoe UI Semibold</option>
-                                        <option value="Sitka">Sitka</option>
-                                        <option value="Sylfaen">Sylfaen</option>
-                                        <option value="Tahoma">Tahoma</option>
-                                        <option value="Times New Roman">Times New Roman</option>
-                                        <option value="Trebuchet MS">Trebuchet MS</option>
-                                        <option value="Verdana">Verdana</option>
-                                        <option value="Yu Gothic">Yu Gothic</option>
+                                        <option value="-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif">System Default</option>
+                                        <option value="Arial, Helvetica, sans-serif">Arial</option>
+                                        <option value="'Arial Black', 'Arial Bold', sans-serif">Arial Black</option>
+                                        <option value="'Helvetica Neue', Helvetica, Arial, sans-serif">Helvetica</option>
+                                        <option value="'Comic Sans MS', 'Comic Sans', cursive">Comic Sans</option>
+                                        <option value="Impact, Haettenschweiler, 'Arial Narrow Bold', sans-serif">Impact</option>
+                                        <option value="Tahoma, Geneva, sans-serif">Tahoma</option>
+                                        <option value="Verdana, Geneva, sans-serif">Verdana</option>
+                                        <option value="Georgia, 'Times New Roman', serif">Georgia</option>
+                                        <option value="'Times New Roman', Times, serif">Times New Roman</option>
+                                        <option value="'Palatino Linotype', Palatino, 'Book Antiqua', serif">Palatino</option>
+                                        <option value="'Courier New', Courier, monospace">Courier New</option>
+                                        <option value="Monaco, Menlo, Consolas, 'Courier New', monospace">Monaco</option>
+                                        <option value="'Trebuchet MS', 'Lucida Grande', sans-serif">Trebuchet</option>
+                                        <option value="'Lucida Sans', 'Lucida Grande', sans-serif">Lucida Sans</option>
+                                        <option value="'American Typewriter', serif">American Typewriter</option>
+                                        <option value="'Brush Script MT', cursive">Brush Script</option>
+                                        <option value="Copperplate, 'Copperplate Gothic Light', fantasy">Copperplate</option>
+                                        <option value="Didot, 'Didot LT STD', serif">Didot</option>
+                                        <option value="Futura, 'Trebuchet MS', sans-serif">Futura</option>
+                                        <option value="'Gill Sans', 'Gill Sans MT', Calibri, sans-serif">Gill Sans</option>
+                                        <option value="'Hoefler Text', Garamond, serif">Hoefler Text</option>
+                                        <option value="'Lucida Console', Monaco, monospace">Lucida Console</option>
+                                        <option value="Optima, Segoe, sans-serif">Optima</option>
+                                        <option value="Papyrus, fantasy">Papyrus</option>
                                     </select>
                                 </div>
                                 <div class="property-row">
@@ -366,52 +345,31 @@
                 <div class="floating-toolbar" id="floating-text-toolbar" style="display: none;">
                     <div class="floating-toolbar-content">
                         <select id="floating-font-family" class="floating-select" title="Font Family" size="1">
-                            <option value="Arial">Arial</option>
-                            <option value="Arial Black">Arial Black</option>
-                            <option value="Bahnschrift">Bahnschrift</option>
-                            <option value="Calibri">Calibri</option>
-                            <option value="Cambria">Cambria</option>
-                            <option value="Candara">Candara</option>
-                            <option value="Century Gothic">Century Gothic</option>
-                            <option value="Comic Sans MS">Comic Sans MS</option>
-                            <option value="Consolas">Consolas</option>
-                            <option value="Constantia">Constantia</option>
-                            <option value="Corbel">Corbel</option>
-                            <option value="Courier New">Courier New</option>
-                            <option value="Ebrima">Ebrima</option>
-                            <option value="Franklin Gothic Medium">Franklin Gothic Medium</option>
-                            <option value="Gabriola">Gabriola</option>
-                            <option value="Gadugi">Gadugi</option>
-                            <option value="Georgia">Georgia</option>
-                            <option value="Impact">Impact</option>
-                            <option value="Ink Free">Ink Free</option>
-                            <option value="Javanese Text">Javanese Text</option>
-                            <option value="Leelawadee UI">Leelawadee UI</option>
-                            <option value="Lucida Console">Lucida Console</option>
-                            <option value="Lucida Sans Unicode">Lucida Sans Unicode</option>
-                            <option value="Malgun Gothic">Malgun Gothic</option>
-                            <option value="Microsoft Sans Serif">Microsoft Sans Serif</option>
-                            <option value="Mongolian Baiti">Mongolian Baiti</option>
-                            <option value="MS Gothic">MS Gothic</option>
-                            <option value="MV Boli">MV Boli</option>
-                            <option value="Myanmar Text">Myanmar Text</option>
-                            <option value="Nirmala UI">Nirmala UI</option>
-                            <option value="Palatino Linotype">Palatino Linotype</option>
-                            <option value="Segoe Print">Segoe Print</option>
-                            <option value="Segoe Script">Segoe Script</option>
-                            <option value="Segoe UI">Segoe UI</option>
-                            <option value="Segoe UI Black">Segoe UI Black</option>
-                            <option value="Segoe UI Emoji">Segoe UI Emoji</option>
-                            <option value="Segoe UI Historic">Segoe UI Historic</option>
-                            <option value="Segoe UI Light">Segoe UI Light</option>
-                            <option value="Segoe UI Semibold">Segoe UI Semibold</option>
-                            <option value="Sitka">Sitka</option>
-                            <option value="Sylfaen">Sylfaen</option>
-                            <option value="Tahoma">Tahoma</option>
-                            <option value="Times New Roman">Times New Roman</option>
-                            <option value="Trebuchet MS">Trebuchet MS</option>
-                            <option value="Verdana">Verdana</option>
-                            <option value="Yu Gothic">Yu Gothic</option>
+                            <option value="-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif">System Default</option>
+                            <option value="Arial, Helvetica, sans-serif">Arial</option>
+                            <option value="'Arial Black', 'Arial Bold', sans-serif">Arial Black</option>
+                            <option value="'Helvetica Neue', Helvetica, Arial, sans-serif">Helvetica</option>
+                            <option value="'Comic Sans MS', 'Comic Sans', cursive">Comic Sans</option>
+                            <option value="Impact, Haettenschweiler, 'Arial Narrow Bold', sans-serif">Impact</option>
+                            <option value="Tahoma, Geneva, sans-serif">Tahoma</option>
+                            <option value="Verdana, Geneva, sans-serif">Verdana</option>
+                            <option value="Georgia, 'Times New Roman', serif">Georgia</option>
+                            <option value="'Times New Roman', Times, serif">Times New Roman</option>
+                            <option value="'Palatino Linotype', Palatino, 'Book Antiqua', serif">Palatino</option>
+                            <option value="'Courier New', Courier, monospace">Courier New</option>
+                            <option value="Monaco, Menlo, Consolas, 'Courier New', monospace">Monaco</option>
+                            <option value="'Trebuchet MS', 'Lucida Grande', sans-serif">Trebuchet</option>
+                            <option value="'Lucida Sans', 'Lucida Grande', sans-serif">Lucida Sans</option>
+                            <option value="'American Typewriter', serif">American Typewriter</option>
+                            <option value="'Brush Script MT', cursive">Brush Script</option>
+                            <option value="Copperplate, 'Copperplate Gothic Light', fantasy">Copperplate</option>
+                            <option value="Didot, 'Didot LT STD', serif">Didot</option>
+                            <option value="Futura, 'Trebuchet MS', sans-serif">Futura</option>
+                            <option value="'Gill Sans', 'Gill Sans MT', Calibri, sans-serif">Gill Sans</option>
+                            <option value="'Hoefler Text', Garamond, serif">Hoefler Text</option>
+                            <option value="'Lucida Console', Monaco, monospace">Lucida Console</option>
+                            <option value="Optima, Segoe, sans-serif">Optima</option>
+                            <option value="Papyrus, fantasy">Papyrus</option>
                         </select>
                         <input type="number" id="floating-font-size" min="8" max="200" value="32" class="floating-input" title="Font Size">
                         <button class="floating-btn" id="floating-text-bold" title="Bold"><strong>B</strong></button>

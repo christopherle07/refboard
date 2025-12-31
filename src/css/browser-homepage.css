@@ -16,7 +16,6 @@
     padding: 0 16px;
     background: var(--bg-primary);
     border-bottom: 1px solid var(--border-color);
-    -webkit-app-region: drag;
 }
 
 /* Window Controls on Left */
@@ -24,7 +23,6 @@
     display: flex;
     align-items: center;
     gap: 0;
-    -webkit-app-region: no-drag;
 }
 
 .titlebar-nav-container {
@@ -32,7 +30,6 @@
     align-items: center;
     justify-content: center;
     gap: 12px;
-    -webkit-app-region: drag;
 }
 
 .nav-breadcrumb {
@@ -49,7 +46,6 @@
     min-height: 32px;
     cursor: pointer;
     transition: background-color 0.15s;
-    -webkit-app-region: no-drag;
 }
 
 .nav-breadcrumb:hover {
@@ -101,7 +97,6 @@
 #open-floating-btn {
     border: 1px solid var(--border-color);
     margin-left: 8px;
-    -webkit-app-region: no-drag;
 }
 
 #open-floating-btn img {
@@ -126,7 +121,6 @@
     display: flex;
     align-items: center;
     gap: 4px;
-    -webkit-app-region: no-drag;
 }
 
 .toolbar-icon-btn {

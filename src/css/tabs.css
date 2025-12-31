@@ -32,7 +32,6 @@
     min-width: 80px;
     max-width: 240px;
     flex-shrink: 1;
-    -webkit-app-region: no-drag; /* Prevent window drag on tabs, allow HTML5 drag */
     user-select: none;
     border: none;
     border-right: 1px solid var(--border-color);
@@ -134,7 +133,6 @@
 .titlebar-drag-region {
     flex: 0 0 100px;
     height: 100%;
-    -webkit-app-region: drag;
     /* Don't disable pointer events - this area should be draggable */
 }
 

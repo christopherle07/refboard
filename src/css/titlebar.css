@@ -12,14 +12,12 @@
     position: relative;
     z-index: 100;
     flex-shrink: 0;
-    -webkit-app-region: drag;
 }
 
 .titlebar-left {
     display: flex;
     align-items: stretch;
     gap: 0;
-    -webkit-app-region: no-drag;
     flex-shrink: 0;
     height: 100%;
     padding: 0;
@@ -72,7 +70,6 @@
     display: flex;
     align-items: stretch;
     gap: 0;
-    -webkit-app-region: no-drag;
     margin-left: auto;
     height: 100%;
 }
