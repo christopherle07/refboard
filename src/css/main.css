@@ -942,6 +942,136 @@ html[data-theme="purplexing"] .floating-canvas-icon {
     background: var(--bg-hover);
 }
 
+/* Font preview styling - show each font in its own typeface */
+.font-preview-select {
+    font-size: 14px;
+}
+
+.font-preview-select option {
+    padding: 6px 10px;
+    font-size: 14px;
+    line-height: 1.4;
+}
+
+/* Custom Font Dropdown */
+.font-dropdown {
+    position: relative;
+    display: inline-block;
+    width: 100%;
+}
+
+.font-dropdown-trigger {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: 6px 10px;
+    border: none;
+    border-radius: 4px;
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    font-size: 13px;
+    cursor: pointer;
+    text-align: left;
+    gap: 8px;
+}
+
+.font-dropdown-trigger:hover {
+    background: var(--bg-hover);
+}
+
+.font-dropdown-selected {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.font-dropdown-arrow {
+    flex-shrink: 0;
+    transition: transform 0.2s ease;
+}
+
+.font-dropdown.open .font-dropdown-arrow {
+    transform: rotate(180deg);
+}
+
+.font-dropdown-menu {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    margin-top: 4px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+    max-height: 300px;
+    overflow-y: auto;
+    z-index: 1000;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-8px);
+    transition: opacity 0.15s ease, transform 0.15s ease, visibility 0.15s;
+}
+
+.font-dropdown.open .font-dropdown-menu {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+}
+
+.font-dropdown-item {
+    padding: 8px 12px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background 0.1s ease;
+}
+
+.font-dropdown-item:hover,
+.font-dropdown-item:focus {
+    background: var(--bg-hover);
+    outline: none;
+}
+
+.font-dropdown-item.selected {
+    background: var(--accent-color);
+    color: white;
+}
+
+.font-dropdown-item.selected:hover {
+    background: var(--accent-hover);
+}
+
+/* Floating toolbar font dropdown - compact version */
+.floating-toolbar .font-dropdown {
+    width: 140px;
+}
+
+.floating-toolbar .font-dropdown-trigger {
+    padding: 4px 8px;
+    background: transparent;
+    font-size: 12px;
+}
+
+.floating-toolbar .font-dropdown-trigger:hover {
+    background: var(--bg-hover);
+}
+
+.floating-toolbar .font-dropdown-menu {
+    width: 180px;
+}
+
+.floating-toolbar .font-dropdown-item {
+    padding: 6px 10px;
+    font-size: 13px;
+}
+
+/* Sidebar font dropdown */
+.property-row .font-dropdown-container {
+    flex: 1;
+}
+
 .floating-input {
     width: 45px;
     padding: 6px 8px;

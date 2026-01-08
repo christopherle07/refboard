@@ -13,6 +13,10 @@
             document.documentElement.setAttribute('data-theme', theme);
         })();
     </script>
+    <!-- Google Fonts for font previews -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&family=Open+Sans:wght@400;700&family=Lato:wght@400;700&family=Montserrat:wght@400;700&family=Oswald:wght@400;700&family=Playfair+Display:wght@400;700&family=Merriweather:wght@400;700&family=Raleway:wght@400;700&family=Poppins:wght@400;700&family=Ubuntu:wght@400;700&family=Roboto+Mono:wght@400;700&family=Source+Code+Pro:wght@400;700&family=Bebas+Neue&family=Pacifico&family=Dancing+Script:wght@400;700&family=Lobster&family=Cinzel:wght@400;700&family=Abril+Fatface&family=Righteous&family=Permanent+Marker&family=Caveat:wght@400;700&family=Indie+Flower&family=Shadows+Into+Light&family=Architects+Daughter&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="css/base.css">
     <link rel="stylesheet" href="css/browser-homepage.css">
     <link rel="stylesheet" href="css/main.css">
@@ -254,33 +258,7 @@
                                 </div>
                                 <div class="property-row">
                                     <label>Font Family</label>
-                                    <select id="text-font-family" class="property-select">
-                                        <option value="-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif">System Default</option>
-                                        <option value="Arial, Helvetica, sans-serif">Arial</option>
-                                        <option value="'Arial Black', 'Arial Bold', sans-serif">Arial Black</option>
-                                        <option value="'Helvetica Neue', Helvetica, Arial, sans-serif">Helvetica</option>
-                                        <option value="'Comic Sans MS', 'Comic Sans', cursive">Comic Sans</option>
-                                        <option value="Impact, Haettenschweiler, 'Arial Narrow Bold', sans-serif">Impact</option>
-                                        <option value="Tahoma, Geneva, sans-serif">Tahoma</option>
-                                        <option value="Verdana, Geneva, sans-serif">Verdana</option>
-                                        <option value="Georgia, 'Times New Roman', serif">Georgia</option>
-                                        <option value="'Times New Roman', Times, serif">Times New Roman</option>
-                                        <option value="'Palatino Linotype', Palatino, 'Book Antiqua', serif">Palatino</option>
-                                        <option value="'Courier New', Courier, monospace">Courier New</option>
-                                        <option value="Monaco, Menlo, Consolas, 'Courier New', monospace">Monaco</option>
-                                        <option value="'Trebuchet MS', 'Lucida Grande', sans-serif">Trebuchet</option>
-                                        <option value="'Lucida Sans', 'Lucida Grande', sans-serif">Lucida Sans</option>
-                                        <option value="'American Typewriter', serif">American Typewriter</option>
-                                        <option value="'Brush Script MT', cursive">Brush Script</option>
-                                        <option value="Copperplate, 'Copperplate Gothic Light', fantasy">Copperplate</option>
-                                        <option value="Didot, 'Didot LT STD', serif">Didot</option>
-                                        <option value="Futura, 'Trebuchet MS', sans-serif">Futura</option>
-                                        <option value="'Gill Sans', 'Gill Sans MT', Calibri, sans-serif">Gill Sans</option>
-                                        <option value="'Hoefler Text', Garamond, serif">Hoefler Text</option>
-                                        <option value="'Lucida Console', Monaco, monospace">Lucida Console</option>
-                                        <option value="Optima, Segoe, sans-serif">Optima</option>
-                                        <option value="Papyrus, fantasy">Papyrus</option>
-                                    </select>
+                                    <div id="font-dropdown-container" class="font-dropdown-container"></div>
                                 </div>
                                 <div class="property-row">
                                     <label>Text Color</label>
@@ -344,33 +322,7 @@
                 <!-- Floating Text Toolbar -->
                 <div class="floating-toolbar" id="floating-text-toolbar" style="display: none;">
                     <div class="floating-toolbar-content">
-                        <select id="floating-font-family" class="floating-select" title="Font Family" size="1">
-                            <option value="-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif">System Default</option>
-                            <option value="Arial, Helvetica, sans-serif">Arial</option>
-                            <option value="'Arial Black', 'Arial Bold', sans-serif">Arial Black</option>
-                            <option value="'Helvetica Neue', Helvetica, Arial, sans-serif">Helvetica</option>
-                            <option value="'Comic Sans MS', 'Comic Sans', cursive">Comic Sans</option>
-                            <option value="Impact, Haettenschweiler, 'Arial Narrow Bold', sans-serif">Impact</option>
-                            <option value="Tahoma, Geneva, sans-serif">Tahoma</option>
-                            <option value="Verdana, Geneva, sans-serif">Verdana</option>
-                            <option value="Georgia, 'Times New Roman', serif">Georgia</option>
-                            <option value="'Times New Roman', Times, serif">Times New Roman</option>
-                            <option value="'Palatino Linotype', Palatino, 'Book Antiqua', serif">Palatino</option>
-                            <option value="'Courier New', Courier, monospace">Courier New</option>
-                            <option value="Monaco, Menlo, Consolas, 'Courier New', monospace">Monaco</option>
-                            <option value="'Trebuchet MS', 'Lucida Grande', sans-serif">Trebuchet</option>
-                            <option value="'Lucida Sans', 'Lucida Grande', sans-serif">Lucida Sans</option>
-                            <option value="'American Typewriter', serif">American Typewriter</option>
-                            <option value="'Brush Script MT', cursive">Brush Script</option>
-                            <option value="Copperplate, 'Copperplate Gothic Light', fantasy">Copperplate</option>
-                            <option value="Didot, 'Didot LT STD', serif">Didot</option>
-                            <option value="Futura, 'Trebuchet MS', sans-serif">Futura</option>
-                            <option value="'Gill Sans', 'Gill Sans MT', Calibri, sans-serif">Gill Sans</option>
-                            <option value="'Hoefler Text', Garamond, serif">Hoefler Text</option>
-                            <option value="'Lucida Console', Monaco, monospace">Lucida Console</option>
-                            <option value="Optima, Segoe, sans-serif">Optima</option>
-                            <option value="Papyrus, fantasy">Papyrus</option>
-                        </select>
+                        <div id="floating-font-dropdown-container"></div>
                         <input type="number" id="floating-font-size" min="8" max="200" value="32" class="floating-input" title="Font Size">
                         <button class="floating-btn" id="floating-text-bold" title="Bold"><strong>B</strong></button>
                         <input type="color" id="floating-text-color" value="#000000" class="floating-color" title="Text Color">

@@ -4,6 +4,7 @@ import { showDeleteConfirm } from './modal.js';
 import { HistoryManager } from './history-manager.js';
 import { showInputModal, showChoiceModal, showToast, showConfirmModal, showColorExtractorModal, extractColorsFromImage } from './modal-utils.js';
 import { updateTitlebarTitle } from './titlebar.js';
+import { FontDropdown } from './font-dropdown.js';
 
 // Apply theme on page load
 const savedSettings = JSON.parse(localStorage.getItem('canvas_settings') || '{}');
@@ -52,7 +53,9 @@ function getEditorInstance(container) {
             draggedFromGroupBounds: null,
             lastDragY: 0,
             layerGroups: [],
-            nextGroupId: 1
+            nextGroupId: 1,
+            sidebarFontDropdown: null,
+            floatingFontDropdown: null
         });
     }
     return editorInstances.get(container);
@@ -4221,7 +4224,7 @@ function positionFloatingToolbar(toolbar, obj) {
 }
 
 function setupTextFloatingToolbar(obj) {
-    const fontFamily = getElement('floating-font-family');
+    const fontDropdownContainer = getElement('floating-font-dropdown-container');
     const fontSize = getElement('floating-font-size');
     const boldBtn = getElement('floating-text-bold');
     const colorInput = getElement('floating-text-color');
@@ -4229,8 +4232,21 @@ function setupTextFloatingToolbar(obj) {
     const alignCenter = getElement('floating-text-align-center');
     const alignRight = getElement('floating-text-align-right');
 
+    // Initialize or update floating font dropdown
+    const instance = getEditorInstance(activeContainer);
+    if (!instance.floatingFontDropdown && fontDropdownContainer) {
+        instance.floatingFontDropdown = new FontDropdown(fontDropdownContainer, {
+            initialValue: obj.fontFamily || "'Roboto', sans-serif",
+            onChange: (value) => {
+                canvas.objectsManager.updateSelectedObject({ fontFamily: value });
+            }
+        });
+    } else if (instance.floatingFontDropdown) {
+        // Update the dropdown value without triggering onChange
+        instance.floatingFontDropdown.setValue(obj.fontFamily || "'Roboto', sans-serif", false);
+    }
+
     // Set current values
-    fontFamily.value = obj.fontFamily || 'Arial';
     fontSize.value = obj.fontSize || 32;
     colorInput.value = obj.color || '#000000';
 
@@ -4247,7 +4263,6 @@ function setupTextFloatingToolbar(obj) {
     alignRight.classList.toggle('active', obj.textAlign === 'right');
 
     // Event listeners
-    fontFamily.onchange = () => canvas.objectsManager.updateSelectedObject({ fontFamily: fontFamily.value });
     fontSize.oninput = () => canvas.objectsManager.updateSelectedObject({ fontSize: parseInt(fontSize.value) });
     boldBtn.onclick = () => {
         const newWeight = obj.fontWeight === 'bold' ? 'normal' : 'bold';
@@ -4419,10 +4434,21 @@ function removeShapePropertyListeners() {
 function setupTextPropertyListeners() {
     const textContent = getElement('text-content');
     const textFontSize = getElement('text-font-size');
-    const textFontFamily = getElement('text-font-family');
+    const fontDropdownContainer = getElement('font-dropdown-container');
     const textColor = getElement('text-color');
     const textFontWeight = getElement('text-font-weight');
     const textAlign = getElement('text-align');
+
+    // Initialize sidebar font dropdown if not already done
+    const instance = getEditorInstance(activeContainer);
+    if (!instance.sidebarFontDropdown && fontDropdownContainer) {
+        instance.sidebarFontDropdown = new FontDropdown(fontDropdownContainer, {
+            initialValue: "'Roboto', sans-serif",
+            onChange: (value) => {
+                canvas.objectsManager.updateSelectedObject({ fontFamily: value });
+            }
+        });
+    }
 
     textContent.oninput = () => {
         canvas.objectsManager.updateSelectedObject({ text: textContent.value });
@@ -4430,10 +4456,6 @@ function setupTextPropertyListeners() {
 
     textFontSize.oninput = () => {
         canvas.objectsManager.updateSelectedObject({ fontSize: parseInt(textFontSize.value) });
-    };
-
-    textFontFamily.onchange = () => {
-        canvas.objectsManager.updateSelectedObject({ fontFamily: textFontFamily.value });
     };
 
     textColor.oninput = () => {
