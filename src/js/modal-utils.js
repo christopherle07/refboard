@@ -346,18 +346,26 @@ export function showColorExtractorModal() {
         });
 
         extractBtn.addEventListener('click', async () => {
-            if (!currentImage) return;
+            if (!currentImage) {
+                console.error('[Color Extractor] No image loaded');
+                return;
+            }
 
             extractBtn.disabled = true;
             statusDiv.style.display = 'block';
             statusMsg.textContent = 'Extracting colors...';
 
             try {
+                console.log('[Color Extractor] Starting extraction from modal image');
+                console.log('[Color Extractor] Image dimensions:', currentImage.width, 'x', currentImage.height);
                 const colors = await extractColorsFromImage(currentImage);
+                console.log('[Color Extractor] Extraction complete, colors:', colors);
                 // Return both colors and the source image for regeneration
                 close({ colors, sourceImage: currentImage });
             } catch (error) {
-                statusMsg.textContent = 'Error extracting colors. Please try another image.';
+                console.error('[Color Extractor] Error:', error);
+                console.error('[Color Extractor] Error stack:', error.stack);
+                statusMsg.textContent = `Error extracting colors: ${error.message}`;
                 extractBtn.disabled = false;
             }
         });
@@ -448,10 +456,20 @@ function determineOptimalK(pixels) {
     // Calculate color variance
     const variance = calculateColorVariance(pixels);
 
-    // Map variance to k (1-10)
-    // Higher variance = more diverse colors = more clusters
-    const normalizedVariance = Math.min(variance / 10000, 1);
-    const k = Math.max(1, Math.min(10, Math.ceil(normalizedVariance * 10)));
+    // Map variance to k (1-10), but with a minimum of 6
+    // Lower threshold from 10000 to 3000 to extract more colors
+    const normalizedVariance = Math.min(variance / 3000, 1);
+    let k = Math.max(6, Math.min(10, Math.ceil(normalizedVariance * 10)));
+
+    // BUT: Check if image truly has very few distinct colors
+    // Only reduce k for EXTREMELY simple images (like solid color backgrounds)
+    if (variance < 200) {
+        // Extremely low variance = basically solid colors only
+        k = Math.max(1, Math.min(3, Math.ceil(normalizedVariance * 10)));
+    } else if (variance < 500) {
+        // Very low variance = very limited palette (2-3 flat colors)
+        k = Math.max(3, Math.min(5, Math.ceil(normalizedVariance * 10)));
+    }
 
     return k;
 }

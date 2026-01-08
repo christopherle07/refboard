@@ -22,8 +22,8 @@
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
-body[data-theme="dark"] .text-editor-input,
-body[data-theme="midnight"] .text-editor-input {
+html[data-theme="dark"] .text-editor-input,
+html[data-theme="purplexing"] .text-editor-input {
     background: rgba(30, 30, 30, 0.95);
     color: #e0e0e0;
 }

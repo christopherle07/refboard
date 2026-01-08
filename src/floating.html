@@ -4,11 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Floating Board</title>
+    <link rel="stylesheet" href="css/base.css">
+    <link rel="stylesheet" href="css/modal.css">
     <link rel="stylesheet" href="css/floating.css">
 </head>
 <body>
-    <div class="titlebar">
-        <div class="titlebar-title" id="window-title" data-tauri-drag-region>Board</div>
+    <div class="titlebar" id="floating-titlebar" data-tauri-drag-region>
+        <div class="titlebar-title" id="window-title">Board</div>
         <div class="titlebar-controls">
 
             <button class="titlebar-btn" id="pin-btn" title="Always on Top">

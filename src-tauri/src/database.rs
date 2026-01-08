@@ -17,6 +17,26 @@ pub struct Layer {
     pub visible: bool,
     #[serde(default)]
     pub z_index: f64,
+    #[serde(default)]
+    pub rotation: Option<f64>,
+    #[serde(default)]
+    pub brightness: Option<f64>,
+    #[serde(default)]
+    pub contrast: Option<f64>,
+    #[serde(default)]
+    pub saturation: Option<f64>,
+    #[serde(default)]
+    pub hue: Option<f64>,
+    #[serde(default)]
+    pub blur: Option<f64>,
+    #[serde(default)]
+    pub opacity: Option<f64>,
+    #[serde(default)]
+    pub grayscale: Option<bool>,
+    #[serde(default)]
+    pub invert: Option<bool>,
+    #[serde(default)]
+    pub mirror: Option<bool>,
 }
 
 fn default_visible() -> bool {

@@ -134,10 +134,29 @@ export class CanvasObjectsManager {
             this.dispatchObjectsChanged();
         } else if (this.isDragging && this.selectedObjects.length > 0) {
             // Drag all selected objects
+            let finalX = worldPos.x;
+            let finalY = worldPos.y;
+
+            // Apply snapping if enabled and only one object is selected
+            if (this.canvas.enableSnapping && this.selectedObjects.length === 1) {
+                const primaryObj = this.selectedObjects[0];
+                const offset = this.dragOffsets[0];
+                if (offset) {
+                    const tentativeX = worldPos.x - offset.x;
+                    const tentativeY = worldPos.y - offset.y;
+                    const snapResult = this.canvas.snapToObjects(tentativeX, tentativeY, primaryObj);
+                    finalX = snapResult.x + offset.x;
+                    finalY = snapResult.y + offset.y;
+                    this.canvas.snapLines = snapResult.guides;
+                }
+            } else {
+                this.canvas.snapLines = [];
+            }
+
             this.selectedObjects.forEach((obj, index) => {
                 const offset = this.dragOffsets[index];
-                const newX = worldPos.x - offset.x;
-                const newY = worldPos.y - offset.y;
+                const newX = finalX - offset.x;
+                const newY = finalY - offset.y;
 
                 // For lines/arrows, move both start and end points
                 if (obj.type === 'shape' &&
@@ -604,49 +623,54 @@ export class CanvasObjectsManager {
         if (obj.type === 'colorPalette') {
             const originalWidth = obj.width;
             const originalHeight = obj.height;
+            const originalX = obj.x;
+            const originalY = obj.y;
             let newWidth = obj.width;
-            let newHeight = obj.height;
+            let anchorX = obj.x; // Store anchor point (the corner that doesn't move)
+            let anchorY = obj.y;
 
             const minSize = 60; // Minimum cell size
 
             switch (handle) {
-                case 'se': // Bottom-right
+                case 'se': // Bottom-right - anchor is top-left
                     newWidth = Math.max(minSize, mouseX - obj.x);
-                    newHeight = Math.max(minSize, mouseY - obj.y);
+                    anchorX = obj.x;
+                    anchorY = obj.y;
                     break;
-                case 'sw': // Bottom-left
+                case 'sw': // Bottom-left - anchor is top-right
                     newWidth = Math.max(minSize, (obj.x + obj.width) - mouseX);
-                    newHeight = Math.max(minSize, mouseY - obj.y);
-                    obj.x = (obj.x + obj.width) - newWidth;
+                    anchorX = obj.x + obj.width;
+                    anchorY = obj.y;
                     break;
-                case 'ne': // Top-right
+                case 'ne': // Top-right - anchor is bottom-left
                     newWidth = Math.max(minSize, mouseX - obj.x);
-                    newHeight = Math.max(minSize, (obj.y + obj.height) - mouseY);
-                    obj.y = (obj.y + obj.height) - newHeight;
+                    anchorX = obj.x;
+                    anchorY = obj.y + obj.height;
                     break;
-                case 'nw': // Top-left
+                case 'nw': // Top-left - anchor is bottom-right
                     newWidth = Math.max(minSize, (obj.x + obj.width) - mouseX);
-                    newHeight = Math.max(minSize, (obj.y + obj.height) - mouseY);
-                    obj.x = (obj.x + obj.width) - newWidth;
-                    obj.y = (obj.y + obj.height) - newHeight;
+                    anchorX = obj.x + obj.width;
+                    anchorY = obj.y + obj.height;
                     break;
-                case 'e': // Right edge
+                case 'e': // Right edge - anchor is left edge
                     newWidth = Math.max(minSize, mouseX - obj.x);
-                    newHeight = obj.height; // Keep height
+                    anchorX = obj.x;
+                    anchorY = obj.y;
                     break;
-                case 'w': // Left edge
+                case 'w': // Left edge - anchor is right edge
                     newWidth = Math.max(minSize, (obj.x + obj.width) - mouseX);
-                    newHeight = obj.height; // Keep height
-                    obj.x = (obj.x + obj.width) - newWidth;
+                    anchorX = obj.x + obj.width;
+                    anchorY = obj.y;
                     break;
-                case 's': // Bottom edge
-                    newWidth = obj.width; // Keep width
-                    newHeight = Math.max(minSize, mouseY - obj.y);
+                case 's': // Bottom edge - anchor is top edge
+                    newWidth = obj.width;
+                    anchorX = obj.x;
+                    anchorY = obj.y;
                     break;
-                case 'n': // Top edge
-                    newWidth = obj.width; // Keep width
-                    newHeight = Math.max(minSize, (obj.y + obj.height) - mouseY);
-                    obj.y = (obj.y + obj.height) - newHeight;
+                case 'n': // Top edge - anchor is bottom edge
+                    newWidth = obj.width;
+                    anchorX = obj.x;
+                    anchorY = obj.y + obj.height;
                     break;
             }
 
@@ -657,6 +681,42 @@ export class CanvasObjectsManager {
             obj.cellSize = Math.max(20, obj.cellSize * scaleFactor);
             obj.width = obj.gridCols * obj.cellSize;
             obj.height = obj.hasWideCell ? (obj.gridRows + 1) * obj.cellSize : obj.gridRows * obj.cellSize;
+
+            // Recalculate position based on anchor point
+            switch (handle) {
+                case 'se': // Anchor at top-left
+                    obj.x = anchorX;
+                    obj.y = anchorY;
+                    break;
+                case 'sw': // Anchor at top-right
+                    obj.x = anchorX - obj.width;
+                    obj.y = anchorY;
+                    break;
+                case 'ne': // Anchor at bottom-left
+                    obj.x = anchorX;
+                    obj.y = anchorY - obj.height;
+                    break;
+                case 'nw': // Anchor at bottom-right
+                    obj.x = anchorX - obj.width;
+                    obj.y = anchorY - obj.height;
+                    break;
+                case 'e': // Anchor at left edge
+                    obj.x = anchorX;
+                    obj.y = anchorY;
+                    break;
+                case 'w': // Anchor at right edge
+                    obj.x = anchorX - obj.width;
+                    obj.y = anchorY;
+                    break;
+                case 's': // Anchor at top edge
+                    obj.x = anchorX;
+                    obj.y = anchorY;
+                    break;
+                case 'n': // Anchor at bottom edge
+                    obj.x = anchorX;
+                    obj.y = anchorY - obj.height;
+                    break;
+            }
 
             return;
         }
@@ -743,7 +803,6 @@ export class CanvasObjectsManager {
     }
 
     deselectAll() {
-        console.log('Deselecting all objects. Was selected:', this.selectedObjects.length);
         this.selectedObject = null;
         this.selectedObjects = [];
         this.canvas.needsRender = true;
@@ -751,13 +810,10 @@ export class CanvasObjectsManager {
         // Dispatch event for UI
         const event = new CustomEvent('objectDeselected');
         this.canvas.canvas.dispatchEvent(event);
-
-        console.log('After deselect - selectedObjects:', this.selectedObjects.length, 'needsRender:', this.canvas.needsRender);
     }
 
     updateSelectedObject(properties) {
         if (this.selectedObject) {
-            console.log('Updating object:', this.selectedObject.id, 'with properties:', properties);
             Object.assign(this.selectedObject, properties);
 
             // If the object is currently being edited (textarea is visible), update textarea styling
@@ -817,9 +873,6 @@ export class CanvasObjectsManager {
 
     render(ctx) {
         // Render all visible objects
-        if (this.objects.length > 0) {
-            console.log('Rendering', this.objects.length, 'objects');
-        }
         for (const obj of this.objects) {
             if (obj.visible !== false) {
                 this.renderObject(ctx, obj);
@@ -847,7 +900,6 @@ export class CanvasObjectsManager {
 
         // Always render selection for selected objects (even in groups)
         // Group bounding box is rendered separately in canvas.js
-        console.log('renderPreviewAndSelection - selectedObjects count:', this.selectedObjects.length);
         for (const obj of this.selectedObjects) {
             if (obj.visible !== false) {
                 this.renderSelection(ctx, obj);
@@ -961,7 +1013,6 @@ export class CanvasObjectsManager {
                 const lineEndX = shape.x2 !== undefined ? shape.x2 : shape.x + shape.width;
                 const lineEndY = shape.y2 !== undefined ? shape.y2 : shape.y + shape.height;
 
-                console.log('Rendering line with strokeWidth:', strokeWidth, 'from shape.strokeWidth:', shape.strokeWidth);
                 ctx.beginPath();
                 ctx.moveTo(shape.x, shape.y);
                 ctx.lineTo(lineEndX, lineEndY);
@@ -1455,9 +1506,7 @@ export class CanvasObjectsManager {
     }
 
     loadObjects(objects) {
-        console.log('CanvasObjectsManager.loadObjects called with:', objects);
         this.objects = objects || [];
-        console.log('Objects loaded, count:', this.objects.length);
         this.canvas.needsRender = true;
     }
 

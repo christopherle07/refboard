@@ -112,7 +112,7 @@ body[data-tauri-platform="macos"] .titlebar-left {
 /* Button icons removed - now using SVG icons in browser-homepage.css */
 
 /* Theme-specific adjustments */
-body[data-theme="dark"] .custom-titlebar,
-body[data-theme="midnight"] .custom-titlebar {
+html[data-theme="dark"] .custom-titlebar,
+html[data-theme="purplexing"] .custom-titlebar {
     border-bottom-color: var(--border-color);
 }

@@ -337,7 +337,12 @@ function renderBoards() {
         });
         thumbnailDiv.appendChild(deleteBtn);
 
-        card.addEventListener('click', () => openBoard(board.id));
+        card.addEventListener('click', () => {
+            console.log('[Board Card] Clicked board:', board.id, board.name);
+            console.log('[Board Card] window.appInstance exists:', !!window.appInstance);
+            console.log('[Board Card] Calling openBoard...');
+            openBoard(board.id);
+        });
 
         // Add right-click context menu
         card.addEventListener('contextmenu', (e) => {
@@ -366,23 +371,33 @@ async function deleteBoard(boardId) {
 }
 
 async function openBoard(boardId) {
-    console.log('[openBoard] Opening board:', boardId);
-    // Get board name for breadcrumb
-    const board = await boardManager.getBoard(boardId);
-    console.log('[openBoard] Board data:', board);
+    try {
+        console.log('[openBoard] Opening board:', boardId);
+        // Get board name for breadcrumb
+        const board = await boardManager.getBoard(boardId);
+        console.log('[openBoard] Board data:', board);
 
-    if (!board) {
-        console.error('[openBoard] Board not found:', boardId);
-        return;
+        if (!board) {
+            console.error('[openBoard] Board not found:', boardId);
+            showToast('Board not found', 'error', 2000);
+            return;
+        }
+
+        if (!window.appInstance) {
+            console.error('[openBoard] App instance not available');
+            console.error('[openBoard] window.appInstance:', window.appInstance);
+            console.error('[openBoard] Checking if app is still initializing...');
+            showToast('Application is still initializing, please try again', 'error', 2000);
+            return;
+        }
+
+        console.log('[openBoard] Calling appInstance.openBoard:', boardId, board.name);
+        await window.appInstance.openBoard(boardId, board.name);
+        console.log('[openBoard] Board opened successfully');
+    } catch (error) {
+        console.error('[openBoard] Error opening board:', error);
+        showToast(`Failed to open board: ${error.message}`, 'error', 3000);
     }
-
-    if (!window.appInstance) {
-        console.error('[openBoard] App instance not available');
-        return;
-    }
-
-    console.log('[openBoard] Opening board:', boardId, board.name);
-    await window.appInstance.openBoard(boardId, board.name);
 }
 
 function importBoardAsNew() {

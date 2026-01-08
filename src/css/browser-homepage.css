@@ -105,15 +105,18 @@
 }
 
 /* Light theme: grey icon (#5f6368) */
-[data-theme="light"] #open-floating-btn img {
+html:not([data-theme="dark"]):not([data-theme="purplexing"]) #open-floating-btn img {
     filter: brightness(0) saturate(100%) invert(42%) sepia(6%) saturate(473%) hue-rotate(169deg) brightness(95%) contrast(87%);
 }
 
-/* Dark themes: purple icon (#9b7fd4) */
-[data-theme="dark"] #open-floating-btn img,
-[data-theme="midnight"] #open-floating-btn img,
-[data-theme="charcoal"] #open-floating-btn img {
-    filter: brightness(0) saturate(100%) invert(65%) sepia(27%) saturate(1346%) hue-rotate(209deg) brightness(93%) contrast(90%);
+/* Dark theme: white icon */
+html[data-theme="dark"] #open-floating-btn img {
+    filter: invert(1) !important;
+}
+
+/* Purplexing theme: purple icon (#9b7fd4) */
+html[data-theme="purplexing"] #open-floating-btn img {
+    filter: brightness(0) saturate(100%) invert(65%) sepia(27%) saturate(1346%) hue-rotate(209deg) brightness(93%) contrast(90%) !important;
 }
 
 /* Titlebar Actions */
@@ -142,13 +145,18 @@
 }
 
 /* Light mode toolbar icons */
-html:not([data-theme="dark"]) .toolbar-icon {
+html:not([data-theme="dark"]):not([data-theme="purplexing"]) .toolbar-icon {
     filter: brightness(0) saturate(100%) invert(44%) sepia(6%) saturate(369%) hue-rotate(185deg) brightness(93%) contrast(87%);
 }
 
-/* Dark mode toolbar icons - purple (#9b7fd4) */
+/* Dark mode toolbar icons - white */
 html[data-theme="dark"] .toolbar-icon {
-    filter: brightness(0) saturate(100%) invert(71%) sepia(35%) saturate(738%) hue-rotate(207deg) brightness(93%) contrast(91%);
+    filter: invert(1) !important;
+}
+
+/* Purplexing mode toolbar icons - purple (#9b7fd4) */
+html[data-theme="purplexing"] .toolbar-icon {
+    filter: brightness(0) saturate(100%) invert(71%) sepia(35%) saturate(738%) hue-rotate(207deg) brightness(93%) contrast(91%) !important;
 }
 
 .toolbar-icon-btn:hover {
@@ -278,13 +286,18 @@ html[data-theme="dark"] .toolbar-icon {
 }
 
 /* Light mode icon colors */
-html:not([data-theme="dark"]) .search-action-icon {
+html:not([data-theme="dark"]):not([data-theme="purplexing"]) .search-action-icon {
     filter: brightness(0) saturate(100%) invert(44%) sepia(6%) saturate(369%) hue-rotate(185deg) brightness(93%) contrast(87%);
 }
 
-/* Dark mode icon colors - purple (#9b7fd4) */
+/* Dark mode icon colors - white */
 html[data-theme="dark"] .search-action-icon {
-    filter: brightness(0) saturate(100%) invert(71%) sepia(35%) saturate(738%) hue-rotate(207deg) brightness(93%) contrast(91%);
+    filter: invert(1) !important;
+}
+
+/* Purplexing mode icon colors - purple */
+html[data-theme="purplexing"] .search-action-icon {
+    filter: brightness(0) saturate(100%) invert(71%) sepia(35%) saturate(738%) hue-rotate(207deg) brightness(93%) contrast(91%) !important;
 }
 
 .search-action-btn:hover {
@@ -298,13 +311,18 @@ html[data-theme="dark"] .search-action-icon {
 }
 
 /* Light mode hover */
-html:not([data-theme="dark"]) .search-action-btn:hover .search-action-icon {
+html:not([data-theme="dark"]):not([data-theme="purplexing"]) .search-action-btn:hover .search-action-icon {
     filter: brightness(0) saturate(100%) invert(13%) sepia(5%) saturate(1142%) hue-rotate(201deg) brightness(98%) contrast(88%);
 }
 
-/* Dark mode hover - brighter purple (#b794f6) */
+/* Dark mode hover - white */
 html[data-theme="dark"] .search-action-btn:hover .search-action-icon {
-    filter: brightness(0) saturate(100%) invert(79%) sepia(29%) saturate(1164%) hue-rotate(205deg) brightness(98%) contrast(93%);
+    filter: invert(1) !important;
+}
+
+/* Purplexing mode hover - purple */
+html[data-theme="purplexing"] .search-action-btn:hover .search-action-icon {
+    filter: brightness(0) saturate(100%) invert(71%) sepia(35%) saturate(738%) hue-rotate(207deg) brightness(93%) contrast(91%) !important;
 }
 
 .search-action-btn:active {
@@ -320,6 +338,8 @@ html[data-theme="dark"] .search-action-btn:hover .search-action-icon {
     width: 100%;
     max-width: 1200px;
     margin: 0 auto;
+    max-height: calc((180px + 80px + 24px) * 2 - 24px); /* 2 rows: (thumbnail + content + gap) * 2 - 1 gap */
+    overflow: hidden;
 }
 
 /* Board Card */
@@ -396,14 +416,14 @@ html[data-theme="dark"] .search-action-btn:hover .search-action-icon {
     color: #4a4a4a;
 }
 
-body[data-theme="dark"] .board-delete-btn,
-body[data-theme="midnight"] .board-delete-btn {
+html[data-theme="dark"] .board-delete-btn,
+html[data-theme="purplexing"] .board-delete-btn {
     background: rgba(0, 0, 0, 0.7);
 }
 
-body[data-theme="dark"] .board-delete-btn svg,
-body[data-theme="midnight"] .board-delete-btn svg {
-    color: #a855f7;
+html[data-theme="dark"] .board-delete-btn svg,
+html[data-theme="purplexing"] .board-delete-btn svg {
+    color: #ffffff;
 }
 
 .board-delete-btn:hover {
@@ -456,6 +476,11 @@ body[data-theme="midnight"] .board-delete-btn svg {
     text-align: center;
     padding: 60px 24px;
     color: var(--text-secondary);
+    grid-column: 1 / -1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
 }
 
 .empty-boards-state h3 {

@@ -137,9 +137,8 @@
 }
 
 /* Theme-specific adjustments */
-body[data-theme="dark"] .tab.active,
-body[data-theme="midnight"] .tab.active,
-body[data-theme="charcoal"] .tab.active {
+html[data-theme="dark"] .tab.active,
+html[data-theme="purplexing"] .tab.active {
     box-shadow: 0 -1px 3px rgba(0, 0, 0, 0.3);
 }
 

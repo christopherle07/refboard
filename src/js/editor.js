@@ -2,7 +2,7 @@ import { Canvas } from './canvas.js';
 import { boardManager } from './board-manager.js';
 import { showDeleteConfirm } from './modal.js';
 import { HistoryManager } from './history-manager.js';
-import { showInputModal, showChoiceModal, showToast, showConfirmModal, showColorExtractorModal } from './modal-utils.js';
+import { showInputModal, showChoiceModal, showToast, showConfirmModal, showColorExtractorModal, extractColorsFromImage } from './modal-utils.js';
 import { updateTitlebarTitle } from './titlebar.js';
 
 // Apply theme on page load
@@ -85,6 +85,9 @@ let lastDragY = 0; // Track the last mouse Y position during drag
 // Layer groups
 let layerGroups = []; // Array of { id, name, layerIds: [], collapsed: false }
 let nextGroupId = 1;
+
+// Track keyboard event handler to prevent duplicates
+let keyboardHandler = null;
 
 // Save current global state back to the instance
 function saveInstanceState() {
@@ -211,6 +214,23 @@ export async function initEditor(boardId, container) {
                 type: 'sync_state_response',
                 updates: zIndexUpdates
             });
+        } else if (event.data.type === 'image_filters_changed') {
+            // Apply filter changes from floating window
+            const img = canvas.images.find(i => i.id === event.data.imageId);
+            if (img && event.data.filters) {
+                const f = event.data.filters;
+                img.brightness = f.brightness;
+                img.contrast = f.contrast;
+                img.saturation = f.saturation;
+                img.hue = f.hue;
+                img.blur = f.blur;
+                img.opacity = f.opacity;
+                img.grayscale = f.grayscale;
+                img.invert = f.invert;
+                img.mirror = f.mirror;
+                canvas.needsRender = true;
+                scheduleSave();
+            }
         }
     };
 
@@ -424,6 +444,17 @@ function loadLayers(layers, viewState = null) {
                 added.id = layer.id;
                 added.zIndex = layer.zIndex || 0;
                 added.rotation = layer.rotation || 0;
+                // Restore filter properties (only if they exist and are not null)
+                if (layer.brightness != null) added.brightness = layer.brightness;
+                if (layer.contrast != null) added.contrast = layer.contrast;
+                if (layer.saturation != null) added.saturation = layer.saturation;
+                if (layer.hue != null) added.hue = layer.hue;
+                if (layer.blur != null) added.blur = layer.blur;
+                if (layer.opacity != null) added.opacity = layer.opacity;
+                if (layer.grayscale === true) added.grayscale = true;
+                if (layer.invert === true) added.invert = true;
+                if (layer.mirror === true) added.mirror = true;
+
                 loaded++;
                 if (loaded >= total) {
                     canvas.selectImage(null);
@@ -480,10 +511,15 @@ function setupEventListeners(container) {
         });
     }
 
-    // Assets view buttons
-    const boardAssetsBtn = $('board-assets-btn');
-    const allAssetsBtn = $('all-assets-btn');
+    // Assets view buttons - clone to remove old event listeners
+    let boardAssetsBtn = $('board-assets-btn');
+    let allAssetsBtn = $('all-assets-btn');
+
     if (boardAssetsBtn) {
+        const newBoardAssetsBtn = boardAssetsBtn.cloneNode(true);
+        boardAssetsBtn.parentNode.replaceChild(newBoardAssetsBtn, boardAssetsBtn);
+        boardAssetsBtn = newBoardAssetsBtn;
+
         boardAssetsBtn.addEventListener('click', () => {
             showAllAssets = false;
             boardAssetsBtn.classList.add('active');
@@ -493,6 +529,10 @@ function setupEventListeners(container) {
     }
 
     if (allAssetsBtn) {
+        const newAllAssetsBtn = allAssetsBtn.cloneNode(true);
+        allAssetsBtn.parentNode.replaceChild(newAllAssetsBtn, allAssetsBtn);
+        allAssetsBtn = newAllAssetsBtn;
+
         allAssetsBtn.addEventListener('click', () => {
             showAllAssets = true;
             allAssetsBtn.classList.add('active');
@@ -636,7 +676,13 @@ function setupEventListeners(container) {
         }
     });
 
-    document.addEventListener('keydown', (e) => {
+    // Remove old keyboard handler if it exists
+    if (keyboardHandler) {
+        document.removeEventListener('keydown', keyboardHandler);
+    }
+
+    // Create new keyboard handler
+    keyboardHandler = (e) => {
         // Don't intercept keyboard events when typing in inputs or textareas
         const isTyping = e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA';
 
@@ -668,7 +714,9 @@ function setupEventListeners(container) {
                 scheduleSave();
             }
         }
-    });
+    };
+
+    document.addEventListener('keydown', keyboardHandler);
 
     // Drawing toolbar event listeners
     setupDrawingToolbar();
@@ -681,14 +729,51 @@ function setupEventListeners(container) {
 }
 
 function setupDrawingToolbar() {
-    const penBtn = getElement('draw-pen-btn');
-    const highlighterBtn = getElement('draw-highlighter-btn');
-    const eraserBtn = getElement('draw-eraser-btn');
-    const colorPicker = getElement('draw-color-picker');
-    const sizeSlider = getElement('draw-size-slider');
-    const sizeInput = getElement('draw-size-input');
-    const clearBtn = getElement('draw-clear-btn');
+    let penBtn = getElement('draw-pen-btn');
+    let highlighterBtn = getElement('draw-highlighter-btn');
+    let eraserBtn = getElement('draw-eraser-btn');
+    let colorPicker = getElement('draw-color-picker');
+    let sizeSlider = getElement('draw-size-slider');
+    let sizeInput = getElement('draw-size-input');
+    let clearBtn = getElement('draw-clear-btn');
     const eraserModeToggle = getElement('eraser-mode-toggle');
+
+    // Clone buttons and controls to remove old event listeners
+    if (penBtn) {
+        const newPenBtn = penBtn.cloneNode(true);
+        penBtn.parentNode.replaceChild(newPenBtn, penBtn);
+        penBtn = newPenBtn;
+    }
+    if (highlighterBtn) {
+        const newHighlighterBtn = highlighterBtn.cloneNode(true);
+        highlighterBtn.parentNode.replaceChild(newHighlighterBtn, highlighterBtn);
+        highlighterBtn = newHighlighterBtn;
+    }
+    if (eraserBtn) {
+        const newEraserBtn = eraserBtn.cloneNode(true);
+        eraserBtn.parentNode.replaceChild(newEraserBtn, eraserBtn);
+        eraserBtn = newEraserBtn;
+    }
+    if (colorPicker) {
+        const newColorPicker = colorPicker.cloneNode(true);
+        colorPicker.parentNode.replaceChild(newColorPicker, colorPicker);
+        colorPicker = newColorPicker;
+    }
+    if (sizeSlider) {
+        const newSizeSlider = sizeSlider.cloneNode(true);
+        sizeSlider.parentNode.replaceChild(newSizeSlider, sizeSlider);
+        sizeSlider = newSizeSlider;
+    }
+    if (sizeInput) {
+        const newSizeInput = sizeInput.cloneNode(true);
+        sizeInput.parentNode.replaceChild(newSizeInput, sizeInput);
+        sizeInput = newSizeInput;
+    }
+    if (clearBtn) {
+        const newClearBtn = clearBtn.cloneNode(true);
+        clearBtn.parentNode.replaceChild(newClearBtn, clearBtn);
+        clearBtn = newClearBtn;
+    }
 
     let currentTool = null;
 
@@ -797,12 +882,13 @@ function setupDrawingToolbar() {
     const drawingToolbar = getElement('drawing-toolbar');
 
     if (drawingModeBtn && drawingToolbar) {
-        // Load saved state from localStorage
-        const toolbarVisible = localStorage.getItem('editor_toolbar_visible') !== 'false';
+        // Load saved state from localStorage - default to hidden (false)
+        const toolbarVisible = localStorage.getItem('editor_toolbar_visible') === 'true';
 
         if (!toolbarVisible) {
             drawingToolbar.style.display = 'none';
             drawingModeBtn.classList.remove('active');
+            canvas.setDrawingMode(null);
         } else {
             drawingModeBtn.classList.add('active');
         }
@@ -915,18 +1001,33 @@ async function saveNow() {
     }
 
     const images = canvas.getImages();
-    const layers = images.map(img => ({
-        id: img.id,
-        name: img.name,
-        src: img.img.src,
-        x: img.x,
-        y: img.y,
-        width: img.width,
-        height: img.height,
-        visible: img.visible !== false,
-        zIndex: img.zIndex || 0,
-        rotation: img.rotation || 0
-    }));
+    const layers = images.map(img => {
+        const layer = {
+            id: img.id,
+            name: img.name,
+            src: img.img.src,
+            x: img.x,
+            y: img.y,
+            width: img.width,
+            height: img.height,
+            visible: img.visible !== false,
+            zIndex: img.zIndex || 0
+        };
+
+        // Only include filter properties if they have non-default values
+        if (img.rotation !== undefined && img.rotation !== 0) layer.rotation = img.rotation;
+        if (img.brightness !== undefined && img.brightness !== 100) layer.brightness = img.brightness;
+        if (img.contrast !== undefined && img.contrast !== 100) layer.contrast = img.contrast;
+        if (img.saturation !== undefined && img.saturation !== 100) layer.saturation = img.saturation;
+        if (img.hue !== undefined && img.hue !== 0) layer.hue = img.hue;
+        if (img.blur !== undefined && img.blur !== 0) layer.blur = img.blur;
+        if (img.opacity !== undefined && img.opacity !== 100) layer.opacity = img.opacity;
+        if (img.grayscale === true) layer.grayscale = true;
+        if (img.invert === true) layer.invert = true;
+        if (img.mirror === true) layer.mirror = true;
+
+        return layer;
+    });
     const bgColor = canvas.bgColor;
     const viewState = {
         pan: { x: canvas.pan.x, y: canvas.pan.y },
@@ -942,11 +1043,7 @@ async function saveNow() {
         objectIds: g.objectIds || [],
         collapsed: g.collapsed || false
     }));
-    console.log('[saveNow] Saving board:', { layersCount: layers.length, strokesCount: strokes.length, objectsCount: objects.length, groupsCount: groups.length, objects, viewState });
-    console.log('[saveNow] Layers zIndex:', layers.map(l => ({ id: l.id, name: l.name, zIndex: l.zIndex })));
-    console.log('[saveNow] Objects zIndex:', objects.map(o => ({ id: o.id, type: o.type, zIndex: o.zIndex })));
     await boardManager.updateBoard(currentBoardId, { layers, bgColor, viewState, strokes, objects, groups, thumbnail });
-    console.log('[saveNow] Save complete');
 }
 
 function createLayerItem(img, images) {
@@ -2624,6 +2721,8 @@ function setupContextMenu() {
     const deleteSelectedItem = getElement('context-delete-selected');
     const deselectAllItem = getElement('context-deselect-all');
     const cropImageItem = getElement('context-crop-image');
+    const editImageItem = getElement('context-edit-image');
+    const extractColorsItem = getElement('context-extract-colors');
     const separator = getElement('context-separator');
 
     let contextMenuMousePos = { x: 0, y: 0 };
@@ -2654,6 +2753,8 @@ function setupContextMenu() {
         deleteSelectedItem.style.display = hasSelection ? 'block' : 'none';
         deselectAllItem.style.display = hasSelection ? 'block' : 'none';
         cropImageItem.style.display = hasImageClick ? 'block' : 'none';
+        editImageItem.style.display = hasImageClick ? 'block' : 'none';
+        extractColorsItem.style.display = hasImageClick ? 'block' : 'none';
         separator.style.display = (hasSelection || hasImageClick) ? 'block' : 'none';
 
         contextMenu.style.left = `${e.clientX}px`;
@@ -2697,6 +2798,95 @@ function setupContextMenu() {
     cropImageItem.addEventListener('click', () => {
         if (canvas.contextMenuImage) {
             canvas.enableCropMode(canvas.contextMenuImage);
+        }
+        contextMenu.classList.remove('show');
+    });
+
+    extractColorsItem.addEventListener('click', async () => {
+        if (canvas.contextMenuImage && canvas.contextMenuImage.img) {
+            try {
+                // Extract colors from the image
+                const colors = await extractColorsFromImage(canvas.contextMenuImage.img);
+
+                // Calculate grid layout based on number of colors
+                const numColors = colors.length;
+                let gridCols, gridRows, hasWideCell = false;
+
+                if (numColors === 1) {
+                    gridCols = 1; gridRows = 1;
+                } else if (numColors === 2) {
+                    gridCols = 2; gridRows = 1;
+                } else if (numColors === 3) {
+                    gridCols = 2; gridRows = 1; hasWideCell = true;
+                } else if (numColors === 4) {
+                    gridCols = 2; gridRows = 2;
+                } else if (numColors === 5) {
+                    gridCols = 2; gridRows = 2; hasWideCell = true;
+                } else if (numColors === 6) {
+                    gridCols = 3; gridRows = 2;
+                } else if (numColors === 7) {
+                    gridCols = 3; gridRows = 2; hasWideCell = true;
+                } else if (numColors === 8) {
+                    gridCols = 4; gridRows = 2;
+                } else if (numColors === 9) {
+                    gridCols = 3; gridRows = 3;
+                } else { // 10
+                    gridCols = 5; gridRows = 2;
+                }
+
+                // Auto-scale based on zoom level
+                const baseCellSize = 60;
+                const zoomFactor = 1 / canvas.zoom;
+                const cellSize = baseCellSize * zoomFactor;
+
+                const width = gridCols * cellSize;
+                const height = hasWideCell ? (gridRows + 1) * cellSize : gridRows * cellSize;
+
+                // Get canvas center position
+                const canvasRect = canvas.canvas.getBoundingClientRect();
+                const centerX = -canvas.pan.x + (canvasRect.width / 2 / canvas.zoom);
+                const centerY = -canvas.pan.y + (canvasRect.height / 2 / canvas.zoom);
+
+                // Generate default name for the palette
+                const existingPalettes = canvas.objectsManager.objects.filter(obj => obj.type === 'colorPalette');
+                const paletteNumber = existingPalettes.length + 1;
+                const paletteName = `Palette ${paletteNumber}`;
+
+                // Create color palette object on canvas
+                const paletteObject = {
+                    type: 'colorPalette',
+                    id: Date.now() + Math.random(),
+                    name: paletteName,
+                    x: centerX - width / 2,
+                    y: centerY - height / 2,
+                    width: width,
+                    height: height,
+                    colors: colors,
+                    sourceImage: canvas.contextMenuImage.img.src,
+                    gridCols: gridCols,
+                    gridRows: gridRows,
+                    cellSize: cellSize,
+                    hasWideCell: hasWideCell,
+                    zIndex: canvas.objectsManager.objects.reduce((max, obj) => Math.max(max, obj.zIndex || 0), 0) + 1
+                };
+
+                // Add to canvas
+                canvas.objectsManager.objects.push(paletteObject);
+                canvas.needsRender = true;
+                canvas.objectsManager.dispatchObjectsChanged();
+
+                showToast(`Color palette created with ${numColors} color${numColors > 1 ? 's' : ''}`, 'success', 3000);
+            } catch (err) {
+                console.error('Failed to extract colors:', err);
+                showToast('Failed to extract colors', 'error', 3000);
+            }
+        }
+        contextMenu.classList.remove('show');
+    });
+
+    editImageItem.addEventListener('click', () => {
+        if (canvas.contextMenuImage) {
+            showImageEditModal(canvas.contextMenuImage);
         }
         contextMenu.classList.remove('show');
     });
@@ -3315,68 +3505,99 @@ let currentAssetIsAllAssets = false;
 
 function setupAssetSidebar() {
     const sidebar = getElement('asset-sidebar');
-    const closeBtn = getElement('asset-sidebar-close');
-    const addToCanvasBtn = getElement('asset-sidebar-add-to-canvas');
-    const deleteBtn = getElement('asset-sidebar-delete');
+    let closeBtn = getElement('asset-sidebar-close');
+    let addToCanvasBtn = getElement('asset-sidebar-add-to-canvas');
+    let deleteBtn = getElement('asset-sidebar-delete');
     const tagInput = getElement('asset-tag-input');
-    const addTagBtn = getElement('asset-tag-add-btn');
+    let addTagBtn = getElement('asset-tag-add-btn');
     const nameInput = getElement('asset-sidebar-name');
 
+    // Clone buttons to remove old event listeners
+    if (closeBtn) {
+        const newCloseBtn = closeBtn.cloneNode(true);
+        closeBtn.parentNode.replaceChild(newCloseBtn, closeBtn);
+        closeBtn = newCloseBtn;
+    }
+
+    if (addToCanvasBtn) {
+        const newAddToCanvasBtn = addToCanvasBtn.cloneNode(true);
+        addToCanvasBtn.parentNode.replaceChild(newAddToCanvasBtn, addToCanvasBtn);
+        addToCanvasBtn = newAddToCanvasBtn;
+    }
+
+    if (deleteBtn) {
+        const newDeleteBtn = deleteBtn.cloneNode(true);
+        deleteBtn.parentNode.replaceChild(newDeleteBtn, deleteBtn);
+        deleteBtn = newDeleteBtn;
+    }
+
+    if (addTagBtn) {
+        const newAddTagBtn = addTagBtn.cloneNode(true);
+        addTagBtn.parentNode.replaceChild(newAddTagBtn, addTagBtn);
+        addTagBtn = newAddTagBtn;
+    }
+
     // Close sidebar
-    closeBtn.addEventListener('click', () => {
-        sidebar.classList.remove('open');
-        currentAssetInSidebar = null;
-    });
+    if (closeBtn) {
+        closeBtn.addEventListener('click', () => {
+            sidebar.classList.remove('open');
+            currentAssetInSidebar = null;
+        });
+    }
 
     // Add to canvas
-    addToCanvasBtn.addEventListener('click', async () => {
-        if (!currentAssetInSidebar) return;
+    if (addToCanvasBtn) {
+        addToCanvasBtn.addEventListener('click', async () => {
+            if (!currentAssetInSidebar) return;
 
-        const imgElement = new Image();
-        imgElement.onload = async () => {
-            // Add image to canvas
-            canvas.addImage(imgElement, 100, 100, currentAssetInSidebar.name);
-            renderLayers();
+            const imgElement = new Image();
+            imgElement.onload = async () => {
+                // Add image to canvas
+                canvas.addImage(imgElement, 100, 100, currentAssetInSidebar.name);
+                renderLayers();
 
-            // If from "All Assets", add to board assets
-            if (currentAssetIsAllAssets) {
-                const board = boardManager.currentBoard;
-                const boardAssets = board.assets || [];
-                const existsInBoard = boardAssets.some(a => a.name === currentAssetInSidebar.name && a.src === currentAssetInSidebar.src);
-                if (!existsInBoard) {
-                    const updatedAssets = [...boardAssets, {
-                        id: currentAssetInSidebar.id,
-                        name: currentAssetInSidebar.name,
-                        src: currentAssetInSidebar.src,
-                        tags: currentAssetInSidebar.tags || [],
-                        metadata: currentAssetInSidebar.metadata || {}
-                    }];
-                    await boardManager.updateBoard(currentBoardId, { assets: updatedAssets });
+                // If from "All Assets", add to board assets
+                if (currentAssetIsAllAssets) {
+                    const board = boardManager.currentBoard;
+                    const boardAssets = board.assets || [];
+                    const existsInBoard = boardAssets.some(a => a.name === currentAssetInSidebar.name && a.src === currentAssetInSidebar.src);
+                    if (!existsInBoard) {
+                        const updatedAssets = [...boardAssets, {
+                            id: currentAssetInSidebar.id,
+                            name: currentAssetInSidebar.name,
+                            src: currentAssetInSidebar.src,
+                            tags: currentAssetInSidebar.tags || [],
+                            metadata: currentAssetInSidebar.metadata || {}
+                        }];
+                        await boardManager.updateBoard(currentBoardId, { assets: updatedAssets });
+                    }
                 }
-            }
 
-            // Close sidebar (stay in assets view)
-            sidebar.classList.remove('open');
-            currentAssetInSidebar = null;
-        };
-        imgElement.src = currentAssetInSidebar.src;
-    });
+                // Close sidebar (stay in assets view)
+                sidebar.classList.remove('open');
+                currentAssetInSidebar = null;
+            };
+            imgElement.src = currentAssetInSidebar.src;
+        });
+    }
 
     // Delete asset
-    deleteBtn.addEventListener('click', async () => {
-        if (!currentAssetInSidebar) return;
+    if (deleteBtn) {
+        deleteBtn.addEventListener('click', async () => {
+            if (!currentAssetInSidebar) return;
 
-        showDeleteConfirm(currentAssetInSidebar.name, async () => {
-            if (currentAssetIsAllAssets) {
-                await boardManager.deleteFromAllAssets(currentAssetInSidebar.id);
-            } else {
-                await boardManager.deleteBoardAsset(currentBoardId, currentAssetInSidebar.id);
-            }
-            sidebar.classList.remove('open');
-            currentAssetInSidebar = null;
-            loadAssetsLibrary();
+            showDeleteConfirm(currentAssetInSidebar.name, async () => {
+                if (currentAssetIsAllAssets) {
+                    await boardManager.deleteFromAllAssets(currentAssetInSidebar.id);
+                } else {
+                    await boardManager.deleteBoardAsset(currentBoardId, currentAssetInSidebar.id);
+                }
+                sidebar.classList.remove('open');
+                currentAssetInSidebar = null;
+                loadAssetsLibrary();
+            });
         });
-    });
+    }
 
     // Add tag
     const addTag = async () => {
@@ -3399,13 +3620,18 @@ function setupAssetSidebar() {
         hideTagPresets();
     };
 
-    addTagBtn.addEventListener('click', addTag);
-    tagInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            addTag();
-        }
-    });
+    if (addTagBtn) {
+        addTagBtn.addEventListener('click', addTag);
+    }
+
+    if (tagInput) {
+        tagInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                addTag();
+            }
+        });
+    }
 
     // Hide dropdown when clicking outside
     document.addEventListener('click', (e) => {
@@ -3419,12 +3645,14 @@ function setupAssetSidebar() {
     });
 
     // Save name on blur
-    nameInput.addEventListener('blur', async () => {
-        if (currentAssetInSidebar) {
-            currentAssetInSidebar.name = nameInput.value;
-            await saveAssetChanges();
-        }
-    });
+    if (nameInput) {
+        nameInput.addEventListener('blur', async () => {
+            if (currentAssetInSidebar) {
+                currentAssetInSidebar.name = nameInput.value;
+                await saveAssetChanges();
+            }
+        });
+    }
 }
 
 async function showAssetSidebar(asset, isAllAssets) {
@@ -4222,8 +4450,13 @@ function setupTextPropertyListeners() {
 }
 
 function setupTextTool() {
-    const textToolBtn = getElement('text-tool-btn');
+    let textToolBtn = getElement('text-tool-btn');
     if (!textToolBtn) return;
+
+    // Clone button to remove old event listeners
+    const newTextToolBtn = textToolBtn.cloneNode(true);
+    textToolBtn.parentNode.replaceChild(newTextToolBtn, textToolBtn);
+    textToolBtn = newTextToolBtn;
 
     textToolBtn.addEventListener('click', () => {
         // Toggle text tool mode
@@ -4245,16 +4478,21 @@ function setupTextTool() {
 }
 
 function setupShapeTool() {
-    const shapeToolBtn = getElement('shape-tool-btn');
+    let shapeToolBtn = getElement('shape-tool-btn');
     if (!shapeToolBtn) return;
 
-    const shapeType = getElement('shape-type');
-    const shapeFillColor = getElement('shape-fill-color');
-    const shapeHasStroke = getElement('shape-has-stroke');
-    const shapeStrokeColor = getElement('shape-stroke-color');
-    const shapeStrokeWidth = getElement('shape-stroke-width');
-    const shapeLineColor = getElement('shape-line-color');
-    const shapeLineThickness = getElement('shape-line-thickness');
+    // Clone button to remove old event listeners
+    const newShapeToolBtn = shapeToolBtn.cloneNode(true);
+    shapeToolBtn.parentNode.replaceChild(newShapeToolBtn, shapeToolBtn);
+    shapeToolBtn = newShapeToolBtn;
+
+    let shapeType = getElement('shape-type');
+    let shapeFillColor = getElement('shape-fill-color');
+    let shapeHasStroke = getElement('shape-has-stroke');
+    let shapeStrokeColor = getElement('shape-stroke-color');
+    let shapeStrokeWidth = getElement('shape-stroke-width');
+    let shapeLineColor = getElement('shape-line-color');
+    let shapeLineThickness = getElement('shape-line-thickness');
     const lineColorRow = getElement('shape-line-color-row');
     const lineThicknessRow = getElement('shape-line-thickness-row');
     const fillColorRow = shapeFillColor.closest('.property-row');
@@ -4262,7 +4500,49 @@ function setupShapeTool() {
     const strokeColorRow = getElement('shape-stroke-color-row');
     const strokeWidthRow = getElement('shape-stroke-width-row');
     const cornerRadiusRow = getElement('shape-corner-radius-row');
-    const shapeCornerRadius = getElement('shape-corner-radius');
+    let shapeCornerRadius = getElement('shape-corner-radius');
+
+    // Clone property controls to remove old event listeners
+    if (shapeType) {
+        const newShapeType = shapeType.cloneNode(true);
+        shapeType.parentNode.replaceChild(newShapeType, shapeType);
+        shapeType = newShapeType;
+    }
+    if (shapeFillColor) {
+        const newShapeFillColor = shapeFillColor.cloneNode(true);
+        shapeFillColor.parentNode.replaceChild(newShapeFillColor, shapeFillColor);
+        shapeFillColor = newShapeFillColor;
+    }
+    if (shapeHasStroke) {
+        const newShapeHasStroke = shapeHasStroke.cloneNode(true);
+        shapeHasStroke.parentNode.replaceChild(newShapeHasStroke, shapeHasStroke);
+        shapeHasStroke = newShapeHasStroke;
+    }
+    if (shapeStrokeColor) {
+        const newShapeStrokeColor = shapeStrokeColor.cloneNode(true);
+        shapeStrokeColor.parentNode.replaceChild(newShapeStrokeColor, shapeStrokeColor);
+        shapeStrokeColor = newShapeStrokeColor;
+    }
+    if (shapeStrokeWidth) {
+        const newShapeStrokeWidth = shapeStrokeWidth.cloneNode(true);
+        shapeStrokeWidth.parentNode.replaceChild(newShapeStrokeWidth, shapeStrokeWidth);
+        shapeStrokeWidth = newShapeStrokeWidth;
+    }
+    if (shapeLineColor) {
+        const newShapeLineColor = shapeLineColor.cloneNode(true);
+        shapeLineColor.parentNode.replaceChild(newShapeLineColor, shapeLineColor);
+        shapeLineColor = newShapeLineColor;
+    }
+    if (shapeLineThickness) {
+        const newShapeLineThickness = shapeLineThickness.cloneNode(true);
+        shapeLineThickness.parentNode.replaceChild(newShapeLineThickness, shapeLineThickness);
+        shapeLineThickness = newShapeLineThickness;
+    }
+    if (shapeCornerRadius) {
+        const newShapeCornerRadius = shapeCornerRadius.cloneNode(true);
+        shapeCornerRadius.parentNode.replaceChild(newShapeCornerRadius, shapeCornerRadius);
+        shapeCornerRadius = newShapeCornerRadius;
+    }
 
     // Show/hide properties based on shape type
     function updatePropertiesVisibility() {
@@ -4543,8 +4823,13 @@ function setupLayerContextMenu() {
 }
 
 function setupColorExtractorTool() {
-    const colorExtractorBtn = getElement('color-extractor-btn');
+    let colorExtractorBtn = getElement('color-extractor-btn');
     if (!colorExtractorBtn) return;
+
+    // Clone button to remove old event listeners
+    const newColorExtractorBtn = colorExtractorBtn.cloneNode(true);
+    colorExtractorBtn.parentNode.replaceChild(newColorExtractorBtn, colorExtractorBtn);
+    colorExtractorBtn = newColorExtractorBtn;
 
     colorExtractorBtn.addEventListener('click', async () => {
 
@@ -4748,6 +5033,7 @@ function showPaletteModal(paletteObj) {
                 </div>
             </div>
             <div class="modal-footer">
+                <button class="modal-btn modal-btn-primary" id="palette-modal-regenerate" ${!paletteObj.sourceImage ? 'disabled' : ''}>Regenerate Colors</button>
                 <button class="modal-btn modal-btn-secondary" id="palette-modal-close">Close</button>
             </div>
         </div>
@@ -4756,69 +5042,195 @@ function showPaletteModal(paletteObj) {
     document.body.appendChild(modal);
     modal.style.display = 'flex';
 
-    // Populate colors
+    // Function to populate colors
     const grid = modal.querySelector('#palette-modal-grid');
-    paletteObj.colors.forEach(color => {
-        const hexColor = typeof color === 'string' ? color : color.hex;
-        const rgbColor = typeof color === 'string' ? null : color.rgb;
 
-        const colorItem = document.createElement('div');
-        colorItem.style.cssText = 'display: flex; flex-direction: column; align-items: center; gap: 8px;';
-        colorItem.innerHTML = `
-            <div style="width: 100%; aspect-ratio: 1; background-color: ${hexColor}; border-radius: 8px; border: 2px solid var(--border-color); cursor: pointer;"></div>
-            <div style="display: flex; flex-direction: column; gap: 4px; width: 100%;">
-                <button class="copy-hex-btn" style="padding: 6px 12px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-secondary); color: var(--text-primary); cursor: pointer; font-size: 12px;">
-                    Copy HEX
-                </button>
-                <button class="copy-rgb-btn" style="padding: 6px 12px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-secondary); color: var(--text-primary); cursor: pointer; font-size: 12px;">
-                    Copy RGB
-                </button>
-            </div>
-        `;
+    function populateColors(colors) {
+        grid.innerHTML = '';
+        colors.forEach(color => {
+            const hexColor = typeof color === 'string' ? color : color.hex;
+            const rgbColor = typeof color === 'string' ? null : color.rgb;
 
-        const hexBtn = colorItem.querySelector('.copy-hex-btn');
-        const rgbBtn = colorItem.querySelector('.copy-rgb-btn');
+            const colorItem = document.createElement('div');
+            colorItem.style.cssText = 'display: flex; flex-direction: column; align-items: center; gap: 8px;';
+            colorItem.innerHTML = `
+                <div style="width: 100%; aspect-ratio: 1; background-color: ${hexColor}; border-radius: 8px; border: 2px solid var(--border-color); cursor: pointer;"></div>
+                <div style="display: flex; flex-direction: column; gap: 4px; width: 100%;">
+                    <button class="copy-hex-btn" style="padding: 6px 12px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-secondary); color: var(--text-primary); cursor: pointer; font-size: 12px;">
+                        Copy HEX
+                    </button>
+                    <button class="copy-rgb-btn" style="padding: 6px 12px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-secondary); color: var(--text-primary); cursor: pointer; font-size: 12px;">
+                        Copy RGB
+                    </button>
+                </div>
+            `;
 
-        hexBtn.addEventListener('click', async () => {
+            const hexBtn = colorItem.querySelector('.copy-hex-btn');
+            const rgbBtn = colorItem.querySelector('.copy-rgb-btn');
+
+            hexBtn.addEventListener('click', async () => {
+                try {
+                    await navigator.clipboard.writeText(hexColor.toUpperCase());
+                    const originalText = hexBtn.textContent;
+                    hexBtn.textContent = 'Copied!';
+                    hexBtn.style.background = 'var(--accent-color)';
+                    hexBtn.style.color = 'white';
+                    setTimeout(() => {
+                        hexBtn.textContent = originalText;
+                        hexBtn.style.background = 'var(--bg-secondary)';
+                        hexBtn.style.color = 'var(--text-primary)';
+                    }, 1000);
+                } catch (err) {
+                    console.error('Failed to copy:', err);
+                }
+            });
+
+            rgbBtn.addEventListener('click', async () => {
+                const rgbText = rgbColor || (() => {
+                    const rgb = hexToRgb(hexColor);
+                    return `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`;
+                })();
+                try {
+                    await navigator.clipboard.writeText(rgbText);
+                    const originalText = rgbBtn.textContent;
+                    rgbBtn.textContent = 'Copied!';
+                    rgbBtn.style.background = 'var(--accent-color)';
+                    rgbBtn.style.color = 'white';
+                    setTimeout(() => {
+                        rgbBtn.textContent = originalText;
+                        rgbBtn.style.background = 'var(--bg-secondary)';
+                        rgbBtn.style.color = 'var(--text-primary)';
+                    }, 1000);
+                } catch (err) {
+                    console.error('Failed to copy:', err);
+                }
+            });
+
+            grid.appendChild(colorItem);
+        });
+    }
+
+    // Initial population
+    populateColors(paletteObj.colors);
+
+    // Regenerate button
+    const regenerateBtn = modal.querySelector('#palette-modal-regenerate');
+    if (regenerateBtn && paletteObj.sourceImage) {
+        // Clone button to remove old listeners
+        const newRegenerateBtn = regenerateBtn.cloneNode(true);
+        regenerateBtn.parentNode.replaceChild(newRegenerateBtn, regenerateBtn);
+
+        newRegenerateBtn.addEventListener('click', async () => {
+            // Check if the palette has a sourceImage reference
+            if (!paletteObj.sourceImage) {
+                showToast('Cannot regenerate - source image not found', 'error', 3000);
+                return;
+            }
+
             try {
-                await navigator.clipboard.writeText(hexColor.toUpperCase());
-                const originalText = hexBtn.textContent;
-                hexBtn.textContent = 'Copied!';
-                hexBtn.style.background = 'var(--accent-color)';
-                hexBtn.style.color = 'white';
-                setTimeout(() => {
-                    hexBtn.textContent = originalText;
-                    hexBtn.style.background = 'var(--bg-secondary)';
-                    hexBtn.style.color = 'var(--text-primary)';
-                }, 1000);
-            } catch (err) {
-                console.error('Failed to copy:', err);
+                newRegenerateBtn.disabled = true;
+                newRegenerateBtn.textContent = 'Regenerating...';
+
+                console.log('[Regenerate] Starting color regeneration...');
+                console.log('[Regenerate] Source image URL:', paletteObj.sourceImage);
+
+                // Find the source image in canvas layers
+                const sourceImageLayer = canvas.images.find(img => img.img && img.img.src === paletteObj.sourceImage);
+                console.log('[Regenerate] Found image in canvas layers:', !!sourceImageLayer);
+
+                let colors;
+                if (sourceImageLayer && sourceImageLayer.img) {
+                    // If we found the image in canvas layers, use it directly
+                    console.log('[Regenerate] Using image from canvas layers');
+                    console.log('[Regenerate] Image dimensions:', sourceImageLayer.img.width, 'x', sourceImageLayer.img.height);
+                    colors = await extractColorsFromImage(sourceImageLayer.img);
+                } else {
+                    // Otherwise, load the image from the URL
+                    console.log('[Regenerate] Loading image from URL...');
+                    const img = new Image();
+                    img.crossOrigin = 'anonymous';
+                    await new Promise((resolve, reject) => {
+                        img.onload = () => {
+                            console.log('[Regenerate] Image loaded successfully:', img.width, 'x', img.height);
+                            resolve();
+                        };
+                        img.onerror = (e) => {
+                            console.error('[Regenerate] Image load error:', e);
+                            reject(new Error('Failed to load source image'));
+                        };
+                        img.src = paletteObj.sourceImage;
+                    });
+                    colors = await extractColorsFromImage(img);
+                }
+
+                console.log('[Regenerate] Extracted colors:', colors);
+
+                // Recalculate grid layout based on new number of colors
+                const numColors = colors.length;
+                let gridCols, gridRows, hasWideCell = false;
+
+                if (numColors === 1) {
+                    gridCols = 1; gridRows = 1;
+                } else if (numColors === 2) {
+                    gridCols = 2; gridRows = 1;
+                } else if (numColors === 3) {
+                    gridCols = 2; gridRows = 1; hasWideCell = true;
+                } else if (numColors === 4) {
+                    gridCols = 2; gridRows = 2;
+                } else if (numColors === 5) {
+                    gridCols = 2; gridRows = 2; hasWideCell = true;
+                } else if (numColors === 6) {
+                    gridCols = 3; gridRows = 2;
+                } else if (numColors === 7) {
+                    gridCols = 3; gridRows = 2; hasWideCell = true;
+                } else if (numColors === 8) {
+                    gridCols = 4; gridRows = 2;
+                } else if (numColors === 9) {
+                    gridCols = 3; gridRows = 3;
+                } else { // 10
+                    gridCols = 5; gridRows = 2;
+                }
+
+                // Calculate new dimensions
+                const cellSize = paletteObj.cellSize || 60;
+                const width = gridCols * cellSize;
+                const height = hasWideCell ? (gridRows + 1) * cellSize : gridRows * cellSize;
+
+                // Update the palette with new colors and layout
+                paletteObj.colors = colors;
+                paletteObj.gridCols = gridCols;
+                paletteObj.gridRows = gridRows;
+                paletteObj.hasWideCell = hasWideCell;
+                paletteObj.width = width;
+                paletteObj.height = height;
+
+                // Update the canvas object
+                const canvasPalette = canvas.objectsManager.objects.find(obj => obj.id === paletteObj.id);
+                if (canvasPalette) {
+                    canvasPalette.colors = colors;
+                    canvasPalette.gridCols = gridCols;
+                    canvasPalette.gridRows = gridRows;
+                    canvasPalette.hasWideCell = hasWideCell;
+                    canvasPalette.width = width;
+                    canvasPalette.height = height;
+                    canvas.needsRender = true;
+                    canvas.objectsManager.dispatchObjectsChanged();
+                }
+
+                // Repopulate the modal
+                populateColors(colors);
+
+                showToast(`Colors regenerated (${colors.length} colors)`, 'success', 2000);
+            } catch (error) {
+                console.error('[Regenerate] Error:', error);
+                console.error('[Regenerate] Error stack:', error.stack);
+                showToast(`Failed to regenerate colors: ${error.message}`, 'error', 3000);
+            } finally {
+                newRegenerateBtn.disabled = false;
+                newRegenerateBtn.textContent = 'Regenerate Colors';
             }
         });
-
-        rgbBtn.addEventListener('click', async () => {
-            const rgbText = rgbColor || (() => {
-                const rgb = hexToRgb(hexColor);
-                return `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`;
-            })();
-            try {
-                await navigator.clipboard.writeText(rgbText);
-                const originalText = rgbBtn.textContent;
-                rgbBtn.textContent = 'Copied!';
-                rgbBtn.style.background = 'var(--accent-color)';
-                rgbBtn.style.color = 'white';
-                setTimeout(() => {
-                    rgbBtn.textContent = originalText;
-                    rgbBtn.style.background = 'var(--bg-secondary)';
-                    rgbBtn.style.color = 'var(--text-primary)';
-                }, 1000);
-            } catch (err) {
-                console.error('Failed to copy:', err);
-            }
-        });
-
-        grid.appendChild(colorItem);
-    });
+    }
 
     // Close button
     const closeBtn = modal.querySelector('#palette-modal-close');
@@ -4830,6 +5242,302 @@ function showPaletteModal(paletteObj) {
     modal.addEventListener('click', (e) => {
         if (e.target === modal) {
             modal.remove();
+        }
+    });
+}
+
+function showImageEditModal(imageObj) {
+    // Remove any existing edit modals
+    const existingModals = document.querySelectorAll('.modal-overlay');
+    existingModals.forEach(m => {
+        if (m.querySelector('#edit-apply')) {
+            m.remove();
+        }
+    });
+
+    const modal = document.createElement('div');
+    modal.className = 'modal-overlay';
+    modal.innerHTML = `
+        <div class="modal" style="max-width: 500px;">
+            <div class="modal-header">
+                <h2>Edit Image</h2>
+            </div>
+            <div class="modal-body" style="padding: 24px;">
+                <div style="margin-bottom: 20px;">
+                    <label style="display: block; margin-bottom: 8px; font-weight: 500;">Brightness</label>
+                    <input type="range" id="edit-brightness" min="0" max="200" value="100" class="themed-slider" style="width: 100%;">
+                    <div style="text-align: center; margin-top: 4px; font-size: 14px; color: var(--text-secondary);">
+                        <span id="brightness-value">100%</span>
+                    </div>
+                </div>
+
+                <div style="margin-bottom: 20px;">
+                    <label style="display: block; margin-bottom: 8px; font-weight: 500;">Contrast</label>
+                    <input type="range" id="edit-contrast" min="0" max="200" value="100" class="themed-slider" style="width: 100%;">
+                    <div style="text-align: center; margin-top: 4px; font-size: 14px; color: var(--text-secondary);">
+                        <span id="contrast-value">100%</span>
+                    </div>
+                </div>
+
+                <div style="margin-bottom: 20px;">
+                    <label style="display: block; margin-bottom: 8px; font-weight: 500;">Saturation</label>
+                    <input type="range" id="edit-saturation" min="0" max="200" value="100" class="themed-slider" style="width: 100%;">
+                    <div style="text-align: center; margin-top: 4px; font-size: 14px; color: var(--text-secondary);">
+                        <span id="saturation-value">100%</span>
+                    </div>
+                </div>
+
+                <div style="margin-bottom: 20px;">
+                    <label style="display: block; margin-bottom: 8px; font-weight: 500;">Hue Rotate</label>
+                    <input type="range" id="edit-hue" min="0" max="360" value="0" class="themed-slider" style="width: 100%;">
+                    <div style="text-align: center; margin-top: 4px; font-size: 14px; color: var(--text-secondary);">
+                        <span id="hue-value">0°</span>
+                    </div>
+                </div>
+
+                <div style="margin-bottom: 20px;">
+                    <label style="display: block; margin-bottom: 8px; font-weight: 500;">Blur</label>
+                    <input type="range" id="edit-blur" min="0" max="10" value="0" step="0.5" class="themed-slider" style="width: 100%;">
+                    <div style="text-align: center; margin-top: 4px; font-size: 14px; color: var(--text-secondary);">
+                        <span id="blur-value">0px</span>
+                    </div>
+                </div>
+
+                <div style="margin-bottom: 20px;">
+                    <label style="display: block; margin-bottom: 8px; font-weight: 500;">Opacity</label>
+                    <input type="range" id="edit-opacity" min="0" max="100" value="100" class="themed-slider" style="width: 100%;">
+                    <div style="text-align: center; margin-top: 4px; font-size: 14px; color: var(--text-secondary);">
+                        <span id="opacity-value">100%</span>
+                    </div>
+                </div>
+
+                <div style="margin-bottom: 20px;">
+                    <label style="display: flex; align-items: center; justify-content: space-between; cursor: pointer;">
+                        <span style="font-weight: 500;">Grayscale</span>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="edit-grayscale">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </label>
+                </div>
+
+                <div style="margin-bottom: 20px;">
+                    <label style="display: flex; align-items: center; justify-content: space-between; cursor: pointer;">
+                        <span style="font-weight: 500;">Invert Colors</span>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="edit-invert">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </label>
+                </div>
+
+                <div style="margin-bottom: 20px;">
+                    <label style="display: flex; align-items: center; justify-content: space-between; cursor: pointer;">
+                        <span style="font-weight: 500;">Mirror</span>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="edit-mirror">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="modal-btn modal-btn-secondary" id="edit-reset">Reset</button>
+                <button class="modal-btn modal-btn-primary" id="edit-apply">Apply</button>
+                <button class="modal-btn modal-btn-secondary" id="edit-cancel">Cancel</button>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+    modal.style.display = 'flex';
+
+    // Get controls
+    const brightnessSlider = modal.querySelector('#edit-brightness');
+    const contrastSlider = modal.querySelector('#edit-contrast');
+    const saturationSlider = modal.querySelector('#edit-saturation');
+    const hueSlider = modal.querySelector('#edit-hue');
+    const blurSlider = modal.querySelector('#edit-blur');
+    const opacitySlider = modal.querySelector('#edit-opacity');
+    const grayscaleCheckbox = modal.querySelector('#edit-grayscale');
+    const invertCheckbox = modal.querySelector('#edit-invert');
+    const mirrorCheckbox = modal.querySelector('#edit-mirror');
+    const brightnessValue = modal.querySelector('#brightness-value');
+    const contrastValue = modal.querySelector('#contrast-value');
+    const saturationValue = modal.querySelector('#saturation-value');
+    const hueValue = modal.querySelector('#hue-value');
+    const blurValue = modal.querySelector('#blur-value');
+    const opacityValue = modal.querySelector('#opacity-value');
+    const resetBtn = modal.querySelector('#edit-reset');
+    const applyBtn = modal.querySelector('#edit-apply');
+    const cancelBtn = modal.querySelector('#edit-cancel');
+
+    // Store original values for cancel
+    imageObj.originalBrightness = imageObj.brightness || 100;
+    imageObj.originalContrast = imageObj.contrast || 100;
+    imageObj.originalSaturation = imageObj.saturation || 100;
+    imageObj.originalHue = imageObj.hue || 0;
+    imageObj.originalBlur = imageObj.blur || 0;
+    imageObj.originalOpacity = imageObj.opacity !== undefined ? imageObj.opacity : 100;
+    imageObj.originalGrayscale = imageObj.grayscale || false;
+    imageObj.originalInvert = imageObj.invert || false;
+    imageObj.originalMirror = imageObj.mirror || false;
+
+    // Initialize with current values if they exist
+    brightnessSlider.value = (imageObj.brightness || 100);
+    contrastSlider.value = (imageObj.contrast || 100);
+    saturationSlider.value = (imageObj.saturation || 100);
+    hueSlider.value = (imageObj.hue || 0);
+    blurSlider.value = (imageObj.blur || 0);
+    opacitySlider.value = (imageObj.opacity !== undefined ? imageObj.opacity : 100);
+    grayscaleCheckbox.checked = imageObj.grayscale || false;
+    invertCheckbox.checked = imageObj.invert || false;
+    mirrorCheckbox.checked = imageObj.mirror || false;
+    brightnessValue.textContent = `${brightnessSlider.value}%`;
+    contrastValue.textContent = `${contrastSlider.value}%`;
+    saturationValue.textContent = `${saturationSlider.value}%`;
+    hueValue.textContent = `${hueSlider.value}°`;
+    blurValue.textContent = `${blurSlider.value}px`;
+    opacityValue.textContent = `${opacitySlider.value}%`;
+
+    // Update preview as sliders change
+    function updatePreview() {
+        const brightness = parseInt(brightnessSlider.value);
+        const contrast = parseInt(contrastSlider.value);
+        const saturation = parseInt(saturationSlider.value);
+        const hue = parseInt(hueSlider.value);
+        const blur = parseFloat(blurSlider.value);
+        const opacity = parseInt(opacitySlider.value);
+        const grayscale = grayscaleCheckbox.checked;
+        const invert = invertCheckbox.checked;
+        const mirror = mirrorCheckbox.checked;
+
+        brightnessValue.textContent = `${brightness}%`;
+        contrastValue.textContent = `${contrast}%`;
+        saturationValue.textContent = `${saturation}%`;
+        hueValue.textContent = `${hue}°`;
+        blurValue.textContent = `${blur}px`;
+        opacityValue.textContent = `${opacity}%`;
+
+        // Apply filters to image
+        imageObj.brightness = brightness;
+        imageObj.contrast = contrast;
+        imageObj.saturation = saturation;
+        imageObj.hue = hue;
+        imageObj.blur = blur;
+        imageObj.opacity = opacity;
+        imageObj.grayscale = grayscale;
+        imageObj.invert = invert;
+        imageObj.mirror = mirror;
+
+        canvas.needsRender = true;
+    }
+
+    brightnessSlider.addEventListener('input', updatePreview);
+    contrastSlider.addEventListener('input', updatePreview);
+    saturationSlider.addEventListener('input', updatePreview);
+    hueSlider.addEventListener('input', updatePreview);
+    blurSlider.addEventListener('input', updatePreview);
+    opacitySlider.addEventListener('input', updatePreview);
+    grayscaleCheckbox.addEventListener('change', updatePreview);
+    invertCheckbox.addEventListener('change', updatePreview);
+    mirrorCheckbox.addEventListener('change', updatePreview);
+
+    // Reset button
+    resetBtn.addEventListener('click', () => {
+        brightnessSlider.value = 100;
+        contrastSlider.value = 100;
+        saturationSlider.value = 100;
+        hueSlider.value = 0;
+        blurSlider.value = 0;
+        opacitySlider.value = 100;
+        grayscaleCheckbox.checked = false;
+        invertCheckbox.checked = false;
+        mirrorCheckbox.checked = false;
+        updatePreview();
+    });
+
+    // Apply button - force save all current slider values
+    applyBtn.addEventListener('click', async () => {
+        // Get current values from controls
+        const brightness = parseInt(brightnessSlider.value);
+        const contrast = parseInt(contrastSlider.value);
+        const saturation = parseInt(saturationSlider.value);
+        const hue = parseInt(hueSlider.value);
+        const blur = parseFloat(blurSlider.value);
+        const opacity = parseInt(opacitySlider.value);
+        const grayscale = grayscaleCheckbox.checked;
+        const invert = invertCheckbox.checked;
+        const mirror = mirrorCheckbox.checked;
+
+        // Find the actual image in the canvas images array by ID
+        const images = canvas.getImages();
+        const actualImage = images.find(img => img.id === imageObj.id);
+
+        if (actualImage) {
+            // Force set all values on the actual image object
+            actualImage.brightness = brightness;
+            actualImage.contrast = contrast;
+            actualImage.saturation = saturation;
+            actualImage.hue = hue;
+            actualImage.blur = blur;
+            actualImage.opacity = opacity;
+            actualImage.grayscale = grayscale;
+            actualImage.invert = invert;
+            actualImage.mirror = mirror;
+        }
+
+        // Also update imageObj reference
+        imageObj.brightness = brightness;
+        imageObj.contrast = contrast;
+        imageObj.saturation = saturation;
+        imageObj.hue = hue;
+        imageObj.blur = blur;
+        imageObj.opacity = opacity;
+        imageObj.grayscale = grayscale;
+        imageObj.invert = invert;
+        imageObj.mirror = mirror;
+
+        canvas.needsRender = true;
+        modal.remove();
+
+        // Force immediate save - bypass pendingSave flag
+        pendingSave = true;
+        await saveNow();
+        showToast('Image filters applied', 'success', 2000);
+    });
+
+    // Cancel button
+    cancelBtn.addEventListener('click', () => {
+        // Revert to original values
+        imageObj.brightness = imageObj.originalBrightness || 100;
+        imageObj.contrast = imageObj.originalContrast || 100;
+        imageObj.saturation = imageObj.originalSaturation || 100;
+        imageObj.hue = imageObj.originalHue || 0;
+        imageObj.blur = imageObj.originalBlur || 0;
+        imageObj.opacity = imageObj.originalOpacity !== undefined ? imageObj.originalOpacity : 100;
+        imageObj.grayscale = imageObj.originalGrayscale || false;
+        imageObj.invert = imageObj.originalInvert || false;
+        imageObj.mirror = imageObj.originalMirror || false;
+        canvas.needsRender = true;
+        modal.remove();
+    });
+
+    // Store original values for cancel
+    imageObj.originalBrightness = imageObj.brightness || 100;
+    imageObj.originalContrast = imageObj.contrast || 100;
+    imageObj.originalSaturation = imageObj.saturation || 100;
+    imageObj.originalHue = imageObj.hue || 0;
+    imageObj.originalBlur = imageObj.blur || 0;
+    imageObj.originalOpacity = imageObj.opacity !== undefined ? imageObj.opacity : 100;
+    imageObj.originalGrayscale = imageObj.grayscale || false;
+    imageObj.originalInvert = imageObj.invert || false;
+    imageObj.originalMirror = imageObj.originalMirror || false;
+
+    // Close modal on overlay click
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+            cancelBtn.click();
         }
     });
 }

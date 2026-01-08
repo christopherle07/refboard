@@ -291,11 +291,14 @@
     display: block;
 }
 
-/* Invert icons for dark themes (SVG files have black fill by default) */
-[data-theme="dark"] .collapse-icon,
-[data-theme="midnight"] .collapse-icon,
-[data-theme="charcoal"] .collapse-icon {
-    filter: invert(1);
+/* Dark theme: white collapse icon */
+html[data-theme="dark"] .collapse-icon {
+    filter: invert(1) !important;
+}
+
+/* Purplexing theme: purple collapse icon */
+html[data-theme="purplexing"] .collapse-icon {
+    filter: brightness(0) saturate(100%) invert(71%) sepia(35%) saturate(738%) hue-rotate(207deg) brightness(93%) contrast(91%) !important;
 }
 
 .panel-section-content {
@@ -384,22 +387,23 @@
 }
 
 /* Light theme: invert white-filled icons to show as black */
-[data-theme="light"] .layer-icon[src*="TextIcon"],
-[data-theme="light"] .layer-icon[src*="ShapeIcon"] {
+html:not([data-theme="dark"]):not([data-theme="purplexing"]) .layer-icon[src*="TextIcon"],
+html:not([data-theme="dark"]):not([data-theme="purplexing"]) .layer-icon[src*="ShapeIcon"] {
     filter: invert(1);
 }
 
-/* Dark themes: invert black-filled icons to show as white/light, keep white icons as-is */
-[data-theme="dark"] .layer-icon[src*="layericon"],
-[data-theme="dark"] .layer-icon[src*="foldericon"],
-[data-theme="dark"] .layer-icon[src*="ColorPalette"],
-[data-theme="midnight"] .layer-icon[src*="layericon"],
-[data-theme="midnight"] .layer-icon[src*="foldericon"],
-[data-theme="midnight"] .layer-icon[src*="ColorPalette"],
-[data-theme="charcoal"] .layer-icon[src*="layericon"],
-[data-theme="charcoal"] .layer-icon[src*="foldericon"],
-[data-theme="charcoal"] .layer-icon[src*="ColorPalette"] {
-    filter: invert(1);
+/* Dark theme: white layer icons for black-filled SVGs */
+html[data-theme="dark"] .layer-icon[src*="layericon"],
+html[data-theme="dark"] .layer-icon[src*="foldericon"],
+html[data-theme="dark"] .layer-icon[src*="ColorPalette"] {
+    filter: invert(1) !important;
+}
+
+/* Purplexing theme: purple layer icons for black-filled SVGs */
+html[data-theme="purplexing"] .layer-icon[src*="layericon"],
+html[data-theme="purplexing"] .layer-icon[src*="foldericon"],
+html[data-theme="purplexing"] .layer-icon[src*="ColorPalette"] {
+    filter: brightness(0) saturate(100%) invert(71%) sepia(35%) saturate(738%) hue-rotate(207deg) brightness(93%) contrast(91%) !important;
 }
 
 .layer-drag-handle {
@@ -696,11 +700,14 @@
     display: block;
 }
 
-/* Invert icons for dark themes (SVG files have black fill by default) */
-[data-theme="dark"] .group-toggle-icon,
-[data-theme="midnight"] .group-toggle-icon,
-[data-theme="charcoal"] .group-toggle-icon {
-    filter: invert(1);
+/* Dark theme: white group toggle icon */
+html[data-theme="dark"] .group-toggle-icon {
+    filter: invert(1) !important;
+}
+
+/* Purplexing theme: purple group toggle icon */
+html[data-theme="purplexing"] .group-toggle-icon {
+    filter: brightness(0) saturate(100%) invert(71%) sepia(35%) saturate(738%) hue-rotate(207deg) brightness(93%) contrast(91%) !important;
 }
 
 .group-visibility-btn {
@@ -1472,16 +1479,35 @@
     transition: filter 0.2s;
 }
 
-/* Light theme: grey icons (#5f6368) */
-[data-theme="light"] .tool-icon {
-    filter: brightness(0) saturate(100%) invert(42%) sepia(6%) saturate(473%) hue-rotate(169deg) brightness(95%) contrast(87%);
+/* Light theme: grey icons - invert white SVGs to dark grey */
+html:not([data-theme="dark"]):not([data-theme="purplexing"]) .tool-icon {
+    filter: invert(1) brightness(0.4);
 }
 
-/* Dark themes: purple icons (#9b7fd4) */
-[data-theme="dark"] .tool-icon,
-[data-theme="midnight"] .tool-icon,
-[data-theme="charcoal"] .tool-icon {
-    filter: brightness(0) saturate(100%) invert(65%) sepia(27%) saturate(1346%) hue-rotate(209deg) brightness(93%) contrast(90%);
+/* Light theme: ColorPalette is black by default, just grey it */
+html:not([data-theme="dark"]):not([data-theme="purplexing"]) .tool-icon[src*="ColorPalette"] {
+    filter: brightness(0) invert(0.4);
+}
+
+/* Dark theme: white icons - keep white SVGs as-is */
+html[data-theme="dark"] .tool-icon {
+    filter: none !important;
+}
+
+/* Dark theme: ColorPalette is black, invert to white */
+html[data-theme="dark"] .tool-icon[src*="ColorPalette"] {
+    filter: invert(1) !important;
+}
+
+/* Purplexing theme: purple icons for white SVGs (PenIcon, ShapeIcon, TextIcon) */
+/* White -> invert to black -> apply purple filter */
+html[data-theme="purplexing"] .tool-icon {
+    filter: invert(1) brightness(0) saturate(100%) invert(71%) sepia(35%) saturate(738%) hue-rotate(207deg) brightness(93%) contrast(91%) !important;
+}
+
+/* Purplexing theme: ColorPalette is already black, just apply purple filter directly */
+html[data-theme="purplexing"] .tool-icon[src*="ColorPalette"] {
+    filter: brightness(0) saturate(100%) invert(71%) sepia(35%) saturate(738%) hue-rotate(207deg) brightness(93%) contrast(91%) !important;
 }
 
 /* Custom scrollbar for property inputs and selects */

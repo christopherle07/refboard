@@ -40,8 +40,41 @@ html:not([data-theme="dark"]) {
     --modal-overlay: rgba(0, 0, 0, 0.4);
 }
 
-/* Dark theme - Dark grey and purple */
+/* Dark theme - True dark mode */
 html[data-theme="dark"] {
+    --bg-primary: #0a0a0a !important;
+    --bg-secondary: #141414 !important;
+    --bg-tertiary: #1a1a1a !important;
+    --bg-hover: #222222 !important;
+    --bg-active: #2a2a2a !important;
+
+    --border-color: #2a2a2a !important;
+    --border-color-hover: #3a3a3a !important;
+
+    --text-primary: #ffffff !important;
+    --text-secondary: #a0a0a0 !important;
+    --text-tertiary: #707070 !important;
+    --text-disabled: #505050 !important;
+
+    --accent-primary: #3a8bfd !important;
+    --accent-primary-hover: #5a9ffd !important;
+    --accent-primary-active: #2a7bed !important;
+    --accent-secondary: #3a8bfd !important;
+    --accent-danger: #ef5350 !important;
+    --accent-danger-hover: #f44336 !important;
+    --accent-warning: #ffa726 !important;
+    --accent-success: #66bb6a !important;
+
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5) !important;
+    --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.6) !important;
+    --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.7) !important;
+    --shadow: rgba(0, 0, 0, 0.5) !important;
+
+    --modal-overlay: rgba(0, 0, 0, 0.8) !important;
+}
+
+/* Purplexing theme - Dark grey and purple */
+html[data-theme="purplexing"] {
     --bg-primary: #1a1a1f !important;
     --bg-secondary: #232329 !important;
     --bg-tertiary: #2a2a32 !important;

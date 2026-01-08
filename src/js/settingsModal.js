@@ -72,14 +72,9 @@ export function showSettingsModal() {
                         <div class="setting-row">
                             <div class="setting-info">
                                 <span class="setting-row-label">Grid Size</span>
-                                <span class="setting-description">Spacing between grid lines</span>
+                                <span class="setting-description">Spacing between grid lines (px)</span>
                             </div>
-                            <select id="grid-size" class="setting-select">
-                                <option value="25" ${settings.gridSize === 25 ? 'selected' : ''}>25px</option>
-                                <option value="50" ${settings.gridSize === 50 ? 'selected' : ''}>50px</option>
-                                <option value="100" ${settings.gridSize === 100 ? 'selected' : ''}>100px</option>
-                                <option value="200" ${settings.gridSize === 200 ? 'selected' : ''}>200px</option>
-                            </select>
+                            <input type="number" id="grid-size" class="setting-input" min="10" max="500" value="${settings.gridSize || 50}" style="width: 80px; text-align: center;">
                         </div>
                     </div>
 
@@ -130,7 +125,7 @@ export function showSettingsModal() {
                         </div>
 
                         <div class="theme-card ${settings.theme === 'dark' ? 'active' : ''}" data-theme="dark">
-                            <div class="theme-preview dark-preview">
+                            <div class="theme-preview truedark-preview">
                                 <div class="theme-preview-header"></div>
                                 <div class="theme-preview-body">
                                     <div class="theme-preview-sidebar"></div>
@@ -140,6 +135,20 @@ export function showSettingsModal() {
                             <div class="theme-info">
                                 <span class="theme-name">Dark</span>
                                 ${settings.theme === 'dark' ? '<span class="theme-badge">Active</span>' : ''}
+                            </div>
+                        </div>
+
+                        <div class="theme-card ${settings.theme === 'purplexing' ? 'active' : ''}" data-theme="purplexing">
+                            <div class="theme-preview purplexing-preview">
+                                <div class="theme-preview-header"></div>
+                                <div class="theme-preview-body">
+                                    <div class="theme-preview-sidebar"></div>
+                                    <div class="theme-preview-content"></div>
+                                </div>
+                            </div>
+                            <div class="theme-info">
+                                <span class="theme-name">Purplexing</span>
+                                ${settings.theme === 'purplexing' ? '<span class="theme-badge">Active</span>' : ''}
                             </div>
                         </div>
                     </div>
@@ -274,8 +283,12 @@ export function showSettingsModal() {
     }
 
     if (gridSizeSelect) {
-        gridSizeSelect.addEventListener('change', async (e) => {
-            settings.gridSize = parseInt(e.target.value);
+        gridSizeSelect.addEventListener('input', async (e) => {
+            let value = parseInt(e.target.value);
+            // Clamp value between 10 and 500
+            if (value < 10) value = 10;
+            if (value > 500) value = 500;
+            settings.gridSize = value;
             saveSettings(settings);
 
             // Update active canvas if in board editor

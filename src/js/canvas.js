@@ -835,6 +835,10 @@ export class Canvas {
         } else if (this.selectedImage && this.selectedImage.visible !== false) {
             const handle = this.getResizeHandle(x, y, this.selectedImage);
             this.canvas.style.cursor = handle ? this.getResizeCursor(handle) : 'default';
+        } else if (this.objectsManager.selectedObject && this.objectsManager.selectedObjects.length === 1) {
+            // Check for object resize handles
+            const handle = this.objectsManager.getResizeHandleAtPoint(this.objectsManager.selectedObject, x, y);
+            this.canvas.style.cursor = handle ? this.getResizeCursor(handle) : 'default';
         }
     }
 
@@ -1373,6 +1377,136 @@ export class Canvas {
         }
     }
 
+    snapToObjects(x, y, draggedObject) {
+        const threshold = this.snapThreshold / this.zoom;
+        const guides = [];
+        let snappedX = x;
+        let snappedY = y;
+        let snapDistX = Infinity;
+        let snapDistY = Infinity;
+
+        const draggedLeft = x;
+        const draggedRight = x + draggedObject.width;
+        const draggedTop = y;
+        const draggedBottom = y + draggedObject.height;
+        const draggedCenterX = x + draggedObject.width / 2;
+        const draggedCenterY = y + draggedObject.height / 2;
+
+        // Snap to images
+        for (const img of this.images) {
+            if (img.visible === false) continue;
+
+            const targetLeft = img.x;
+            const targetRight = img.x + img.width;
+            const targetTop = img.y;
+            const targetBottom = img.y + img.height;
+            const targetCenterX = img.x + img.width / 2;
+            const targetCenterY = img.y + img.height / 2;
+
+            const xChecks = [
+                { dragPos: draggedLeft, targetPos: targetLeft, offset: 0 },
+                { dragPos: draggedLeft, targetPos: targetRight, offset: 0 },
+                { dragPos: draggedRight, targetPos: targetLeft, offset: -draggedObject.width },
+                { dragPos: draggedRight, targetPos: targetRight, offset: -draggedObject.width },
+                { dragPos: draggedCenterX, targetPos: targetCenterX, offset: -draggedObject.width / 2 }
+            ];
+
+            for (const check of xChecks) {
+                const dist = Math.abs(check.dragPos - check.targetPos);
+                if (dist < threshold && dist < snapDistX) {
+                    snappedX = check.targetPos + check.offset;
+                    snapDistX = dist;
+                    guides.push({
+                        type: 'vertical',
+                        pos: check.targetPos
+                    });
+                }
+            }
+
+            const yChecks = [
+                { dragPos: draggedTop, targetPos: targetTop, offset: 0 },
+                { dragPos: draggedTop, targetPos: targetBottom, offset: 0 },
+                { dragPos: draggedBottom, targetPos: targetTop, offset: -draggedObject.height },
+                { dragPos: draggedBottom, targetPos: targetBottom, offset: -draggedObject.height },
+                { dragPos: draggedCenterY, targetPos: targetCenterY, offset: -draggedObject.height / 2 }
+            ];
+
+            for (const check of yChecks) {
+                const dist = Math.abs(check.dragPos - check.targetPos);
+                if (dist < threshold && dist < snapDistY) {
+                    snappedY = check.targetPos + check.offset;
+                    snapDistY = dist;
+                    guides.push({
+                        type: 'horizontal',
+                        pos: check.targetPos
+                    });
+                }
+            }
+        }
+
+        // Snap to other objects
+        for (const obj of this.objectsManager.getObjects()) {
+            if (obj.id === draggedObject.id || obj.visible === false) continue;
+
+            const targetLeft = obj.x;
+            const targetRight = obj.x + obj.width;
+            const targetTop = obj.y;
+            const targetBottom = obj.y + obj.height;
+            const targetCenterX = obj.x + obj.width / 2;
+            const targetCenterY = obj.y + obj.height / 2;
+
+            const xChecks = [
+                { dragPos: draggedLeft, targetPos: targetLeft, offset: 0 },
+                { dragPos: draggedLeft, targetPos: targetRight, offset: 0 },
+                { dragPos: draggedRight, targetPos: targetLeft, offset: -draggedObject.width },
+                { dragPos: draggedRight, targetPos: targetRight, offset: -draggedObject.width },
+                { dragPos: draggedCenterX, targetPos: targetCenterX, offset: -draggedObject.width / 2 }
+            ];
+
+            for (const check of xChecks) {
+                const dist = Math.abs(check.dragPos - check.targetPos);
+                if (dist < threshold && dist < snapDistX) {
+                    snappedX = check.targetPos + check.offset;
+                    snapDistX = dist;
+                    guides.push({
+                        type: 'vertical',
+                        pos: check.targetPos
+                    });
+                }
+            }
+
+            const yChecks = [
+                { dragPos: draggedTop, targetPos: targetTop, offset: 0 },
+                { dragPos: draggedTop, targetPos: targetBottom, offset: 0 },
+                { dragPos: draggedBottom, targetPos: targetTop, offset: -draggedObject.height },
+                { dragPos: draggedBottom, targetPos: targetBottom, offset: -draggedObject.height },
+                { dragPos: draggedCenterY, targetPos: targetCenterY, offset: -draggedObject.height / 2 }
+            ];
+
+            for (const check of yChecks) {
+                const dist = Math.abs(check.dragPos - check.targetPos);
+                if (dist < threshold && dist < snapDistY) {
+                    snappedY = check.targetPos + check.offset;
+                    snapDistY = dist;
+                    guides.push({
+                        type: 'horizontal',
+                        pos: check.targetPos
+                    });
+                }
+            }
+        }
+
+        const activeGuides = [];
+        if (snapDistX < threshold) {
+            activeGuides.push(...guides.filter(g => g.type === 'vertical'));
+        }
+        if (snapDistY < threshold) {
+            activeGuides.push(...guides.filter(g => g.type === 'horizontal'));
+        }
+
+        return { x: snappedX, y: snappedY, guides: activeGuides };
+    }
+
     snapToImages(x, y, draggedImage) {
         const threshold = this.snapThreshold / this.zoom;
         const guides = [];
@@ -1380,17 +1514,17 @@ export class Canvas {
         let snappedY = y;
         let snapDistX = Infinity;
         let snapDistY = Infinity;
-        
+
         const draggedLeft = x;
         const draggedRight = x + draggedImage.width;
         const draggedTop = y;
         const draggedBottom = y + draggedImage.height;
         const draggedCenterX = x + draggedImage.width / 2;
         const draggedCenterY = y + draggedImage.height / 2;
-        
+
         for (const img of this.images) {
             if (img.id === draggedImage.id || img.visible === false) continue;
-            
+
             const targetLeft = img.x;
             const targetRight = img.x + img.width;
             const targetTop = img.y;
@@ -1506,7 +1640,8 @@ export class Canvas {
         const cursors = {
             'nw': 'nw-resize', 'n': 'n-resize', 'ne': 'ne-resize',
             'e': 'e-resize', 'se': 'se-resize', 's': 's-resize',
-            'sw': 'sw-resize', 'w': 'w-resize'
+            'sw': 'sw-resize', 'w': 'w-resize',
+            'start': 'move', 'end': 'move' // For line/arrow endpoints
         };
         return cursors[handle] || 'default';
     }
@@ -2001,8 +2136,13 @@ export class Canvas {
     getImageAtPoint(x, y) {
         const visibleImages = this.cullImages();
 
-        // Sort by zIndex descending (higher zIndex = on top = checked first)
-        const sortedImages = [...visibleImages].sort((a, b) => (b.zIndex || 0) - (a.zIndex || 0));
+        // Sort by array index descending (later in array = on top = checked first)
+        // Use the actual index from this.images array for proper layer order
+        const sortedImages = [...visibleImages].sort((a, b) => {
+            const indexA = this.images.indexOf(a);
+            const indexB = this.images.indexOf(b);
+            return indexB - indexA; // Higher index = on top
+        });
 
         for (const img of sortedImages) {
             if (x >= img.x && x <= img.x + img.width &&
@@ -2039,22 +2179,6 @@ export class Canvas {
         }
         
         this.ctx.stroke();
-        
-        this.ctx.strokeStyle = 'rgba(0, 0, 0, 0.15)';
-        this.ctx.lineWidth = 2 / this.zoom;
-        this.ctx.beginPath();
-        
-        if (startX <= 0 && endX >= 0) {
-            this.ctx.moveTo(0, startY);
-            this.ctx.lineTo(0, endY);
-        }
-        
-        if (startY <= 0 && endY >= 0) {
-            this.ctx.moveTo(startX, 0);
-            this.ctx.lineTo(endX, 0);
-        }
-        
-        this.ctx.stroke();
     }
 
     render() {
@@ -2085,10 +2209,49 @@ export class Canvas {
             if (item.type === 'image') {
                 const img = item.data;
                 try {
-                    if (img.rotation && img.rotation !== 0) {
-                        // Save context state
-                        this.ctx.save();
+                    // Save context for filters and rotation
+                    this.ctx.save();
 
+                    // Apply opacity if set
+                    if (img.opacity !== undefined && img.opacity !== 100) {
+                        this.ctx.globalAlpha = img.opacity / 100;
+                    }
+
+                    // Apply filters if they exist
+                    let filters = [];
+                    if (img.brightness && img.brightness !== 100) {
+                        filters.push(`brightness(${img.brightness}%)`);
+                    }
+                    if (img.contrast && img.contrast !== 100) {
+                        filters.push(`contrast(${img.contrast}%)`);
+                    }
+                    if (img.saturation && img.saturation !== 100) {
+                        filters.push(`saturate(${img.saturation}%)`);
+                    }
+                    if (img.hue && img.hue !== 0) {
+                        filters.push(`hue-rotate(${img.hue}deg)`);
+                    }
+                    if (img.blur && img.blur > 0) {
+                        filters.push(`blur(${img.blur}px)`);
+                    }
+                    if (img.grayscale) {
+                        filters.push('grayscale(100%)');
+                    }
+                    if (img.invert) {
+                        filters.push('invert(100%)');
+                    }
+                    if (filters.length > 0) {
+                        this.ctx.filter = filters.join(' ');
+                    }
+
+                    // Apply mirror transformation
+                    if (img.mirror) {
+                        this.ctx.translate(img.x + img.width, img.y);
+                        this.ctx.scale(-1, 1);
+                        this.ctx.translate(-img.x, -img.y);
+                    }
+
+                    if (img.rotation && img.rotation !== 0) {
                         // Move to image center
                         const centerX = img.x + img.width / 2;
                         const centerY = img.y + img.height / 2;
@@ -2099,12 +2262,12 @@ export class Canvas {
 
                         // Draw image centered at origin
                         this.ctx.drawImage(img.img, -img.width / 2, -img.height / 2, img.width, img.height);
-
-                        // Restore context state
-                        this.ctx.restore();
                     } else {
                         this.ctx.drawImage(img.img, img.x, img.y, img.width, img.height);
                     }
+
+                    // Restore context state (removes filters and rotation)
+                    this.ctx.restore();
                 } catch (e) {
                 }
             } else if (item.type === 'object') {
