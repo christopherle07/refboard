@@ -3001,6 +3001,20 @@ function setupBoardDropdown() {
             importBoard();
         });
     }
+
+    let exportLinesItem = getElement('dropdown-export-lines');
+    console.log('[setupBoardDropdown] exportLinesItem:', exportLinesItem);
+    if (exportLinesItem) {
+        const newExportLinesItem = exportLinesItem.cloneNode(true);
+        exportLinesItem.parentNode.replaceChild(newExportLinesItem, exportLinesItem);
+        exportLinesItem = newExportLinesItem;
+
+        exportLinesItem.addEventListener('click', () => {
+            console.log('[Export Lines] clicked');
+            dropdownMenu.classList.remove('show');
+            exportLines();
+        });
+    }
 }
 
 function importAssets() {
@@ -4006,6 +4020,296 @@ async function exportBoard() {
 
         showToast(`Board exported as ${filename}`, 'success', 4000);
     }
+}
+
+async function exportLines() {
+    console.log('[exportLines] Starting export...');
+    const strokes = canvas.getStrokes() || [];
+    console.log('[exportLines] Got strokes:', strokes.length);
+
+    // Filter out eraser strokes - only export pen and highlighter
+    const drawingStrokes = strokes.filter(s => s.tool === 'pen' || s.tool === 'highlighter');
+    console.log('[exportLines] Drawing strokes (pen/highlighter):', drawingStrokes.length);
+
+    if (drawingStrokes.length === 0) {
+        showToast('No pen or highlighter lines to export', 'error');
+        return;
+    }
+
+    // Calculate bounding box of all strokes
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+
+    for (const stroke of drawingStrokes) {
+        for (const point of stroke.points) {
+            minX = Math.min(minX, point.x);
+            minY = Math.min(minY, point.y);
+            maxX = Math.max(maxX, point.x);
+            maxY = Math.max(maxY, point.y);
+        }
+    }
+
+    const strokesWidth = maxX - minX;
+    const strokesHeight = maxY - minY;
+    console.log('[exportLines] Strokes bounding box:', { minX, minY, maxX, maxY, strokesWidth, strokesHeight });
+
+    // Show modal to choose background type
+    console.log('[exportLines] Showing modal...');
+    const bgChoice = await showExportLinesModal();
+    console.log('[exportLines] User chose:', bgChoice);
+    if (!bgChoice) return; // User cancelled
+
+    // Use screen resolution as target canvas size (with some margin)
+    const maxCanvasWidth = Math.min(window.screen.width, 1920);
+    const maxCanvasHeight = Math.min(window.screen.height, 1080);
+
+    // Add padding around the strokes (10% of canvas size)
+    const paddingX = maxCanvasWidth * 0.1;
+    const paddingY = maxCanvasHeight * 0.1;
+    const availableWidth = maxCanvasWidth - (paddingX * 2);
+    const availableHeight = maxCanvasHeight - (paddingY * 2);
+
+    // Calculate scale to fit strokes within available space
+    const scaleX = strokesWidth > 0 ? availableWidth / strokesWidth : 1;
+    const scaleY = strokesHeight > 0 ? availableHeight / strokesHeight : 1;
+    const scale = Math.min(scaleX, scaleY, 1); // Don't scale up, only down if needed
+
+    console.log('[exportLines] Canvas size:', maxCanvasWidth, 'x', maxCanvasHeight, 'scale:', scale);
+
+    // Create export canvas
+    const exportCanvas = document.createElement('canvas');
+    exportCanvas.width = maxCanvasWidth;
+    exportCanvas.height = maxCanvasHeight;
+    const ctx = exportCanvas.getContext('2d');
+
+    // Fill background if user chose board color
+    if (bgChoice === 'board') {
+        ctx.fillStyle = canvas.bgColor || '#1a1a2e';
+        ctx.fillRect(0, 0, maxCanvasWidth, maxCanvasHeight);
+    }
+    // For transparent, we leave the canvas clear
+
+    // Calculate offset to center the strokes
+    const scaledWidth = strokesWidth * scale;
+    const scaledHeight = strokesHeight * scale;
+    const offsetX = (maxCanvasWidth - scaledWidth) / 2;
+    const offsetY = (maxCanvasHeight - scaledHeight) / 2;
+
+    // Apply transformations: translate to center, then scale, then offset for stroke positions
+    ctx.translate(offsetX, offsetY);
+    ctx.scale(scale, scale);
+    ctx.translate(-minX, -minY);
+
+    // Draw all strokes
+    for (const stroke of drawingStrokes) {
+        drawStrokeToContext(ctx, stroke);
+    }
+
+    // Export as PNG
+    const dataUrl = exportCanvas.toDataURL('image/png');
+    const boardName = boardManager.currentBoard?.name || 'Untitled';
+    const filename = `${boardName.replace(/[^a-z0-9]/gi, '_')}_lines.png`;
+
+    // Try to use File System Access API
+    if (window.showSaveFilePicker) {
+        try {
+            const handle = await window.showSaveFilePicker({
+                suggestedName: filename,
+                types: [{
+                    description: 'PNG Image',
+                    accept: { 'image/png': ['.png'] }
+                }]
+            });
+
+            // Convert data URL to blob
+            const response = await fetch(dataUrl);
+            const blob = await response.blob();
+
+            const writable = await handle.createWritable();
+            await writable.write(blob);
+            await writable.close();
+
+            showToast(`Lines exported as ${handle.name}`, 'success', 4000);
+        } catch (err) {
+            if (err.name !== 'AbortError') {
+                console.error('Export error:', err);
+                showToast('Failed to export lines', 'error');
+            }
+        }
+    } else {
+        // Fallback download
+        const a = document.createElement('a');
+        a.href = dataUrl;
+        a.download = filename;
+        a.click();
+
+        showToast(`Lines exported as ${filename}`, 'success', 4000);
+    }
+}
+
+function drawStrokeToContext(ctx, stroke) {
+    if (!stroke || stroke.points.length < 2) return;
+
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    if (stroke.tool === 'pen') {
+        ctx.globalAlpha = 1;
+        ctx.strokeStyle = stroke.color;
+        ctx.lineWidth = stroke.size;
+    } else if (stroke.tool === 'highlighter') {
+        ctx.globalAlpha = 0.3;
+        ctx.strokeStyle = stroke.color;
+        ctx.lineWidth = stroke.size;
+    }
+
+    ctx.beginPath();
+    ctx.moveTo(stroke.points[0].x, stroke.points[0].y);
+
+    // Draw smooth curves using quadratic curves
+    for (let i = 1; i < stroke.points.length - 1; i++) {
+        const xc = (stroke.points[i].x + stroke.points[i + 1].x) / 2;
+        const yc = (stroke.points[i].y + stroke.points[i + 1].y) / 2;
+        ctx.quadraticCurveTo(stroke.points[i].x, stroke.points[i].y, xc, yc);
+    }
+
+    // Draw the last point
+    const lastPoint = stroke.points[stroke.points.length - 1];
+    ctx.lineTo(lastPoint.x, lastPoint.y);
+    ctx.stroke();
+
+    ctx.restore();
+}
+
+function showExportLinesModal() {
+    return new Promise((resolve) => {
+        const modal = document.createElement('div');
+        modal.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.6);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10000;
+            backdrop-filter: blur(4px);
+        `;
+
+        const bgColor = canvas.bgColor || '#1a1a2e';
+
+        modal.innerHTML = `
+            <div style="
+                background: var(--bg-secondary, #2a2a3e);
+                border-radius: 12px;
+                padding: 24px;
+                min-width: 300px;
+                max-width: 340px;
+                box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+                border: 1px solid var(--border-color, #3a3a4e);
+            ">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <h3 style="margin: 0; font-size: 18px; font-weight: 600; color: var(--text-primary, #fff);">Export Lines</h3>
+                    <button class="export-lines-close" style="
+                        background: none;
+                        border: none;
+                        color: var(--text-secondary, #888);
+                        font-size: 24px;
+                        cursor: pointer;
+                        padding: 0;
+                        line-height: 1;
+                        transition: color 0.2s;
+                    ">&times;</button>
+                </div>
+                <p style="margin: 0 0 16px 0; font-size: 14px; color: var(--text-secondary, #888);">Choose background:</p>
+                <div style="display: flex; flex-direction: column; gap: 8px;">
+                    <button class="export-lines-option" data-value="transparent" style="
+                        display: flex;
+                        align-items: center;
+                        gap: 12px;
+                        padding: 12px 16px;
+                        background: var(--bg-tertiary, #1a1a2e);
+                        border: 1px solid var(--border-color, #3a3a4e);
+                        border-radius: 8px;
+                        color: var(--text-primary, #fff);
+                        font-size: 14px;
+                        cursor: pointer;
+                        transition: all 0.2s;
+                    ">
+                        <span style="
+                            width: 28px;
+                            height: 28px;
+                            background: repeating-conic-gradient(#606060 0% 25%, #404040 0% 50%) 50% / 8px 8px;
+                            border-radius: 6px;
+                            flex-shrink: 0;
+                        "></span>
+                        Transparent
+                    </button>
+                    <button class="export-lines-option" data-value="board" style="
+                        display: flex;
+                        align-items: center;
+                        gap: 12px;
+                        padding: 12px 16px;
+                        background: var(--bg-tertiary, #1a1a2e);
+                        border: 1px solid var(--border-color, #3a3a4e);
+                        border-radius: 8px;
+                        color: var(--text-primary, #fff);
+                        font-size: 14px;
+                        cursor: pointer;
+                        transition: all 0.2s;
+                    ">
+                        <span style="
+                            width: 28px;
+                            height: 28px;
+                            background: ${bgColor};
+                            border-radius: 6px;
+                            flex-shrink: 0;
+                            border: 1px solid rgba(255,255,255,0.1);
+                        "></span>
+                        Board Color
+                    </button>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(modal);
+
+        // Add hover effects
+        const buttons = modal.querySelectorAll('.export-lines-option');
+        buttons.forEach(btn => {
+            btn.addEventListener('mouseenter', () => {
+                btn.style.background = 'var(--bg-hover, #3a3a4e)';
+                btn.style.borderColor = 'var(--accent-color, #6366f1)';
+            });
+            btn.addEventListener('mouseleave', () => {
+                btn.style.background = 'var(--bg-tertiary, #1a1a2e)';
+                btn.style.borderColor = 'var(--border-color, #3a3a4e)';
+            });
+            btn.addEventListener('click', () => {
+                modal.remove();
+                resolve(btn.dataset.value);
+            });
+        });
+
+        // Handle close button
+        const closeBtn = modal.querySelector('.export-lines-close');
+        closeBtn.addEventListener('mouseenter', () => closeBtn.style.color = 'var(--text-primary, #fff)');
+        closeBtn.addEventListener('mouseleave', () => closeBtn.style.color = 'var(--text-secondary, #888)');
+        closeBtn.addEventListener('click', () => {
+            modal.remove();
+            resolve(null);
+        });
+
+        // Handle overlay click
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                modal.remove();
+                resolve(null);
+            }
+        });
+    });
 }
 
 function importBoard() {
