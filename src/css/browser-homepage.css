@@ -599,21 +599,13 @@ html[data-theme="purplexing"] .board-delete-btn svg {
 /* List View Styles */
 .boards-grid.list-view {
     grid-template-columns: 1fr;
-    gap: 0;
-    border: 1px solid var(--border-color);
-    border-radius: 12px;
-    overflow: hidden;
+    gap: 8px;
 }
 
 .boards-grid.list-view .board-card {
     flex-direction: row;
     border: none;
-    border-radius: 0;
-    border-bottom: 1px solid var(--border-color);
-}
-
-.boards-grid.list-view .board-card:last-child {
-    border-bottom: none;
+    border-radius: 8px;
 }
 
 .boards-grid.list-view .board-card:hover {

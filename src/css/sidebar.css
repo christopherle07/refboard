@@ -402,7 +402,9 @@ html[data-theme="dark"] .layer-icon[src*="ColorPalette"] {
 /* Purplexing theme: purple layer icons for black-filled SVGs */
 html[data-theme="purplexing"] .layer-icon[src*="layericon"],
 html[data-theme="purplexing"] .layer-icon[src*="foldericon"],
-html[data-theme="purplexing"] .layer-icon[src*="ColorPalette"] {
+html[data-theme="purplexing"] .layer-icon[src*="ColorPalette"],
+html[data-theme="purplexing"] .layer-icon[src*="TextIcon"],
+html[data-theme="purplexing"] .layer-icon[src*="ShapeIcon"] {
     filter: brightness(0) saturate(100%) invert(71%) sepia(35%) saturate(738%) hue-rotate(207deg) brightness(93%) contrast(91%) !important;
 }
 
@@ -446,22 +448,26 @@ html[data-theme="purplexing"] .layer-icon[src*="ColorPalette"] {
 }
 
 .layer-visibility-btn {
-    width: 20px;
-    height: 20px;
+    width: 22px;
+    height: 22px;
     display: flex;
     align-items: center;
     justify-content: center;
     background: none;
     border: none;
     cursor: pointer;
-    color: var(--text-tertiary);
-    font-size: 11px;
+    color: var(--text-secondary);
     flex-shrink: 0;
-    transition: all 0.1s;
+    transition: all 0.15s;
     padding: 0;
     margin-left: auto;
-    border-radius: 3px;
+    border-radius: 4px;
     opacity: 0;
+}
+
+.layer-visibility-btn svg {
+    width: 14px;
+    height: 14px;
 }
 
 .layer-item:hover .layer-visibility-btn {
@@ -638,6 +644,51 @@ html[data-theme="purplexing"] .layer-icon[src*="ColorPalette"] {
 }
 
 .group-header:hover .layer-controls {
+    opacity: 1;
+}
+
+/* Group visibility button - always visible */
+.group-visibility-btn {
+    width: 22px;
+    height: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text-secondary);
+    padding: 0;
+    border-radius: 4px;
+    transition: all 0.15s;
+    flex-shrink: 0;
+}
+
+.group-visibility-btn:hover {
+    color: var(--text-primary);
+    background: var(--bg-hover);
+}
+
+.group-visibility-btn.hidden {
+    color: var(--text-disabled);
+}
+
+.group-visibility-btn.hidden:hover {
+    color: var(--text-secondary);
+}
+
+.group-visibility-btn svg {
+    width: 14px;
+    height: 14px;
+}
+
+/* But hide delete button until hover */
+.group-header .layer-controls .layer-btn-delete {
+    opacity: 0;
+    transition: opacity 0.1s;
+}
+
+.group-header:hover .layer-controls .layer-btn-delete {
     opacity: 1;
 }
 
@@ -1183,19 +1234,27 @@ html[data-theme="purplexing"] .group-toggle-icon {
 
 /* Right Tools Sidebar */
 .tools-sidebar {
-    width: 56px;
-    background: var(--bg-primary);
-    border-left: 1px solid var(--border-color);
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: transparent;
     display: flex;
     flex-direction: column;
-    flex-shrink: 0;
+    align-items: center;
+    z-index: 100;
 }
 
 .tools-sidebar-content {
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    padding: 16px 8px;
+    gap: 0;
+    padding: 0;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
 }
 
 .tool-btn {
@@ -1206,11 +1265,22 @@ html[data-theme="purplexing"] .group-toggle-icon {
     justify-content: center;
     background: transparent;
     border: none;
-    border-radius: 6px;
+    border-radius: 0;
     cursor: pointer;
     transition: all 0.15s ease;
     padding: 0;
     position: relative;
+}
+
+/* Divider lines between buttons */
+.tool-btn:not(:last-child)::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 8px;
+    right: 8px;
+    height: 1px;
+    background: var(--border-color);
 }
 
 .tool-btn:hover {
@@ -1218,25 +1288,37 @@ html[data-theme="purplexing"] .group-toggle-icon {
 }
 
 .tool-btn.active {
-    background: rgba(91, 138, 197, 0.15);
+    background: var(--accent-primary);
+}
+
+.tool-btn.active::after {
+    display: none;
+}
+
+.tool-btn.active + .tool-btn::before {
+    display: none;
 }
 
 .tool-btn.active:hover {
-    background: rgba(91, 138, 197, 0.22);
+    background: var(--accent-primary-hover);
+}
+
+.tool-btn.active .tool-icon {
+    filter: brightness(0) invert(1) !important;
 }
 
 .tool-btn svg {
-    width: 20px;
-    height: 20px;
+    width: 18px;
+    height: 18px;
     stroke: currentColor;
     fill: none;
 }
 
 .tool-icon {
-    width: 20px;
-    height: 20px;
-    opacity: 0.8;
-    transition: opacity 0.2s;
+    width: 18px;
+    height: 18px;
+    opacity: 0.7;
+    transition: all 0.15s;
 }
 
 .tool-btn:hover .tool-icon {

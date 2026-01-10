@@ -1272,3 +1272,331 @@ html[data-theme="purplexing"] .floating-canvas-icon {
 .toggle-switch input:checked + .toggle-slider:before {
     transform: translateX(20px);
 }
+
+/* ========================================
+   Procreate-style Drawing Controls
+   ======================================== */
+
+/* Vertical Size Slider - Clean pill style, matches toolbar width */
+.draw-size-slider-container {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(calc(-50% - 180px));
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    z-index: 100;
+    width: 42px;
+    padding: 12px 0;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+}
+
+.draw-size-slider-container.visible {
+    display: flex;
+}
+
+/* The actual slider input - vertical orientation */
+.draw-size-slider-vertical {
+    -webkit-appearance: none;
+    appearance: none;
+    writing-mode: vertical-lr;
+    direction: rtl;
+    width: 24px;
+    height: 140px;
+    background: transparent;
+    outline: none;
+    margin: 0;
+    padding: 0;
+}
+
+/* Track - invisible, no center line */
+.draw-size-slider-vertical::-webkit-slider-runnable-track {
+    width: 24px;
+    height: 140px;
+    background: transparent;
+}
+
+.draw-size-slider-vertical::-moz-range-track {
+    width: 24px;
+    height: 140px;
+    background: transparent;
+}
+
+/* Thumb - horizontal bar, centered */
+.draw-size-slider-vertical::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 24px;
+    height: 6px;
+    background: rgba(255, 255, 255, 0.5);
+    border-radius: 3px;
+    cursor: pointer;
+    border: none;
+    transition: background 0.15s;
+}
+
+.draw-size-slider-vertical::-webkit-slider-thumb:hover {
+    background: rgba(255, 255, 255, 0.7);
+}
+
+.draw-size-slider-vertical::-webkit-slider-thumb:active {
+    background: rgba(255, 255, 255, 0.8);
+}
+
+.draw-size-slider-vertical::-moz-range-thumb {
+    width: 24px;
+    height: 6px;
+    background: rgba(255, 255, 255, 0.5);
+    border-radius: 3px;
+    cursor: pointer;
+    border: none;
+}
+
+/* Size input wrapper - at bottom */
+.draw-size-input-wrapper {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: 8px;
+}
+
+/* Number input for custom size */
+.draw-size-input {
+    width: 34px;
+    height: 24px;
+    background: rgba(255, 255, 255, 0.08);
+    border: none;
+    border-radius: 4px;
+    color: var(--text-secondary);
+    font-size: 11px;
+    font-weight: 500;
+    text-align: center;
+    outline: none;
+    -moz-appearance: textfield;
+    appearance: textfield;
+}
+
+.draw-size-input::-webkit-outer-spin-button,
+.draw-size-input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.draw-size-input:focus {
+    background: rgba(255, 255, 255, 0.12);
+    color: var(--text-primary);
+}
+
+.draw-size-preview {
+    display: none;
+}
+
+/* Bottom Controls Container */
+.draw-controls-container {
+    position: absolute;
+    bottom: 20px;
+    right: 12px;
+    display: none;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    z-index: 100;
+}
+
+.draw-controls-container.visible {
+    display: flex;
+}
+
+/* Tool Selector Dropdown */
+.draw-tool-selector {
+    position: relative;
+}
+
+.draw-tool-current {
+    width: 48px;
+    height: 48px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+}
+
+.draw-tool-current:hover {
+    background: var(--bg-hover);
+    border-color: var(--border-color-hover);
+}
+
+.draw-tool-current svg {
+    width: 24px;
+    height: 24px;
+    color: var(--text-primary);
+}
+
+.draw-tool-dropdown {
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    margin-bottom: 8px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 6px;
+    display: none;
+    flex-direction: column;
+    gap: 4px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    min-width: 140px;
+}
+
+.draw-tool-dropdown.show {
+    display: flex;
+}
+
+.draw-tool-option {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    background: transparent;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    color: var(--text-secondary);
+    transition: all 0.15s;
+}
+
+.draw-tool-option:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+.draw-tool-option.active {
+    background: var(--accent-primary);
+    color: white;
+}
+
+.draw-tool-option svg {
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+}
+
+.draw-tool-option span {
+    font-size: 13px;
+    font-weight: 500;
+}
+
+/* Clear Button */
+.draw-clear-btn {
+    width: 48px;
+    height: 48px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+}
+
+.draw-clear-btn:hover {
+    background: var(--accent-danger);
+    border-color: var(--accent-danger);
+    color: white;
+}
+
+.draw-clear-btn svg {
+    width: 22px;
+    height: 22px;
+    color: var(--text-secondary);
+    transition: color 0.15s;
+}
+
+.draw-clear-btn:hover svg {
+    color: white;
+}
+
+/* Eraser Mode Toggle */
+.eraser-mode-toggle {
+    display: flex;
+    gap: 4px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 4px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+}
+
+.eraser-mode-btn {
+    width: 36px;
+    height: 36px;
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+    color: var(--text-secondary);
+}
+
+.eraser-mode-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+.eraser-mode-btn.active {
+    background: var(--accent-primary);
+    color: white;
+}
+
+.eraser-mode-btn svg {
+    width: 18px;
+    height: 18px;
+}
+
+/* Color Picker */
+.draw-color-picker-wrapper {
+    position: relative;
+}
+
+.draw-color-picker {
+    width: 48px;
+    height: 48px;
+    border: 3px solid var(--bg-secondary);
+    border-radius: 50%;
+    cursor: pointer;
+    padding: 0;
+    background: transparent;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+}
+
+.draw-color-picker::-webkit-color-swatch-wrapper {
+    padding: 0;
+}
+
+.draw-color-picker::-webkit-color-swatch {
+    border: none;
+    border-radius: 50%;
+}
+
+.draw-color-picker::-moz-color-swatch {
+    border: none;
+    border-radius: 50%;
+}

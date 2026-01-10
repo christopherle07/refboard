@@ -285,38 +285,79 @@
             </aside>
 
             <main class="canvas-area">
-                <div class="drawing-toolbar" id="drawing-toolbar">
-                    <div class="toolbar-group">
-                        <button class="toolbar-btn" id="draw-pen-btn" title="Pen Tool">P</button>
-                        <button class="toolbar-btn" id="draw-highlighter-btn" title="Highlighter Tool">H</button>
-                        <button class="toolbar-btn" id="draw-eraser-btn" title="Eraser Tool">E</button>
-                    </div>
-                    <div class="toolbar-separator"></div>
-                    <div class="toolbar-group">
-                        <input type="color" id="draw-color-picker" class="color-picker-input" value="#000000" title="Drawing Color">
-                        <div class="size-control">
-                            <label class="size-label" id="draw-size-label">Size:</label>
-                            <div class="size-input-group">
-                                <input type="number" id="draw-size-input" class="size-input" min="1" max="500" value="2">
-                                <input type="range" id="draw-size-slider" class="size-slider" min="1" max="100" value="2">
-                            </div>
-                        </div>
-                    </div>
-                    <div class="toolbar-separator"></div>
-                    <div class="toolbar-group">
-                        <div class="eraser-mode-toggle" id="eraser-mode-toggle" style="display: none;">
-                            <label class="toggle-label">Erase:</label>
-                            <div class="toggle-buttons">
-                                <button class="toggle-option active" data-mode="strokes">Strokes</button>
-                                <button class="toggle-option" data-mode="pixels">Pixels</button>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="toolbar-separator" id="clear-separator"></div>
-                    <div class="toolbar-group">
-                        <button class="toolbar-btn" id="draw-clear-btn" title="Clear All Strokes">C</button>
+                <!-- Procreate-style Drawing Controls -->
+                <div class="draw-size-slider-container" id="draw-size-slider-container">
+                    <input type="range" id="draw-size-slider" class="draw-size-slider-vertical" min="1" max="800" value="8">
+                    <div class="draw-size-input-wrapper">
+                        <input type="number" id="draw-size-input" class="draw-size-input" min="1" value="8" title="Brush size (no max limit)">
                     </div>
                 </div>
+
+                <div class="draw-controls-container" id="drawing-toolbar">
+                    <div class="draw-tool-selector" id="draw-tool-selector">
+                        <button class="draw-tool-current" id="draw-tool-current">
+                            <svg class="draw-tool-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M12 19l7-7 3 3-7 7-3-3z"/>
+                                <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/>
+                                <path d="M2 2l7.586 7.586"/>
+                            </svg>
+                        </button>
+                        <div class="draw-tool-dropdown" id="draw-tool-dropdown">
+                            <button class="draw-tool-option active" id="draw-pen-btn" data-tool="pen">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M12 19l7-7 3 3-7 7-3-3z"/>
+                                    <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/>
+                                    <path d="M2 2l7.586 7.586"/>
+                                </svg>
+                                <span>Pen</span>
+                            </button>
+                            <button class="draw-tool-option" id="draw-highlighter-btn" data-tool="highlighter">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M9 11l-6 6v3h9l3-3"/>
+                                    <path d="M22 12l-4.6 4.6a2 2 0 01-2.8 0l-5.2-5.2a2 2 0 010-2.8L14 4"/>
+                                </svg>
+                                <span>Highlighter</span>
+                            </button>
+                            <button class="draw-tool-option" id="draw-eraser-btn" data-tool="eraser">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M20 20H7L3 16a1 1 0 010-1.4l9.9-9.9a1 1 0 011.4 0l5.3 5.3a1 1 0 010 1.4L11 20"/>
+                                    <path d="M6 11l8 8"/>
+                                </svg>
+                                <span>Eraser</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Eraser mode toggle - shows when eraser is active -->
+                    <div class="eraser-mode-toggle" id="eraser-mode-toggle" style="display: none;">
+                        <button class="eraser-mode-btn active" data-mode="strokes" title="Erase drawn strokes">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+                                <path d="M3 17c3-3 5 2 9 0s6 3 9 0"/>
+                                <path d="M3 12c3-3 5 2 9 0s6 3 9 0"/>
+                                <path d="M3 7c3-3 5 2 9 0s6 3 9 0"/>
+                            </svg>
+                        </button>
+                        <button class="eraser-mode-btn" data-mode="pixels" title="Erase image pixels">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="3" y="3" width="18" height="18" rx="2"/>
+                                <path d="M9 3v18M15 3v18M3 9h18M3 15h18"/>
+                            </svg>
+                        </button>
+                    </div>
+
+                    <button class="draw-clear-btn" id="draw-clear-btn" title="Clear All">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M3 6h18"/>
+                            <path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+                            <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6"/>
+                        </svg>
+                    </button>
+
+                    <div class="draw-color-picker-wrapper">
+                        <input type="color" id="draw-color-picker" class="draw-color-picker" value="#000000" title="Drawing Color">
+                    </div>
+                </div>
+                <input type="number" id="draw-size-input" style="display: none;" min="1" max="500" value="8">
 
                 <!-- Floating Text Toolbar -->
                 <div class="floating-toolbar" id="floating-text-toolbar" style="display: none;">

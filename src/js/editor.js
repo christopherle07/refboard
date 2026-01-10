@@ -579,16 +579,20 @@ function setupEventListeners(container) {
                 $('assets-library-view').style.display = 'none';
                 const drawingToolbar = $('drawing-toolbar');
                 const toolsSidebar = document.querySelector('.tools-sidebar');
+                const sizeSlider = $('draw-size-slider-container');
                 if (drawingToolbar) drawingToolbar.style.display = 'flex';
                 if (toolsSidebar) toolsSidebar.style.display = 'flex';
+                if (sizeSlider) sizeSlider.style.display = '';
             } else if (tab === 'assets') {
                 // Show assets library view
                 $('canvas-container').style.display = 'none';
                 $('assets-library-view').style.display = 'flex';
                 const drawingToolbar = $('drawing-toolbar');
                 const toolsSidebar = document.querySelector('.tools-sidebar');
+                const sizeSlider = $('draw-size-slider-container');
                 if (drawingToolbar) drawingToolbar.style.display = 'none';
                 if (toolsSidebar) toolsSidebar.style.display = 'none';
+                if (sizeSlider) sizeSlider.style.display = 'none';
 
                 // Load assets into library view
                 loadAssetsLibrary();
@@ -732,6 +736,7 @@ function setupEventListeners(container) {
 }
 
 function setupDrawingToolbar() {
+    // Procreate-style drawing controls
     let penBtn = getElement('draw-pen-btn');
     let highlighterBtn = getElement('draw-highlighter-btn');
     let eraserBtn = getElement('draw-eraser-btn');
@@ -740,6 +745,11 @@ function setupDrawingToolbar() {
     let sizeInput = getElement('draw-size-input');
     let clearBtn = getElement('draw-clear-btn');
     const eraserModeToggle = getElement('eraser-mode-toggle');
+    const toolCurrentBtn = getElement('draw-tool-current');
+    const toolDropdown = getElement('draw-tool-dropdown');
+    const sizeSliderContainer = getElement('draw-size-slider-container');
+    const sizePreview = getElement('draw-size-preview');
+    const drawingToolbar = getElement('drawing-toolbar');
 
     // Clone buttons and controls to remove old event listeners
     if (penBtn) {
@@ -780,23 +790,55 @@ function setupDrawingToolbar() {
 
     let currentTool = null;
 
+    // SVG icons for each tool
+    const toolIcons = {
+        pen: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 19l7-7 3 3-7 7-3-3z"/>
+            <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/>
+            <path d="M2 2l7.586 7.586"/>
+        </svg>`,
+        highlighter: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M9 11l-6 6v3h9l3-3"/>
+            <path d="M22 12l-4.6 4.6a2 2 0 01-2.8 0l-5.2-5.2a2 2 0 010-2.8L14 4"/>
+        </svg>`,
+        eraser: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M20 20H7L3 16a1 1 0 010-1.4l9.9-9.9a1 1 0 011.4 0l5.3 5.3a1 1 0 010 1.4L11 20"/>
+            <path d="M6 11l8 8"/>
+        </svg>`
+    };
+
     function updateSizeControls(size) {
-        sizeInput.value = size;
-        sizeSlider.value = Math.min(size, 100);
-        sizeSlider.max = size > 100 ? size : 100;
+        if (sizeInput) sizeInput.value = size;
+        if (sizeSlider) {
+            // Slider max is 800, clamp value to that
+            sizeSlider.value = Math.min(size, 800);
+        }
+        updateSizePreview(size);
+    }
+
+    function updateSizePreview(size) {
+        if (sizePreview) {
+            const previewSize = Math.max(4, Math.min(36, size * 0.8));
+            sizePreview.style.setProperty('--preview-size', previewSize + 'px');
+            sizePreview.style.setProperty('--preview-color', colorPicker?.value || '#fff');
+        }
+    }
+
+    function updateToolIcon(tool) {
+        if (toolCurrentBtn && toolIcons[tool]) {
+            toolCurrentBtn.innerHTML = toolIcons[tool];
+        }
     }
 
     function setActiveTool(tool) {
-        // Remove active class from all tool buttons
-        penBtn.classList.remove('active');
-        highlighterBtn.classList.remove('active');
-        eraserBtn.classList.remove('active');
+        // Remove active class from all tool options
+        penBtn?.classList.remove('active');
+        highlighterBtn?.classList.remove('active');
+        eraserBtn?.classList.remove('active');
 
         // Hide/show eraser mode toggle
-        if (tool === 'eraser') {
-            eraserModeToggle.style.display = 'flex';
-        } else {
-            eraserModeToggle.style.display = 'none';
+        if (eraserModeToggle) {
+            eraserModeToggle.style.display = tool === 'eraser' ? 'flex' : 'none';
         }
 
         // Set the drawing mode
@@ -804,15 +846,18 @@ function setupDrawingToolbar() {
             // Toggle off if clicking the same tool
             currentTool = null;
             canvas.setDrawingMode(null);
-            eraserModeToggle.style.display = 'none';
+            if (eraserModeToggle) eraserModeToggle.style.display = 'none';
         } else {
             currentTool = tool;
             canvas.setDrawingMode(tool);
 
             // Add active class to the clicked button
-            if (tool === 'pen') penBtn.classList.add('active');
-            else if (tool === 'highlighter') highlighterBtn.classList.add('active');
-            else if (tool === 'eraser') eraserBtn.classList.add('active');
+            if (tool === 'pen') penBtn?.classList.add('active');
+            else if (tool === 'highlighter') highlighterBtn?.classList.add('active');
+            else if (tool === 'eraser') eraserBtn?.classList.add('active');
+
+            // Update the current tool button icon
+            updateToolIcon(tool);
 
             // Update size controls based on tool
             if (tool === 'pen') {
@@ -823,20 +868,46 @@ function setupDrawingToolbar() {
                 updateSizeControls(canvas.eraserSize);
             }
         }
+
+        // Close dropdown after selection
+        if (toolDropdown) toolDropdown.classList.remove('show');
     }
 
-    penBtn.addEventListener('click', () => setActiveTool('pen'));
-    highlighterBtn.addEventListener('click', () => setActiveTool('highlighter'));
-    eraserBtn.addEventListener('click', () => setActiveTool('eraser'));
+    // Tool dropdown toggle
+    if (toolCurrentBtn && toolDropdown) {
+        toolCurrentBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            toolDropdown.classList.toggle('show');
+        });
 
-    colorPicker.addEventListener('input', (e) => {
-        canvas.setDrawingColor(e.target.value);
-    });
+        // Close dropdown when clicking outside
+        document.addEventListener('click', (e) => {
+            if (!toolDropdown.contains(e.target) && e.target !== toolCurrentBtn) {
+                toolDropdown.classList.remove('show');
+            }
+        });
+    }
+
+    // Tool button click handlers
+    penBtn?.addEventListener('click', () => setActiveTool('pen'));
+    highlighterBtn?.addEventListener('click', () => setActiveTool('highlighter'));
+    eraserBtn?.addEventListener('click', () => setActiveTool('eraser'));
+
+    // Color picker - sync with canvas on init
+    if (colorPicker) {
+        // Set color picker to match canvas drawing color
+        colorPicker.value = canvas.drawingColor || '#000000';
+
+        colorPicker.addEventListener('input', (e) => {
+            canvas.setDrawingColor(e.target.value);
+        });
+    }
 
     // Size slider handler
-    sizeSlider.addEventListener('input', (e) => {
+    sizeSlider?.addEventListener('input', (e) => {
         const size = parseInt(e.target.value);
-        sizeInput.value = size;
+        if (sizeInput) sizeInput.value = size;
+        updateSizePreview(size);
 
         if (currentTool === 'pen') {
             canvas.setPenSize(size);
@@ -847,15 +918,16 @@ function setupDrawingToolbar() {
         }
     });
 
-    // Size input handler
-    sizeInput.addEventListener('input', (e) => {
+    // Size input handler - uncapped for large boards
+    sizeInput?.addEventListener('input', (e) => {
         let size = parseInt(e.target.value) || 1;
-        size = Math.max(1, Math.min(500, size));
+        size = Math.max(1, size); // No max cap - users can set any size
 
-        sizeSlider.value = Math.min(size, 100);
-        if (size > 100) {
-            sizeSlider.max = size;
+        // Sync slider (capped at 800)
+        if (sizeSlider) {
+            sizeSlider.value = Math.min(size, 800);
         }
+        updateSizePreview(size);
 
         if (currentTool === 'pen') {
             canvas.setPenSize(size);
@@ -867,12 +939,12 @@ function setupDrawingToolbar() {
     });
 
     // Eraser mode toggle
-    eraserModeToggle.querySelectorAll('.toggle-option').forEach(btn => {
+    eraserModeToggle?.querySelectorAll('.eraser-mode-btn').forEach(btn => {
         btn.addEventListener('click', () => {
             const mode = btn.dataset.mode;
 
             // Update active state
-            eraserModeToggle.querySelectorAll('.toggle-option').forEach(b => b.classList.remove('active'));
+            eraserModeToggle.querySelectorAll('.eraser-mode-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
 
             // Set eraser mode
@@ -880,94 +952,60 @@ function setupDrawingToolbar() {
         });
     });
 
-    // Drawing mode button (in sidebar tools section)
-    const drawingModeBtn = getElement('drawing-mode-btn');
-    const drawingToolbar = getElement('drawing-toolbar');
+    // Clear all strokes button
+    clearBtn?.addEventListener('click', () => {
+        clearDrawingStrokes();
+    });
 
-    if (drawingModeBtn && drawingToolbar) {
+    // Drawing mode button (in right tools sidebar)
+    const drawingModeBtn = getElement('drawing-mode-btn');
+
+    if (drawingModeBtn) {
         // Load saved state from localStorage - default to hidden (false)
         const toolbarVisible = localStorage.getItem('editor_toolbar_visible') === 'true';
 
-        if (!toolbarVisible) {
-            drawingToolbar.style.display = 'none';
-            drawingModeBtn.classList.remove('active');
-            canvas.setDrawingMode(null);
-        } else {
+        function showDrawingControls() {
+            if (drawingToolbar) drawingToolbar.classList.add('visible');
+            if (sizeSliderContainer) sizeSliderContainer.classList.add('visible');
             drawingModeBtn.classList.add('active');
         }
 
+        function hideDrawingControls() {
+            if (drawingToolbar) drawingToolbar.classList.remove('visible');
+            if (sizeSliderContainer) sizeSliderContainer.classList.remove('visible');
+            drawingModeBtn.classList.remove('active');
+            if (toolDropdown) toolDropdown.classList.remove('show');
+        }
+
+        if (!toolbarVisible) {
+            hideDrawingControls();
+            canvas.setDrawingMode(null);
+        } else {
+            showDrawingControls();
+            setActiveTool('pen');
+        }
+
         drawingModeBtn.addEventListener('click', () => {
-            const isVisible = drawingToolbar.style.display !== 'none';
+            const isVisible = drawingToolbar?.classList.contains('visible');
 
             if (isVisible) {
                 // Hide toolbar and disable all drawing tools
-                drawingToolbar.style.display = 'none';
-                drawingModeBtn.classList.remove('active');
+                hideDrawingControls();
                 localStorage.setItem('editor_toolbar_visible', 'false');
 
                 // Disable current tool
                 currentTool = null;
                 canvas.setDrawingMode(null);
-                penBtn.classList.remove('active');
-                highlighterBtn.classList.remove('active');
-                eraserBtn.classList.remove('active');
-                eraserModeToggle.style.display = 'none';
+                penBtn?.classList.remove('active');
+                highlighterBtn?.classList.remove('active');
+                eraserBtn?.classList.remove('active');
+                if (eraserModeToggle) eraserModeToggle.style.display = 'none';
             } else {
                 // Show toolbar and enable pen tool by default
-                drawingToolbar.style.display = 'flex';
-                drawingModeBtn.classList.add('active');
+                showDrawingControls();
                 localStorage.setItem('editor_toolbar_visible', 'true');
                 setActiveTool('pen');
             }
-        });
-
-        // Sync button state when tools are clicked
-        const syncDrawingModeBtn = () => {
-            if (currentTool !== null) {
-                drawingModeBtn.classList.add('active');
-            }
-        };
-
-        // Add sync to tool button clicks
-        const originalSetActiveTool = setActiveTool;
-        setActiveTool = (tool) => {
-            originalSetActiveTool(tool);
-            syncDrawingModeBtn();
-        };
-
-        // Make toolbar draggable
-        let isDragging = false;
-        let currentX = 0;
-        let currentY = 0;
-        let initialX;
-        let initialY;
-
-        drawingToolbar.addEventListener('mousedown', (e) => {
-            // Only drag if clicking on the toolbar background, not buttons/inputs
-            if (e.target === drawingToolbar || e.target.classList.contains('toolbar-separator')) {
-                const rect = drawingToolbar.getBoundingClientRect();
-                initialX = e.clientX - rect.left;
-                initialY = e.clientY - rect.top;
-                isDragging = true;
-            }
-        });
-
-        document.addEventListener('mousemove', (e) => {
-            if (isDragging) {
-                e.preventDefault();
-                currentX = e.clientX - initialX;
-                currentY = e.clientY - initialY;
-
-                // Remove centering and position absolutely
-                drawingToolbar.style.left = currentX + 'px';
-                drawingToolbar.style.top = currentY + 'px';
-                drawingToolbar.style.bottom = 'auto';
-                drawingToolbar.style.transform = 'none';
-            }
-        });
-
-        document.addEventListener('mouseup', () => {
-            isDragging = false;
         });
     }
 
@@ -1077,15 +1115,19 @@ function createLayerItem(img, images) {
         <div class="drag-row"><span></span><span></span></div>
     `;
 
+    // Eye icons for visibility
+    const eyeOpen = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>`;
+    const eyeClosed = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>`;
+
     const visibilityBtn = document.createElement('button');
     visibilityBtn.className = 'layer-visibility-btn';
     visibilityBtn.type = 'button';
     if (img.visible === false) {
         visibilityBtn.classList.add('hidden');
-        visibilityBtn.innerHTML = '◯';
+        visibilityBtn.innerHTML = eyeClosed;
         visibilityBtn.title = 'Show layer';
     } else {
-        visibilityBtn.innerHTML = '●';
+        visibilityBtn.innerHTML = eyeOpen;
         visibilityBtn.title = 'Hide layer';
     }
     visibilityBtn.addEventListener('click', (e) => {
@@ -1372,15 +1414,19 @@ function createObjectLayerItem(obj, objects) {
         <div class="drag-row"><span></span><span></span></div>
     `;
 
+    // Eye icons for visibility
+    const eyeOpen = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>`;
+    const eyeClosed = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>`;
+
     const visibilityBtn = document.createElement('button');
     visibilityBtn.className = 'layer-visibility-btn';
     visibilityBtn.type = 'button';
     if (obj.visible === false) {
         visibilityBtn.classList.add('hidden');
-        visibilityBtn.innerHTML = '◯';
+        visibilityBtn.innerHTML = eyeClosed;
         visibilityBtn.title = 'Show layer';
     } else {
-        visibilityBtn.innerHTML = '●';
+        visibilityBtn.innerHTML = eyeOpen;
         visibilityBtn.title = 'Hide layer';
     }
     visibilityBtn.addEventListener('click', (e) => {
@@ -1788,6 +1834,61 @@ function createGroupElement(group, allLayers, images, objects) {
     const groupControls = document.createElement('div');
     groupControls.className = 'layer-controls';
 
+    // Eye icons for visibility
+    const eyeOpenIcon = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>`;
+    const eyeClosedIcon = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>`;
+
+    // Check if group is currently hidden (all layers hidden)
+    const checkGroupVisibility = () => {
+        const imgs = canvas.getImages();
+        const objs = canvas.objectsManager ? canvas.objectsManager.getObjects() : [];
+        const grpImages = imgs.filter(img => group.layerIds.includes(img.id));
+        const grpObjects = objs.filter(obj => group.objectIds && group.objectIds.includes(obj.id));
+        const allItems = [...grpImages, ...grpObjects];
+        return allItems.length > 0 && allItems.every(item => item.visible === false);
+    };
+
+    const visibilityBtn = document.createElement('button');
+    visibilityBtn.className = 'group-visibility-btn';
+    visibilityBtn.type = 'button';
+    const isGroupHidden = checkGroupVisibility();
+    if (isGroupHidden) {
+        visibilityBtn.classList.add('hidden');
+        visibilityBtn.innerHTML = eyeClosedIcon;
+        visibilityBtn.title = 'Show group';
+    } else {
+        visibilityBtn.innerHTML = eyeOpenIcon;
+        visibilityBtn.title = 'Hide group';
+    }
+    visibilityBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+
+        const imgs = canvas.getImages();
+        const objs = canvas.objectsManager ? canvas.objectsManager.getObjects() : [];
+        const grpImages = imgs.filter(img => group.layerIds.includes(img.id));
+        const grpObjects = objs.filter(obj => group.objectIds && group.objectIds.includes(obj.id));
+        const allItems = [...grpImages, ...grpObjects];
+        const allHidden = allItems.length > 0 && allItems.every(item => item.visible === false);
+        const newVisibility = allHidden ? true : false; // If all hidden, show them; otherwise hide them
+
+        // Toggle visibility for all image layers in group
+        grpImages.forEach(img => {
+            img.visible = newVisibility;
+        });
+
+        // Toggle visibility for all object layers in group
+        grpObjects.forEach(obj => {
+            obj.visible = newVisibility;
+        });
+
+        canvas.invalidateCullCache();
+        canvas.needsRender = true;
+        canvas.render();
+        renderLayers();
+        scheduleSave();
+    });
+
     const deleteBtn = document.createElement('button');
     deleteBtn.className = 'layer-btn-delete';
     deleteBtn.type = 'button';
@@ -1805,6 +1906,7 @@ function createGroupElement(group, allLayers, images, objects) {
         }
     });
 
+    groupControls.appendChild(visibilityBtn);
     groupControls.appendChild(deleteBtn);
 
     groupHeader.appendChild(collapseToggle);
@@ -2247,6 +2349,38 @@ function showGroupContextMenu(x, y, group) {
         }
     });
 
+    // Check if group is currently hidden (all layers hidden)
+    const images = canvas.getImages();
+    const objects = canvas.objectsManager ? canvas.objectsManager.getObjects() : [];
+    const groupImages = images.filter(img => group.layerIds.includes(img.id));
+    const groupObjects = objects.filter(obj => group.objectIds && group.objectIds.includes(obj.id));
+    const allItems = [...groupImages, ...groupObjects];
+    const allHidden = allItems.length > 0 && allItems.every(item => item.visible === false);
+
+    const visibilityItem = document.createElement('div');
+    visibilityItem.className = 'layer-context-menu-item';
+    visibilityItem.textContent = allHidden ? 'Show Group' : 'Hide Group';
+    visibilityItem.addEventListener('click', () => {
+        menu.remove();
+        const newVisibility = allHidden ? true : false; // If all hidden, show them; otherwise hide them
+
+        // Toggle visibility for all image layers in group
+        groupImages.forEach(img => {
+            img.visible = newVisibility;
+        });
+
+        // Toggle visibility for all object layers in group
+        groupObjects.forEach(obj => {
+            obj.visible = newVisibility;
+        });
+
+        canvas.invalidateCullCache();
+        canvas.needsRender = true;
+        canvas.render();
+        renderLayers();
+        scheduleSave();
+    });
+
     const deleteItem = document.createElement('div');
     deleteItem.className = 'layer-context-menu-item';
     deleteItem.textContent = 'Delete Group and Layers';
@@ -2281,6 +2415,7 @@ function showGroupContextMenu(x, y, group) {
     });
 
     menu.appendChild(renameItem);
+    menu.appendChild(visibilityItem);
     menu.appendChild(duplicateItem);
     menu.appendChild(separator);
     menu.appendChild(ungroupItem);
