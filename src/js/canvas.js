@@ -2004,87 +2004,118 @@ export class Canvas {
         // Exit crop mode immediately to prevent multiple clicks
         this.cancelCrop();
 
-        // Save original state for undo
-        const oldSrc = img.src || img.img.src;
-        const oldImgElement = img.img;
+        // Store original image data if this is the first crop
+        if (!img.originalSrc) {
+            img.originalSrc = img.src || img.img.src;
+            img.originalWidth = img.width;
+            img.originalHeight = img.height;
+            img.originalNaturalWidth = img.img.naturalWidth;
+            img.originalNaturalHeight = img.img.naturalHeight;
+            img.originalImg = img.img;
+        }
+
+        // Calculate crop offsets relative to the CURRENT display dimensions
+        const cropX = (rect.x - img.x) / img.width;
+        const cropY = (rect.y - img.y) / img.height;
+        const cropW = rect.width / img.width;
+        const cropH = rect.height / img.height;
+
+        // Save old crop data for history
+        const oldCropData = img.cropData ? { ...img.cropData } : null;
         const oldX = img.x;
         const oldY = img.y;
         const oldWidth = img.width;
         const oldHeight = img.height;
 
-        // Calculate crop offsets relative to original image
-        const cropX = (rect.x - oldX) / oldWidth;
-        const cropY = (rect.y - oldY) / oldHeight;
-        const cropW = rect.width / oldWidth;
-        const cropH = rect.height / oldHeight;
+        // If there's existing crop data, we need to combine it with the new crop
+        if (img.cropData) {
+            // Calculate new crop relative to original image
+            const { offsetX, offsetY, cropWidth, cropHeight } = img.cropData;
+            img.cropData = {
+                offsetX: offsetX + cropX * cropWidth,
+                offsetY: offsetY + cropY * cropHeight,
+                cropWidth: cropW * cropWidth,
+                cropHeight: cropH * cropHeight
+            };
+        } else {
+            // First crop - store as ratios of original image
+            img.cropData = {
+                offsetX: cropX,
+                offsetY: cropY,
+                cropWidth: cropW,
+                cropHeight: cropH
+            };
+        }
 
-        // Create a temporary canvas to crop the image
-        const tempCanvas = document.createElement('canvas');
-        const tempCtx = tempCanvas.getContext('2d');
+        // Update image display dimensions
+        img.x = rect.x;
+        img.y = rect.y;
+        img.width = rect.width;
+        img.height = rect.height;
 
-        tempCanvas.width = rect.width;
-        tempCanvas.height = rect.height;
-
-        // Draw the cropped portion
-        if (img.img && img.img.complete) {
-            const srcX = cropX * img.img.naturalWidth;
-            const srcY = cropY * img.img.naturalHeight;
-            const srcW = cropW * img.img.naturalWidth;
-            const srcH = cropH * img.img.naturalHeight;
-
-            tempCtx.drawImage(
-                img.img,
-                srcX, srcY, srcW, srcH,
-                0, 0, rect.width, rect.height
-            );
-
-            // Update image with cropped version
-            tempCanvas.toBlob((blob) => {
-                const url = URL.createObjectURL(blob);
-                const newImg = new Image();
-                newImg.onload = () => {
-                    // Update image properties
-                    img.img = newImg;
-                    img.src = url;
-                    img.x = rect.x;
-                    img.y = rect.y;
-                    img.width = rect.width;
-                    img.height = rect.height;
-
-                    // Save to history for undo
-                    if (this.historyManager) {
-                        console.log('Pushing crop action to history:', {
-                            id: img.id,
-                            oldSrc: oldSrc,
-                            newSrc: url
-                        });
-                        this.historyManager.pushAction({
-                            type: 'crop',
-                            data: {
-                                id: img.id,
-                                oldSrc: oldSrc,
-                                oldX: oldX,
-                                oldY: oldY,
-                                oldWidth: oldWidth,
-                                oldHeight: oldHeight,
-                                newSrc: url,
-                                newX: rect.x,
-                                newY: rect.y,
-                                newWidth: rect.width,
-                                newHeight: rect.height
-                            }
-                        });
-                        console.log('History stats:', this.historyManager.getStats());
-                    } else {
-                        console.log('No history manager available');
-                    }
-
-                    this.needsRender = true;
-                    this.notifyChange();
-                };
-                newImg.src = url;
+        // Save to history for undo
+        if (this.historyManager) {
+            this.historyManager.pushAction({
+                type: 'crop',
+                data: {
+                    id: img.id,
+                    oldCropData: oldCropData,
+                    newCropData: { ...img.cropData },
+                    oldX: oldX,
+                    oldY: oldY,
+                    oldWidth: oldWidth,
+                    oldHeight: oldHeight,
+                    newX: rect.x,
+                    newY: rect.y,
+                    newWidth: rect.width,
+                    newHeight: rect.height
+                }
             });
         }
+
+        this.needsRender = true;
+        this.notifyChange();
+    }
+
+    uncropImage(img) {
+        if (!img || !img.originalSrc) return; // No crop to revert
+
+        // Save old state for history
+        const oldCropData = img.cropData ? { ...img.cropData } : null;
+        const oldX = img.x;
+        const oldY = img.y;
+        const oldWidth = img.width;
+        const oldHeight = img.height;
+
+        // Restore original image
+        img.cropData = null;
+        img.width = img.originalWidth;
+        img.height = img.originalHeight;
+
+        // Keep the current position, or could reset to original if desired
+        // For now, keep current position for better UX
+
+        // Save to history for undo
+        if (this.historyManager) {
+            this.historyManager.pushAction({
+                type: 'uncrop',
+                data: {
+                    id: img.id,
+                    oldCropData: oldCropData,
+                    oldX: oldX,
+                    oldY: oldY,
+                    oldWidth: oldWidth,
+                    oldHeight: oldHeight,
+                    newX: img.x,
+                    newY: img.y,
+                    newWidth: img.width,
+                    newHeight: img.height
+                }
+            });
+        }
+
+        this.needsRender = true;
+        this.notifyChange();
     }
 
     cancelCrop() {
@@ -2251,6 +2282,18 @@ export class Canvas {
                         this.ctx.translate(-img.x, -img.y);
                     }
 
+                    // Determine source image and crop parameters
+                    const sourceImg = img.originalImg || img.img;
+                    let sx = 0, sy = 0, sWidth = sourceImg.naturalWidth, sHeight = sourceImg.naturalHeight;
+
+                    if (img.cropData) {
+                        // Apply crop from original image
+                        sx = img.cropData.offsetX * sourceImg.naturalWidth;
+                        sy = img.cropData.offsetY * sourceImg.naturalHeight;
+                        sWidth = img.cropData.cropWidth * sourceImg.naturalWidth;
+                        sHeight = img.cropData.cropHeight * sourceImg.naturalHeight;
+                    }
+
                     if (img.rotation && img.rotation !== 0) {
                         // Move to image center
                         const centerX = img.x + img.width / 2;
@@ -2260,10 +2303,11 @@ export class Canvas {
                         // Rotate
                         this.ctx.rotate(img.rotation * Math.PI / 180);
 
-                        // Draw image centered at origin
-                        this.ctx.drawImage(img.img, -img.width / 2, -img.height / 2, img.width, img.height);
+                        // Draw image centered at origin (with crop if applicable)
+                        this.ctx.drawImage(sourceImg, sx, sy, sWidth, sHeight, -img.width / 2, -img.height / 2, img.width, img.height);
                     } else {
-                        this.ctx.drawImage(img.img, img.x, img.y, img.width, img.height);
+                        // Draw image (with crop if applicable)
+                        this.ctx.drawImage(sourceImg, sx, sy, sWidth, sHeight, img.x, img.y, img.width, img.height);
                     }
 
                     // Restore context state (removes filters and rotation)
@@ -2877,7 +2921,17 @@ export class Canvas {
             
             for (const img of validImages) {
                 try {
-                    ctx.drawImage(img.img, img.x, img.y, img.width, img.height);
+                    const sourceImg = img.originalImg || img.img;
+                    let sx = 0, sy = 0, sWidth = sourceImg.naturalWidth, sHeight = sourceImg.naturalHeight;
+
+                    if (img.cropData) {
+                        sx = img.cropData.offsetX * sourceImg.naturalWidth;
+                        sy = img.cropData.offsetY * sourceImg.naturalHeight;
+                        sWidth = img.cropData.cropWidth * sourceImg.naturalWidth;
+                        sHeight = img.cropData.cropHeight * sourceImg.naturalHeight;
+                    }
+
+                    ctx.drawImage(sourceImg, sx, sy, sWidth, sHeight, img.x, img.y, img.width, img.height);
                 } catch (e) {
                 }
             }

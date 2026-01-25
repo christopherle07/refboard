@@ -458,6 +458,15 @@ function loadLayers(layers, viewState = null) {
                 if (layer.invert === true) added.invert = true;
                 if (layer.mirror === true) added.mirror = true;
 
+                // Restore crop data if it exists
+                if (layer.cropData) {
+                    added.cropData = layer.cropData;
+                    added.originalSrc = layer.originalSrc || layer.src;
+                    added.originalWidth = layer.originalWidth || img.naturalWidth;
+                    added.originalHeight = layer.originalHeight || img.naturalHeight;
+                    added.originalImg = img;
+                }
+
                 loaded++;
                 if (loaded >= total) {
                     canvas.selectImage(null);
@@ -478,7 +487,8 @@ function loadLayers(layers, viewState = null) {
                     resolve();
                 }
             };
-            img.src = layer.src;
+            // Load from original source if crop data exists, otherwise use saved src
+            img.src = layer.cropData && layer.originalSrc ? layer.originalSrc : layer.src;
         });
     });
 }
@@ -961,9 +971,6 @@ function setupDrawingToolbar() {
     const drawingModeBtn = getElement('drawing-mode-btn');
 
     if (drawingModeBtn) {
-        // Load saved state from localStorage - default to hidden (false)
-        const toolbarVisible = localStorage.getItem('editor_toolbar_visible') === 'true';
-
         function showDrawingControls() {
             if (drawingToolbar) drawingToolbar.classList.add('visible');
             if (sizeSliderContainer) sizeSliderContainer.classList.add('visible');
@@ -977,13 +984,9 @@ function setupDrawingToolbar() {
             if (toolDropdown) toolDropdown.classList.remove('show');
         }
 
-        if (!toolbarVisible) {
-            hideDrawingControls();
-            canvas.setDrawingMode(null);
-        } else {
-            showDrawingControls();
-            setActiveTool('pen');
-        }
+        // Always start with toolbar hidden
+        hideDrawingControls();
+        canvas.setDrawingMode(null);
 
         drawingModeBtn.addEventListener('click', () => {
             const isVisible = drawingToolbar?.classList.contains('visible');
@@ -991,7 +994,6 @@ function setupDrawingToolbar() {
             if (isVisible) {
                 // Hide toolbar and disable all drawing tools
                 hideDrawingControls();
-                localStorage.setItem('editor_toolbar_visible', 'false');
 
                 // Disable current tool
                 currentTool = null;
@@ -1003,7 +1005,6 @@ function setupDrawingToolbar() {
             } else {
                 // Show toolbar and enable pen tool by default
                 showDrawingControls();
-                localStorage.setItem('editor_toolbar_visible', 'true');
                 setActiveTool('pen');
             }
         });
@@ -1066,6 +1067,14 @@ async function saveNow() {
         if (img.grayscale === true) layer.grayscale = true;
         if (img.invert === true) layer.invert = true;
         if (img.mirror === true) layer.mirror = true;
+
+        // Save crop data if image is cropped
+        if (img.cropData) {
+            layer.cropData = img.cropData;
+            layer.originalSrc = img.originalSrc;
+            layer.originalWidth = img.originalWidth;
+            layer.originalHeight = img.originalHeight;
+        }
 
         return layer;
     });
@@ -2859,6 +2868,7 @@ function setupContextMenu() {
     const deleteSelectedItem = getElement('context-delete-selected');
     const deselectAllItem = getElement('context-deselect-all');
     const cropImageItem = getElement('context-crop-image');
+    const uncropImageItem = getElement('context-uncrop-image');
     const editImageItem = getElement('context-edit-image');
     const extractColorsItem = getElement('context-extract-colors');
     const separator = getElement('context-separator');
@@ -2887,10 +2897,12 @@ function setupContextMenu() {
         // Show/hide multi-select options based on selection state
         const hasSelection = canvas.selectedImages.length > 0;
         const hasImageClick = canvas.contextMenuImage !== null && canvas.contextMenuImage !== undefined;
+        const hasImageCrop = hasImageClick && canvas.contextMenuImage.cropData;
 
         deleteSelectedItem.style.display = hasSelection ? 'block' : 'none';
         deselectAllItem.style.display = hasSelection ? 'block' : 'none';
         cropImageItem.style.display = hasImageClick ? 'block' : 'none';
+        uncropImageItem.style.display = hasImageCrop ? 'block' : 'none';
         editImageItem.style.display = hasImageClick ? 'block' : 'none';
         extractColorsItem.style.display = hasImageClick ? 'block' : 'none';
         separator.style.display = (hasSelection || hasImageClick) ? 'block' : 'none';
@@ -2936,6 +2948,15 @@ function setupContextMenu() {
     cropImageItem.addEventListener('click', () => {
         if (canvas.contextMenuImage) {
             canvas.enableCropMode(canvas.contextMenuImage);
+        }
+        contextMenu.classList.remove('show');
+    });
+
+    uncropImageItem.addEventListener('click', () => {
+        if (canvas.contextMenuImage) {
+            canvas.uncropImage(canvas.contextMenuImage);
+            renderLayers();
+            scheduleSave();
         }
         contextMenu.classList.remove('show');
     });

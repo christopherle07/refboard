@@ -167,23 +167,28 @@ export class HistoryManager {
                 break;
 
             case 'crop':
-                // Undo crop - restore original image
-                console.log('Undoing crop:', action.data);
+                // Undo crop - restore previous crop state
                 const img = this.canvas.images.find(i => i.id === action.data.id);
-                console.log('Found image:', img);
                 if (img) {
-                    const oldImg = new Image();
-                    oldImg.onload = () => {
-                        console.log('Old image loaded, restoring');
-                        img.img = oldImg;
-                        img.src = action.data.oldSrc;
-                        img.x = action.data.oldX;
-                        img.y = action.data.oldY;
-                        img.width = action.data.oldWidth;
-                        img.height = action.data.oldHeight;
-                        this.canvas.needsRender = true;
-                    };
-                    oldImg.src = action.data.oldSrc;
+                    img.cropData = action.data.oldCropData;
+                    img.x = action.data.oldX;
+                    img.y = action.data.oldY;
+                    img.width = action.data.oldWidth;
+                    img.height = action.data.oldHeight;
+                    this.canvas.needsRender = true;
+                }
+                break;
+
+            case 'uncrop':
+                // Undo uncrop - restore crop state
+                const uncropImg = this.canvas.images.find(i => i.id === action.data.id);
+                if (uncropImg) {
+                    uncropImg.cropData = action.data.oldCropData;
+                    uncropImg.x = action.data.oldX;
+                    uncropImg.y = action.data.oldY;
+                    uncropImg.width = action.data.oldWidth;
+                    uncropImg.height = action.data.oldHeight;
+                    this.canvas.needsRender = true;
                 }
                 break;
         }
@@ -273,20 +278,28 @@ export class HistoryManager {
                 break;
 
             case 'crop':
-                // Redo crop - apply cropped image
+                // Redo crop - apply crop state
                 const img = this.canvas.images.find(i => i.id === action.data.id);
                 if (img) {
-                    const newImg = new Image();
-                    newImg.onload = () => {
-                        img.img = newImg;
-                        img.src = action.data.newSrc;
-                        img.x = action.data.newX;
-                        img.y = action.data.newY;
-                        img.width = action.data.newWidth;
-                        img.height = action.data.newHeight;
-                        this.canvas.needsRender = true;
-                    };
-                    newImg.src = action.data.newSrc;
+                    img.cropData = action.data.newCropData;
+                    img.x = action.data.newX;
+                    img.y = action.data.newY;
+                    img.width = action.data.newWidth;
+                    img.height = action.data.newHeight;
+                    this.canvas.needsRender = true;
+                }
+                break;
+
+            case 'uncrop':
+                // Redo uncrop - remove crop
+                const uncropImg = this.canvas.images.find(i => i.id === action.data.id);
+                if (uncropImg) {
+                    uncropImg.cropData = null;
+                    uncropImg.x = action.data.newX;
+                    uncropImg.y = action.data.newY;
+                    uncropImg.width = action.data.newWidth;
+                    uncropImg.height = action.data.newHeight;
+                    this.canvas.needsRender = true;
                 }
                 break;
         }
