@@ -418,9 +418,6 @@ function setupContextMenu() {
         const action = e.target.dataset.action;
 
         if (action === 'recenter') {
-            canvas.fitToContent();
-            contextMenu.classList.remove('show');
-        } else if (action === 'reset') {
             canvas.resetView();
             contextMenu.classList.remove('show');
         } else if (action === 'edit-image' && clickedImageObj) {

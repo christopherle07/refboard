@@ -453,6 +453,7 @@
                     <div class="context-menu-item" id="context-delete-selected" style="display: none;">Delete Selected</div>
                     <div class="context-menu-item" id="context-deselect-all" style="display: none;">Deselect All</div>
                     <div class="context-menu-item" id="context-crop-image" style="display: none;">Crop Image</div>
+                    <div class="context-menu-item" id="context-uncrop-image" style="display: none;">Uncrop Image</div>
                     <div class="context-menu-item" id="context-edit-image" style="display: none;">Edit Image</div>
                     <div class="context-menu-item" id="context-extract-colors" style="display: none;">Extract Colors</div>
                     <div class="context-menu-separator" id="context-separator" style="display: none;"></div>
@@ -479,6 +480,11 @@
                     </button>
                 </div>
             </aside>
+
+            <div class="draw-opacity-slider-container" id="draw-opacity-slider-container">
+                <input type="range" id="draw-opacity-slider" class="draw-opacity-slider-vertical" min="0" max="100" value="100">
+                <div class="draw-opacity-label">%</div>
+            </div>
         </div>
 
         <!-- Layer context menu -->

@@ -49,7 +49,7 @@
 .shortcuts-modal {
     min-width: 600px;
     max-width: 700px;
-    max-height: 80vh;
+    max-height: none;
     display: flex;
     flex-direction: column;
 }
@@ -603,7 +603,7 @@
 
 /* Keyboard Shortcuts Modal */
 .shortcuts-modal-body {
-    overflow-y: auto;
+    overflow-y: hidden;
     padding: 20px 24px;
 }
 

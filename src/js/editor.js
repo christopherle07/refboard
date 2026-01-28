@@ -948,6 +948,18 @@ function setupDrawingToolbar() {
         }
     });
 
+    // Opacity slider handler
+    const opacitySlider = getElement('draw-opacity-slider');
+    const opacityLabel = document.querySelector('.draw-opacity-label');
+
+    opacitySlider?.addEventListener('input', (e) => {
+        const opacity = parseInt(e.target.value) / 100;
+        canvas.drawingOpacity = opacity;
+        if (opacityLabel) {
+            opacityLabel.textContent = e.target.value + '%';
+        }
+    });
+
     // Eraser mode toggle
     eraserModeToggle?.querySelectorAll('.eraser-mode-btn').forEach(btn => {
         btn.addEventListener('click', () => {
@@ -969,17 +981,20 @@ function setupDrawingToolbar() {
 
     // Drawing mode button (in right tools sidebar)
     const drawingModeBtn = getElement('drawing-mode-btn');
+    const opacitySliderContainer = getElement('draw-opacity-slider-container');
 
     if (drawingModeBtn) {
         function showDrawingControls() {
             if (drawingToolbar) drawingToolbar.classList.add('visible');
             if (sizeSliderContainer) sizeSliderContainer.classList.add('visible');
+            if (opacitySliderContainer) opacitySliderContainer.classList.add('visible');
             drawingModeBtn.classList.add('active');
         }
 
         function hideDrawingControls() {
             if (drawingToolbar) drawingToolbar.classList.remove('visible');
             if (sizeSliderContainer) sizeSliderContainer.classList.remove('visible');
+            if (opacitySliderContainer) opacitySliderContainer.classList.remove('visible');
             drawingModeBtn.classList.remove('active');
             if (toolDropdown) toolDropdown.classList.remove('show');
         }
@@ -3051,7 +3066,7 @@ function setupContextMenu() {
     });
 
     getElement('context-recenter').addEventListener('click', () => {
-        canvas.fitToContent();
+        canvas.resetView();
         contextMenu.classList.remove('show');
     });
 

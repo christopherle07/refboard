@@ -56,6 +56,7 @@ export class Canvas {
         this.drawingMode = null; // null, 'pen', 'highlighter', 'eraser'
         this.eraserMode = 'strokes'; // 'strokes' or 'pixels'
         this.drawingColor = '#000000';
+        this.drawingOpacity = 1; // 0-1, affects pen/highlighter/eraser
         this.penSize = 2;
         this.highlighterSize = 20;
         this.eraserSize = 20;
@@ -3000,17 +3001,20 @@ export class Canvas {
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
 
+        const strokeOpacity = stroke.opacity !== undefined ? stroke.opacity : 1;
+
         if (stroke.tool === 'pen') {
-            ctx.globalAlpha = 1;
+            ctx.globalAlpha = strokeOpacity;
             ctx.strokeStyle = stroke.color;
             ctx.lineWidth = stroke.size;
         } else if (stroke.tool === 'highlighter') {
-            ctx.globalAlpha = 0.3;
+            ctx.globalAlpha = 0.3 * strokeOpacity;
             ctx.strokeStyle = stroke.color;
             ctx.lineWidth = stroke.size;
         } else if (stroke.tool === 'eraser' && stroke.mode === 'pixels') {
             // Pixel-based eraser uses destination-out
             ctx.globalCompositeOperation = 'destination-out';
+            ctx.globalAlpha = strokeOpacity;
             ctx.strokeStyle = 'rgba(0,0,0,1)';
             ctx.lineWidth = stroke.size;
         }
@@ -3042,6 +3046,7 @@ export class Canvas {
             tool: this.drawingMode,
             mode: this.drawingMode === 'eraser' ? this.eraserMode : undefined,
             color: this.drawingColor,
+            opacity: this.drawingOpacity,
             size: this.drawingMode === 'pen' ? this.penSize :
                   this.drawingMode === 'highlighter' ? this.highlighterSize :
                   this.eraserSize,
