@@ -980,8 +980,15 @@ function setupDrawingToolbar() {
     });
 
     // Drawing mode button (in right tools sidebar)
-    const drawingModeBtn = getElement('drawing-mode-btn');
+    let drawingModeBtn = getElement('drawing-mode-btn');
     const opacitySliderContainer = getElement('draw-opacity-slider-container');
+
+    // Clone to remove old event listeners
+    if (drawingModeBtn) {
+        const newDrawingModeBtn = drawingModeBtn.cloneNode(true);
+        drawingModeBtn.parentNode.replaceChild(newDrawingModeBtn, drawingModeBtn);
+        drawingModeBtn = newDrawingModeBtn;
+    }
 
     if (drawingModeBtn) {
         function showDrawingControls() {
@@ -3146,6 +3153,11 @@ function setupBoardDropdown() {
             if (newName && newName !== currentName) {
                 await boardManager.updateBoard(currentBoardId, { name: newName });
                 getElement('board-name').textContent = newName;
+                // Update home page board cards
+                if (window.renderBoards) {
+                    await boardManager.loadBoards();
+                    window.renderBoards();
+                }
                 showToast('Board renamed successfully', 'success');
             }
         });

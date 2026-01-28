@@ -221,6 +221,9 @@ function setupEventListeners() {
 
 function renderBoards() {
     let boards = [...boardManager.getAllBoards()];
+
+    // Make renderBoards globally accessible for editor.js
+    window.renderBoards = renderBoards;
     console.log('[renderBoards] Total boards:', boards.length);
 
     // Filter by search query
