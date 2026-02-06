@@ -831,8 +831,11 @@ function setupEventListeners(container) {
 
     // Create new keyboard handler
     keyboardHandler = (e) => {
-        // Don't intercept keyboard events when typing in inputs or textareas
-        const isTyping = e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA';
+        // Don't intercept keyboard events when typing in inputs, textareas, or contenteditable
+        const isTyping = e.target.tagName === 'INPUT' ||
+                         e.target.tagName === 'TEXTAREA' ||
+                         e.target.isContentEditable ||
+                         e.target.closest('.floating-toolbar') !== null;
 
         if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
             e.preventDefault();
@@ -4880,16 +4883,18 @@ function setupTextFloatingToolbar(obj) {
     const alignCenter = getElement('floating-text-align-center');
     const alignRight = getElement('floating-text-align-right');
 
-    // Prevent toolbar from stealing focus from the text editor
+    // Prevent toolbar buttons from stealing focus/selection from the editor
+    // This is crucial for applying formatting to selected text
     const toolbar = getElement('floating-text-toolbar');
-    if (toolbar && !toolbar._mousedownHandlerAdded) {
+    if (toolbar && !toolbar._selectionPreserveSetup) {
         toolbar.addEventListener('mousedown', (e) => {
-            // Prevent focus loss, but allow inputs to receive focus for typing
-            if (e.target.tagName !== 'INPUT') {
+            // For buttons, prevent default to keep selection in editor
+            // For inputs (like font size), allow default so user can type
+            if (e.target.tagName === 'BUTTON' || e.target.closest('button')) {
                 e.preventDefault();
             }
         });
-        toolbar._mousedownHandlerAdded = true;
+        toolbar._selectionPreserveSetup = true;
     }
 
     // Get default style from object or create default
@@ -4912,6 +4917,43 @@ function setupTextFloatingToolbar(obj) {
     fontSize.value = defaultStyle.fontSize || 32;
     colorInput.value = defaultStyle.color || '#000000';
 
+    // Listen for selection style changes to update toolbar
+    const handleSelectionStyleChange = (e) => {
+        const style = e.detail;
+        if (style) {
+            // Update font size input
+            if (style.fontSize) {
+                fontSize.value = style.fontSize;
+            }
+            // Update color input
+            if (style.color) {
+                colorInput.value = style.color;
+            }
+            // Update bold button state
+            boldBtn.classList.toggle('active', style.fontWeight === 'bold');
+            // Update italic button state
+            if (italicBtn) {
+                italicBtn.classList.toggle('active', style.fontStyle === 'italic');
+            }
+            // Update underline button state
+            if (underlineBtn) {
+                underlineBtn.classList.toggle('active', style.textDecoration === 'underline');
+            }
+            // Update font dropdown
+            const instance = getEditorInstance(activeContainer);
+            if (instance.floatingFontDropdown && style.fontFamily) {
+                instance.floatingFontDropdown.setValue(style.fontFamily, false);
+            }
+        }
+    };
+
+    // Remove previous listener if exists, add new one
+    if (canvas.canvas._selectionStyleHandler) {
+        canvas.canvas.removeEventListener('textSelectionStyleChanged', canvas.canvas._selectionStyleHandler);
+    }
+    canvas.canvas._selectionStyleHandler = handleSelectionStyleChange;
+    canvas.canvas.addEventListener('textSelectionStyleChanged', handleSelectionStyleChange);
+
     // Update button states
     boldBtn.classList.toggle('active', defaultStyle.fontWeight === 'bold');
     if (italicBtn) italicBtn.classList.toggle('active', defaultStyle.fontStyle === 'italic');
@@ -4927,14 +4969,28 @@ function setupTextFloatingToolbar(obj) {
         const editor = document.querySelector('.rich-text-editor');
         if (!editor) {
             // Not editing - update default style AND apply to all existing text content
+            // For toggle properties (bold, italic, underline), toggle instead of always applying
+            let newValue = value;
+            if (property === 'fontWeight') {
+                // Toggle: if currently bold, set to normal; otherwise set to bold
+                const currentValue = obj.defaultStyle?.fontWeight || 'normal';
+                newValue = currentValue === 'bold' ? 'normal' : 'bold';
+            } else if (property === 'fontStyle') {
+                const currentValue = obj.defaultStyle?.fontStyle || 'normal';
+                newValue = currentValue === 'italic' ? 'normal' : 'italic';
+            } else if (property === 'textDecoration') {
+                const currentValue = obj.defaultStyle?.textDecoration || 'none';
+                newValue = currentValue === 'underline' ? 'none' : 'underline';
+            }
+
             if (obj.defaultStyle) {
-                obj.defaultStyle[property] = value;
+                obj.defaultStyle[property] = newValue;
             }
             // Also update all content spans with the new value
             if (obj.content && Array.isArray(obj.content)) {
                 obj.content.forEach(span => {
                     if (span.style) {
-                        span.style[property] = value;
+                        span.style[property] = newValue;
                     }
                 });
                 canvas.needsRender = true;
@@ -4943,8 +4999,12 @@ function setupTextFloatingToolbar(obj) {
             return;
         }
 
-        // Refocus editor
-        editor.focus();
+        // Try to restore saved selection first (it may have been lost when clicking toolbar)
+        if (canvas.objectsManager.restoreSelection) {
+            canvas.objectsManager.restoreSelection();
+        } else {
+            editor.focus();
+        }
 
         const selection = window.getSelection();
         const textObj = canvas.objectsManager.editingTextObject;
@@ -4953,7 +5013,7 @@ function setupTextFloatingToolbar(obj) {
         const hasSelection = selection.rangeCount > 0 && !selection.isCollapsed;
 
         if (hasSelection) {
-            // Apply to selection using execCommand or wrapSelectionWithStyle
+            // Apply to selection using execCommand or custom wrapping
             if (property === 'fontWeight') {
                 document.execCommand('bold', false, null);
             } else if (property === 'fontStyle') {
@@ -4966,7 +5026,9 @@ function setupTextFloatingToolbar(obj) {
                 document.execCommand('fontName', false, value);
             } else if (property === 'fontSize') {
                 // execCommand fontSize is limited (1-7), so we wrap selection with span
-                wrapSelectionWithStyle(selection, { fontSize: value + 'px' });
+                // Must scale by zoom since editor content is displayed at zoom scale
+                const scaledSize = value * canvas.zoom;
+                wrapSelectionWithStyle(selection, { fontSize: scaledSize + 'px' });
             }
 
             // Sync back to content model
@@ -4974,22 +5036,43 @@ function setupTextFloatingToolbar(obj) {
                 textObj.content = canvas.objectsManager.htmlToContent(editor, textObj.defaultStyle || canvas.objectsManager.getDefaultTextStyle());
                 canvas.needsRender = true;
             }
+
+            // Save the selection again after formatting
+            if (canvas.objectsManager.savedSelection !== undefined) {
+                const sel = window.getSelection();
+                if (sel.rangeCount > 0) {
+                    canvas.objectsManager.savedSelection = sel.getRangeAt(0).cloneRange();
+                }
+            }
         } else {
             // No selection - apply to all content
             if (textObj && textObj.content && Array.isArray(textObj.content)) {
+                // For toggle properties, toggle instead of always applying
+                let newValue = value;
+                if (property === 'fontWeight') {
+                    const currentValue = textObj.defaultStyle?.fontWeight || 'normal';
+                    newValue = currentValue === 'bold' ? 'normal' : 'bold';
+                } else if (property === 'fontStyle') {
+                    const currentValue = textObj.defaultStyle?.fontStyle || 'normal';
+                    newValue = currentValue === 'italic' ? 'normal' : 'italic';
+                } else if (property === 'textDecoration') {
+                    const currentValue = textObj.defaultStyle?.textDecoration || 'none';
+                    newValue = currentValue === 'underline' ? 'none' : 'underline';
+                }
+
                 // Update default style
                 if (textObj.defaultStyle) {
-                    textObj.defaultStyle[property] = value;
+                    textObj.defaultStyle[property] = newValue;
                 }
                 // Update all content spans
                 textObj.content.forEach(span => {
                     if (span.style) {
-                        span.style[property] = value;
+                        span.style[property] = newValue;
                     }
                 });
                 // Re-render the editor HTML with updated content
                 const zoom = canvas.zoom;
-                editor.innerHTML = canvas.objectsManager.contentToHTMLWithZoom(textObj.content, zoom);
+                editor.innerHTML = canvas.objectsManager.contentToHTMLWithZoom(textObj.content, zoom, textObj.defaultStyle);
                 canvas.needsRender = true;
             }
         }
@@ -5023,7 +5106,23 @@ function setupTextFloatingToolbar(obj) {
     }
 
     // Event listeners for formatting buttons
-    fontSize.oninput = () => applyFormatToSelection('fontSize', parseInt(fontSize.value));
+    // Use onchange instead of oninput so user can finish typing the full number
+    fontSize.onchange = () => {
+        const size = parseInt(fontSize.value);
+        if (!isNaN(size) && size > 0) {
+            applyFormatToSelection('fontSize', size);
+        }
+    };
+    // Also apply on Enter key
+    fontSize.onkeydown = (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            const size = parseInt(fontSize.value);
+            if (!isNaN(size) && size > 0) {
+                applyFormatToSelection('fontSize', size);
+            }
+        }
+    };
 
     boldBtn.onclick = () => {
         applyFormatToSelection('fontWeight', 'bold');

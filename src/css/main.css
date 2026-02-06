@@ -927,6 +927,7 @@ html[data-theme="purplexing"] .floating-canvas-icon {
 
 .rich-text-editor span {
     display: inline;
+    vertical-align: baseline;
 }
 
 /* Floating Toolbars */

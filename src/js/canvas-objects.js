@@ -424,6 +424,7 @@ export class CanvasObjectsManager {
             const zoom = this.canvas.zoom;
             const scaledWidth = textObj.width * zoom;
             const scaledHeight = textObj.height * zoom;
+            const defStyle = textObj.defaultStyle || this.getDefaultTextStyle();
 
             editor.style.position = 'absolute';
             editor.style.left = `${rect.left + screenPos.x}px`;
@@ -433,8 +434,15 @@ export class CanvasObjectsManager {
             editor.style.padding = `${10 * zoom}px`;
             editor.style.textAlign = textObj.textAlign || 'left';
 
+            // Set default font styles on the editor itself (fallback for empty content)
+            editor.style.fontSize = `${(defStyle.fontSize || 32) * zoom}px`;
+            editor.style.fontFamily = defStyle.fontFamily || 'Arial';
+            editor.style.fontWeight = defStyle.fontWeight || 'normal';
+            editor.style.fontStyle = defStyle.fontStyle || 'normal';
+            editor.style.color = defStyle.color || '#000000';
+
             // Update font sizes to match new zoom
-            editor.innerHTML = this.contentToHTMLWithZoom(textObj.content, zoom);
+            editor.innerHTML = this.contentToHTMLWithZoom(textObj.content, zoom, textObj.defaultStyle);
         };
 
         // Initial positioning
@@ -443,6 +451,67 @@ export class CanvasObjectsManager {
         document.body.appendChild(editor);
         this.activeEditor = editor;
 
+        // Selection saving for toolbar interactions
+        this.savedSelection = null;
+
+        // Save selection before it's lost
+        const saveSelection = () => {
+            const sel = window.getSelection();
+            if (sel.rangeCount > 0) {
+                this.savedSelection = sel.getRangeAt(0).cloneRange();
+            }
+        };
+
+        // Restore saved selection
+        this.restoreSelection = () => {
+            if (this.savedSelection && this.activeEditor === editor) {
+                editor.focus();
+                const sel = window.getSelection();
+                sel.removeAllRanges();
+                sel.addRange(this.savedSelection);
+                return true;
+            }
+            return false;
+        };
+
+        // Save selection on any selection change within editor
+        editor.addEventListener('mouseup', saveSelection);
+        editor.addEventListener('keyup', saveSelection);
+
+        // Function to get the style at the current cursor/selection
+        const getSelectionStyle = () => {
+            const sel = window.getSelection();
+            if (!sel.rangeCount) return null;
+
+            // Get the element at the cursor position
+            let element = sel.anchorNode;
+            if (element.nodeType === Node.TEXT_NODE) {
+                element = element.parentElement;
+            }
+
+            if (!element || !editor.contains(element)) return null;
+
+            // Extract style from the element
+            return this.extractStyleFromElement(element, textObj.defaultStyle || this.getDefaultTextStyle());
+        };
+
+        // Dispatch event when selection changes so toolbar can update
+        document.addEventListener('selectionchange', () => {
+            if (document.activeElement === editor) {
+                saveSelection();
+                // Dispatch event with current selection's style
+                const style = getSelectionStyle();
+                if (style) {
+                    this.canvas.canvas.dispatchEvent(new CustomEvent('textSelectionStyleChanged', {
+                        detail: style
+                    }));
+                }
+            }
+        });
+
+        // Save selection before focus leaves (important for toolbar interactions)
+        editor.addEventListener('focusout', saveSelection);
+
         // Focus and select all
         editor.focus();
         const range = document.createRange();
@@ -450,6 +519,7 @@ export class CanvasObjectsManager {
         const selection = window.getSelection();
         selection.removeAllRanges();
         selection.addRange(range);
+        saveSelection();
 
         // Sync changes back to content model
         const syncContent = () => {
@@ -509,7 +579,8 @@ export class CanvasObjectsManager {
                 const toolbar = document.getElementById('floating-text-toolbar');
                 if (toolbar && (toolbar.contains(active) || toolbar.contains(e.relatedTarget))) {
                     // Focus moved to toolbar, don't finish editing
-                    editor.focus();
+                    // Don't refocus immediately - let toolbar interaction happen
+                    // The applyFormatToSelection will restore selection when needed
                     return;
                 }
                 finishEditing();
@@ -528,8 +599,24 @@ export class CanvasObjectsManager {
     }
 
     // Convert content to HTML with zoom scaling applied to font sizes
-    contentToHTMLWithZoom(content, zoom) {
-        if (!Array.isArray(content)) return '';
+    contentToHTMLWithZoom(content, zoom, defaultStyle = null) {
+        const defStyle = defaultStyle || this.getDefaultTextStyle();
+
+        // If content is empty or not an array, return empty span with default styles
+        // This ensures new typed text inherits proper styling
+        if (!Array.isArray(content) || content.length === 0) {
+            const styleStr = [
+                `font-size: ${(defStyle.fontSize || 32) * zoom}px`,
+                `font-family: ${defStyle.fontFamily || 'Arial'}`,
+                `font-weight: ${defStyle.fontWeight || 'normal'}`,
+                `font-style: ${defStyle.fontStyle || 'normal'}`,
+                `color: ${defStyle.color || '#000000'}`,
+                `text-decoration: ${defStyle.textDecoration || 'none'}`
+            ].join('; ');
+            // Return empty span so typed text inherits its style
+            return `<span style="${styleStr}"></span>`;
+        }
+
         return content.map(span => {
             const style = span.style || {};
             const styleStr = [
@@ -1205,8 +1292,8 @@ export class CanvasObjectsManager {
         ctx.rect(textObj.x, textObj.y, textObj.width, textObj.height);
         ctx.clip();
 
-        // Draw each line
-        ctx.textBaseline = 'top';
+        // Draw each line - use alphabetic baseline for proper alignment of mixed sizes
+        ctx.textBaseline = 'alphabetic';
         let y = textObj.y + padding;
 
         for (const line of lines) {
@@ -1214,6 +1301,16 @@ export class CanvasObjectsManager {
                 y += lineHeight;
                 continue;
             }
+
+            // Find the maximum font size in this line for baseline calculation
+            let maxFontSize = 0;
+            for (const seg of line.segments) {
+                const fontSize = seg.style?.fontSize || 32;
+                if (fontSize > maxFontSize) maxFontSize = fontSize;
+            }
+
+            // Calculate baseline position (approximately 80% down from top of tallest text)
+            const baselineY = y + maxFontSize * 0.8;
 
             // Calculate line width for alignment
             let lineWidth = 0;
@@ -1230,40 +1327,42 @@ export class CanvasObjectsManager {
                 x = textObj.x + textObj.width - padding - lineWidth;
             }
 
-            // Render each segment in the line
+            // Render each segment in the line at the common baseline
             for (const seg of line.segments) {
                 const style = seg.style || {};
+                const fontSize = style.fontSize || 32;
                 ctx.font = this.styleToFont(style);
                 ctx.fillStyle = style.color || '#000000';
 
-                ctx.fillText(seg.text, x, y);
+                ctx.fillText(seg.text, x, baselineY);
 
                 const segWidth = ctx.measureText(seg.text).width;
 
-                // Handle underline
+                // Handle underline (positioned relative to baseline)
                 if (style.textDecoration === 'underline') {
                     ctx.strokeStyle = style.color || '#000000';
                     ctx.lineWidth = 1;
                     ctx.beginPath();
-                    ctx.moveTo(x, y + (style.fontSize || 32) * 0.9);
-                    ctx.lineTo(x + segWidth, y + (style.fontSize || 32) * 0.9);
+                    ctx.moveTo(x, baselineY + fontSize * 0.1);
+                    ctx.lineTo(x + segWidth, baselineY + fontSize * 0.1);
                     ctx.stroke();
                 }
 
-                // Handle strikethrough
+                // Handle strikethrough (positioned relative to baseline)
                 if (style.textDecoration === 'line-through') {
                     ctx.strokeStyle = style.color || '#000000';
                     ctx.lineWidth = 1;
                     ctx.beginPath();
-                    ctx.moveTo(x, y + (style.fontSize || 32) * 0.5);
-                    ctx.lineTo(x + segWidth, y + (style.fontSize || 32) * 0.5);
+                    ctx.moveTo(x, baselineY - fontSize * 0.3);
+                    ctx.lineTo(x + segWidth, baselineY - fontSize * 0.3);
                     ctx.stroke();
                 }
 
                 x += segWidth;
             }
 
-            y += lineHeight;
+            // Move to next line based on max font size
+            y += maxFontSize * 1.2;
         }
 
         ctx.restore();

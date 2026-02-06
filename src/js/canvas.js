@@ -465,6 +465,22 @@ export class Canvas {
             }
         }
 
+        // Check for object resize handles (single selection only)
+        if (this.objectsManager.selectedObject && this.objectsManager.selectedObjects.length === 1) {
+            const handle = this.objectsManager.getResizeHandleAtPoint(this.objectsManager.selectedObject, x, y);
+            if (handle) {
+                this.objectsManager.isResizing = true;
+                this.objectsManager.resizeHandle = handle;
+                this.objectsManager.resizeStart = {
+                    x: this.objectsManager.selectedObject.x,
+                    y: this.objectsManager.selectedObject.y,
+                    width: this.objectsManager.selectedObject.width,
+                    height: this.objectsManager.selectedObject.height
+                };
+                return;
+            }
+        }
+
         // Check what's at this point - objects or images
         const clickedObject = this.objectsManager.getObjectAtPoint(x, y);
         const clickedImage = this.getImageAtPoint(x, y);
