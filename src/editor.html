@@ -24,6 +24,9 @@
 <body>
     <div class="custom-titlebar">
         <div class="titlebar-left" data-tauri-drag-region>
+            <button class="titlebar-sidebar-toggle" id="sidebar-toggle-btn" title="Toggle Sidebar">
+                <img src="/assets/sidebar-col.svg" alt="Toggle Sidebar" class="sidebar-toggle-icon">
+            </button>
             <span class="titlebar-title" id="titlebar-board-name">EyeDea - Board Editor</span>
         </div>
         <div class="titlebar-right">
@@ -34,10 +37,10 @@
     </div>
 
     <div class="editor-container">
-        <aside class="sidebar">
+        <aside class="sidebar" id="sidebar">
             <div class="sidebar-header">
                 <button class="back-arrow-btn" id="back-home-btn" title="Back to Home">
-                    <img src="assets/backarrow.svg" alt="Back" class="back-arrow-icon theme-icon">
+                    <img src="/assets/backarrow.svg" alt="Back" class="back-arrow-icon theme-icon">
                 </button>
                 <div class="board-name-wrapper">
                     <h2 class="board-name" id="board-name">Untitled Board</h2>
@@ -62,7 +65,7 @@
                         <h3>Layers</h3>
                         <div class="header-actions">
                             <button class="collapse-btn" id="collapse-layers-btn">
-                                <img src="assets/collapse.svg" alt="Collapse" class="collapse-icon" width="14" height="14"/>
+                                <img src="/assets/collapse.svg" alt="Collapse" class="collapse-icon" width="14" height="14"/>
                             </button>
                         </div>
                     </div>
@@ -226,6 +229,12 @@
                     <input type="number" id="floating-font-size" min="8" max="200" value="32" class="floating-input" title="Font Size">
                     <button class="floating-btn" id="floating-text-bold" title="Bold">
                         <strong>B</strong>
+                    </button>
+                    <button class="floating-btn" id="floating-text-italic" title="Italic">
+                        <em>I</em>
+                    </button>
+                    <button class="floating-btn" id="floating-text-underline" title="Underline">
+                        <u>U</u>
                     </button>
                     <input type="color" id="floating-text-color" value="#000000" class="floating-color" title="Text Color">
                     <div class="floating-separator"></div>
@@ -410,17 +419,17 @@
         <!-- Right Tools Sidebar -->
         <aside class="tools-sidebar" id="tools-sidebar">
             <div class="tools-sidebar-content">
-                <button class="tool-btn" id="drawing-mode-btn" title="Drawing Mode">
-                    <img src="assets/PenIcon.svg" alt="Drawing Mode" class="tool-icon theme-icon">
+                <button class="tool-btn" id="drawing-mode-btn" data-tooltip="Draw on canvas">
+                    <img src="/assets/PenIcon.svg" alt="Drawing Mode" class="tool-icon theme-icon">
                 </button>
-                <button class="tool-btn" id="shape-tool-btn" title="Shape Tool">
-                    <img src="assets/ShapeIcon.svg" alt="Shape Tool" class="tool-icon theme-icon">
+                <button class="tool-btn" id="shape-tool-btn" data-tooltip="Add shapes">
+                    <img src="/assets/ShapeIcon.svg" alt="Shape Tool" class="tool-icon theme-icon">
                 </button>
-                <button class="tool-btn" id="text-tool-btn" title="Text Tool">
-                    <img src="assets/TextIcon.svg" alt="Text Tool" class="tool-icon theme-icon">
+                <button class="tool-btn" id="text-tool-btn" data-tooltip="Add text">
+                    <img src="/assets/TextIcon.svg" alt="Text Tool" class="tool-icon theme-icon">
                 </button>
-                <button class="tool-btn" id="color-extractor-btn" title="Color Extractor">
-                    <img src="assets/ColorPalette.svg" alt="Color Extractor" class="tool-icon theme-icon">
+                <button class="tool-btn" id="color-extractor-btn" data-tooltip="Extract colors">
+                    <img src="/assets/ColorPalette.svg" alt="Color Extractor" class="tool-icon theme-icon">
                 </button>
             </div>
         </aside>

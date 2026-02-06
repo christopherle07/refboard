@@ -188,6 +188,57 @@ class BoardManager {
     getAllBoards() {
         return this.boards;
     }
+
+    // --- File-based image storage ---
+
+    async saveImageFile(dataUrl, name) {
+        if (window.__TAURI__) {
+            try {
+                return await this.invoke('save_image_file', { data: dataUrl, name });
+            } catch (e) {
+                console.error('Failed to save image file:', e);
+                return null;
+            }
+        }
+        // No file storage in browser — return null so caller falls back to dataURL
+        return null;
+    }
+
+    async getImagesDir() {
+        if (this._imagesDirCache) return this._imagesDirCache;
+        if (window.__TAURI__) {
+            try {
+                this._imagesDirCache = await this.invoke('get_images_dir');
+                return this._imagesDirCache;
+            } catch (e) {
+                console.error('Failed to get images dir:', e);
+                return null;
+            }
+        }
+        return null;
+    }
+
+    async resolveImageSrc(src) {
+        // Old format (base64 dataURL) — use directly
+        if (!src || src.startsWith('data:')) return src;
+        // Already resolved blob URL
+        if (src.startsWith('blob:')) return src;
+        // File reference — fetch via asset protocol and create same-origin blob URL
+        // (asset:// URLs are cross-origin which taints canvas, breaking pixel operations)
+        if (window.__TAURI__) {
+            try {
+                const fullPath = await this.invoke('get_image_file_path', { filename: src });
+                const assetUrl = window.__TAURI__.core.convertFileSrc(fullPath);
+                const response = await fetch(assetUrl);
+                const blob = await response.blob();
+                return URL.createObjectURL(blob);
+            } catch (e) {
+                console.error('Failed to resolve image src:', e);
+                return src;
+            }
+        }
+        return src;
+    }
 }
 
 export const boardManager = new BoardManager();

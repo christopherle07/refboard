@@ -169,7 +169,7 @@ export function showSettingsModal() {
                                     </svg>
                                 </a>
                                 <a href="https://x.com/chringusdingus" target="_blank" class="about-icon-link twitter-link" title="Follow on X">
-                                    <img src="assets/x-social-media-logo-icon.svg" alt="X/Twitter" width="32" height="32">
+                                    <img src="/assets/x-social-media-logo-icon.svg" alt="X/Twitter" width="32" height="32">
                                 </a>
                             </div>
                         </div>

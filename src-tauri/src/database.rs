@@ -1,3 +1,4 @@
+use base64::Engine;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
@@ -113,6 +114,11 @@ fn get_all_assets_path(app: &AppHandle) -> PathBuf {
     data_dir.join("all_assets.json")
 }
 
+pub fn get_images_dir(app: &AppHandle) -> PathBuf {
+    let data_dir = app.path().app_data_dir().expect("Failed to get app data dir");
+    data_dir.join("images")
+}
+
 fn sanitize_filename(name: &str) -> String {
     name.chars()
         .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '-' })
@@ -129,14 +135,17 @@ fn get_board_path(app: &AppHandle, name: &str, id: u64) -> PathBuf {
 pub fn init_storage(app: &AppHandle) -> Result<(), String> {
     let boards_dir = get_boards_dir(app);
     fs::create_dir_all(&boards_dir).map_err(|e| e.to_string())?;
-    
+
+    let images_dir = get_images_dir(app);
+    fs::create_dir_all(&images_dir).map_err(|e| e.to_string())?;
+
     let all_assets_path = get_all_assets_path(app);
     if !all_assets_path.exists() {
         let empty: Vec<Asset> = Vec::new();
         let content = serde_json::to_string_pretty(&empty).map_err(|e| e.to_string())?;
         fs::write(&all_assets_path, content).map_err(|e| e.to_string())?;
     }
-    
+
     Ok(())
 }
 
@@ -332,4 +341,61 @@ pub fn now_millis() -> u64 {
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
         .as_millis() as u64
+}
+
+pub fn save_image_file(app: &AppHandle, data: String, name: String) -> Result<String, String> {
+    let images_dir = get_images_dir(app);
+
+    // Parse data URL: "data:image/png;base64,iVBOR..."
+    let (ext, base64_data) = if let Some(rest) = data.strip_prefix("data:") {
+        if let Some(comma_pos) = rest.find(',') {
+            let meta = &rest[..comma_pos];
+            let b64 = &rest[comma_pos + 1..];
+            let ext = if meta.contains("image/png") {
+                "png"
+            } else if meta.contains("image/jpeg") || meta.contains("image/jpg") {
+                "jpg"
+            } else if meta.contains("image/gif") {
+                "gif"
+            } else if meta.contains("image/webp") {
+                "webp"
+            } else if meta.contains("image/svg") {
+                "svg"
+            } else if meta.contains("image/bmp") {
+                "bmp"
+            } else {
+                "png"
+            };
+            (ext, b64.to_string())
+        } else {
+            return Err("Invalid data URL format".to_string());
+        }
+    } else {
+        return Err("Expected a data URL starting with 'data:'".to_string());
+    };
+
+    // Decode base64
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(&base64_data)
+        .map_err(|e| format!("Base64 decode error: {}", e))?;
+
+    // Generate filename: {timestamp}_{sanitized_name}.{ext}
+    let sanitized = sanitize_filename(&name);
+    // Remove existing extension from sanitized name if present
+    let stem = sanitized
+        .rsplit_once('.')
+        .map(|(s, _)| s)
+        .unwrap_or(&sanitized);
+    let filename = format!("{}_{}.{}", now_millis(), stem, ext);
+
+    let file_path = images_dir.join(&filename);
+    fs::write(&file_path, bytes).map_err(|e| format!("Failed to write image file: {}", e))?;
+
+    Ok(filename)
+}
+
+pub fn get_image_file_path(app: &AppHandle, filename: String) -> Result<String, String> {
+    let images_dir = get_images_dir(app);
+    let path = images_dir.join(&filename);
+    Ok(path.to_string_lossy().to_string())
 }

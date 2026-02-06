@@ -16,11 +16,53 @@
 
 .titlebar-left {
     display: flex;
-    align-items: stretch;
-    gap: 0;
+    align-items: center;
+    gap: 8px;
     flex-shrink: 0;
     height: 100%;
-    padding: 0;
+    padding: 0 8px;
+}
+
+/* Sidebar Toggle in Custom Titlebar */
+.custom-titlebar .titlebar-sidebar-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background-color 0.15s;
+}
+
+.custom-titlebar .titlebar-sidebar-toggle:hover {
+    background: var(--bg-hover);
+}
+
+.custom-titlebar .titlebar-sidebar-toggle.active {
+    background: var(--bg-tertiary);
+}
+
+.custom-titlebar .sidebar-toggle-icon {
+    width: 16px;
+    height: 16px;
+}
+
+/* Light theme: dark icon */
+html:not([data-theme="dark"]):not([data-theme="purplexing"]) .custom-titlebar .sidebar-toggle-icon {
+    filter: brightness(0) invert(0.3);
+}
+
+/* Dark theme: light icon */
+html[data-theme="dark"] .custom-titlebar .sidebar-toggle-icon {
+    filter: invert(1) brightness(0.9);
+}
+
+/* Purplexing theme: purple icon */
+html[data-theme="purplexing"] .custom-titlebar .sidebar-toggle-icon {
+    filter: brightness(0) saturate(100%) invert(71%) sepia(35%) saturate(738%) hue-rotate(207deg) brightness(93%) contrast(91%);
 }
 
 .home-btn {

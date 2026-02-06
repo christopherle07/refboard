@@ -10,7 +10,7 @@
 /* Unified Titlebar - combines window controls with navigation */
 .unified-titlebar {
     display: grid;
-    grid-template-columns: auto 1fr auto;
+    grid-template-columns: auto auto 1fr auto;
     align-items: center;
     height: 48px;
     padding: 0 16px;
@@ -23,6 +23,49 @@
     display: flex;
     align-items: center;
     gap: 0;
+}
+
+/* Sidebar Toggle Button */
+.titlebar-sidebar-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    margin-left: 8px;
+    transition: background-color 0.15s;
+}
+
+.titlebar-sidebar-toggle:hover {
+    background: var(--bg-hover);
+}
+
+.titlebar-sidebar-toggle.active {
+    background: var(--bg-tertiary);
+}
+
+.sidebar-toggle-icon {
+    width: 18px;
+    height: 18px;
+}
+
+/* Light theme: dark icon */
+html:not([data-theme="dark"]):not([data-theme="purplexing"]) .sidebar-toggle-icon {
+    filter: brightness(0) invert(0.3);
+}
+
+/* Dark theme: light icon */
+html[data-theme="dark"] .sidebar-toggle-icon {
+    filter: invert(1) brightness(0.9);
+}
+
+/* Purplexing theme: purple icon */
+html[data-theme="purplexing"] .sidebar-toggle-icon {
+    filter: brightness(0) saturate(100%) invert(71%) sepia(35%) saturate(738%) hue-rotate(207deg) brightness(93%) contrast(91%);
 }
 
 .titlebar-nav-container {
@@ -117,6 +160,128 @@ html[data-theme="dark"] #open-floating-btn img {
 /* Purplexing theme: purple icon (#9b7fd4) */
 html[data-theme="purplexing"] #open-floating-btn img {
     filter: brightness(0) saturate(100%) invert(65%) sepia(27%) saturate(1346%) hue-rotate(209deg) brightness(93%) contrast(90%) !important;
+}
+
+/* Floating Window Help Button */
+.floating-help-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    margin-left: 4px;
+    padding: 0;
+    border: 1px solid var(--border-color);
+    background: transparent;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    transition: all 0.15s;
+}
+
+.floating-help-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+/* Onboarding Overlay - covers the entire screen */
+.onboarding-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.6);
+    z-index: 9998;
+}
+
+/* Onboarding Spotlight - brings element above overlay */
+.onboarding-spotlight {
+    position: relative;
+    z-index: 9999 !important;
+}
+
+/* Raise parent containers when they contain a spotlight element */
+.tools-sidebar:has(.onboarding-spotlight),
+.tools-sidebar:has(.onboarding-dimmed),
+.unified-titlebar:has(.onboarding-spotlight),
+.unified-titlebar:has(.onboarding-dimmed) {
+    z-index: 9999 !important;
+}
+
+/* Dimmed state for previously shown elements */
+.onboarding-dimmed {
+    position: relative;
+    z-index: 9999 !important;
+    opacity: 0.5 !important;
+}
+
+/* Onboarding Tooltip */
+.onboarding-tooltip {
+    position: fixed;
+    background: var(--accent-primary);
+    color: white;
+    padding: 12px 16px;
+    border-radius: 8px;
+    font-size: 13px;
+    max-width: 240px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+    z-index: 10000;
+    animation: tooltipFadeIn 0.2s ease;
+}
+
+/* Tooltip positioned below (arrow on top) */
+.onboarding-tooltip.tooltip-below::before {
+    content: '';
+    position: absolute;
+    top: -8px;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 8px solid transparent;
+    border-bottom-color: var(--accent-primary);
+    border-top: none;
+}
+
+/* Tooltip positioned to the left (arrow on right) */
+.onboarding-tooltip.tooltip-left::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    right: -8px;
+    transform: translateY(-50%);
+    border: 8px solid transparent;
+    border-left-color: var(--accent-primary);
+    border-right: none;
+}
+
+.onboarding-tooltip strong {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 14px;
+}
+
+.onboarding-tooltip p {
+    margin: 0 0 8px 0;
+    opacity: 0.95;
+    line-height: 1.4;
+}
+
+.onboarding-tooltip .tooltip-hint {
+    display: block;
+    font-size: 11px;
+    opacity: 0.7;
+    font-style: italic;
+}
+
+@keyframes tooltipFadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
 }
 
 /* Titlebar Actions */

@@ -16,6 +16,7 @@ console.log('Applied theme on load:', theme);
 // Editor instance manager - stores separate state for each board container
 const editorInstances = new Map(); // Map<container, editorState>
 let activeContainer = null; // Currently active editor container
+let sidebarToggleListenerAttached = false; // Prevent duplicate listeners on titlebar button
 
 // Helper to get element from active container
 function getElement(id) {
@@ -190,7 +191,7 @@ export async function initEditor(boardId, container) {
     syncChannel = new BroadcastChannel('board_sync_' + currentBoardId);
 
     // Handle sync requests from floating window
-    syncChannel.onmessage = (event) => {
+    syncChannel.onmessage = async (event) => {
         if (event.data.type === 'sync_state_request') {
             // Send current layer order to requesting window
             const zIndexUpdates = [];
@@ -217,6 +218,21 @@ export async function initEditor(boardId, container) {
                 type: 'sync_state_response',
                 updates: zIndexUpdates
             });
+        } else if (event.data.type === 'image_added') {
+            // Image added in floating window — add it here too
+            const data = event.data.image;
+            const resolvedSrc = await boardManager.resolveImageSrc(data.src);
+            const img = new Image();
+            img.onload = () => {
+                const added = canvas.addImageSilent(img, data.x, data.y, data.name, data.width, data.height);
+                added.id = data.id;
+                if (data.src && !data.src.startsWith('data:')) added.filePath = data.src;
+                canvas.invalidateCullCache();
+                canvas.needsRender = true;
+                canvas.render();
+                canvas.canvas.dispatchEvent(new CustomEvent('canvasChanged'));
+            };
+            img.src = resolvedSrc;
         } else if (event.data.type === 'image_filters_changed') {
             // Apply filter changes from floating window
             const img = canvas.images.find(i => i.id === event.data.imageId);
@@ -231,6 +247,9 @@ export async function initEditor(boardId, container) {
                 img.grayscale = f.grayscale;
                 img.invert = f.invert;
                 img.mirror = f.mirror;
+                // Rebuild filter cache with new values
+                canvas.clearFilterCache(img);
+                canvas.applyFilters(img);
                 canvas.needsRender = true;
                 scheduleSave();
             }
@@ -284,6 +303,17 @@ export async function initEditor(boardId, container) {
     }
     boardNameEl.textContent = board.name;
     updateTitlebarTitle(`EyeDea - ${board.name}`);
+
+    // Apply sidebar collapsed state BEFORE creating canvas so it gets correct dimensions
+    const sidebar = container.querySelector('#sidebar');
+    const sidebarToggleBtn = document.getElementById('sidebar-toggle-btn');
+    const savedCollapsed = localStorage.getItem('sidebar_collapsed') === 'true';
+    if (sidebar && savedCollapsed) {
+        sidebar.classList.add('collapsed');
+        if (sidebarToggleBtn) {
+            sidebarToggleBtn.classList.add('active');
+        }
+    }
 
     const canvasElement = container.querySelector('#main-canvas');
     if (!canvasElement) {
@@ -409,37 +439,54 @@ export async function initEditor(boardId, container) {
     // Make save function globally accessible for app.js
     window.editorSaveNow = saveNow;
 
+    // Final resize trigger after all initialization is complete
+    // This ensures the canvas gets correct dimensions if sidebar was collapsed
+    setTimeout(() => {
+        if (canvas) {
+            canvas.resizeCanvas();
+            canvas.needsRender = true;
+        }
+    }, 50);
+
     console.log('[initEditor] Editor initialization complete!');
 }
 
-function loadLayers(layers, viewState = null) {
+async function loadLayers(layers, viewState = null) {
+    canvas.clear();
+
+    // Restore view state immediately after clear
+    if (viewState) {
+        if (viewState.pan) {
+            canvas.pan.x = viewState.pan.x;
+            canvas.pan.y = viewState.pan.y;
+        }
+        if (viewState.zoom) {
+            canvas.zoom = viewState.zoom;
+        }
+    }
+
+    if (!layers || !layers.length) {
+        // Force initial render
+        canvas.invalidateCullCache();
+        canvas.needsRender = true;
+        canvas.render();
+        return;
+    }
+
+    // Resolve all image sources (file refs → asset URLs) up front
+    const resolvedLayers = await Promise.all(layers.map(async (layer) => {
+        const rawSrc = layer.cropData && layer.originalSrc ? layer.originalSrc : layer.src;
+        const resolvedSrc = await boardManager.resolveImageSrc(rawSrc);
+        // Track whether this layer uses file-based storage
+        const filePath = (layer.src && !layer.src.startsWith('data:')) ? layer.src : null;
+        return { layer, resolvedSrc, filePath };
+    }));
+
     return new Promise(resolve => {
-        canvas.clear();
-
-        // Restore view state immediately after clear
-        if (viewState) {
-            if (viewState.pan) {
-                canvas.pan.x = viewState.pan.x;
-                canvas.pan.y = viewState.pan.y;
-            }
-            if (viewState.zoom) {
-                canvas.zoom = viewState.zoom;
-            }
-        }
-
-        if (!layers || !layers.length) {
-            // Force initial render
-            canvas.invalidateCullCache();
-            canvas.needsRender = true;
-            canvas.render();
-            resolve();
-            return;
-        }
-
         let loaded = 0;
-        const total = layers.length;
+        const total = resolvedLayers.length;
 
-        layers.forEach(layer => {
+        resolvedLayers.forEach(({ layer, resolvedSrc, filePath }) => {
             const img = new Image();
             img.onload = () => {
                 const visible = layer.visible !== false;
@@ -447,6 +494,7 @@ function loadLayers(layers, viewState = null) {
                 added.id = layer.id;
                 added.zIndex = layer.zIndex || 0;
                 added.rotation = layer.rotation || 0;
+                if (filePath) added.filePath = filePath;
                 // Restore filter properties (only if they exist and are not null)
                 if (layer.brightness != null) added.brightness = layer.brightness;
                 if (layer.contrast != null) added.contrast = layer.contrast;
@@ -465,6 +513,11 @@ function loadLayers(layers, viewState = null) {
                     added.originalWidth = layer.originalWidth || img.naturalWidth;
                     added.originalHeight = layer.originalHeight || img.naturalHeight;
                     added.originalImg = img;
+                }
+
+                // Build filter cache at load time if image has non-default filter values
+                if (canvas.buildFilterString(added)) {
+                    canvas.applyFilters(added);
                 }
 
                 loaded++;
@@ -487,8 +540,7 @@ function loadLayers(layers, viewState = null) {
                     resolve();
                 }
             };
-            // Load from original source if crop data exists, otherwise use saved src
-            img.src = layer.cropData && layer.originalSrc ? layer.originalSrc : layer.src;
+            img.src = resolvedSrc;
         });
     });
 }
@@ -497,6 +549,40 @@ function loadLayers(layers, viewState = null) {
 function setupEventListeners(container) {
     // Helper function to get element scoped to this container
     const $ = (id) => container.querySelector('#' + id);
+
+    // Sidebar collapse toggle - use titlebar button
+    // Note: Collapsed state is applied in initEditor BEFORE canvas creation
+    // Only attach listener once since the button is in the titlebar (persists across boards)
+    const sidebarToggleBtn = document.getElementById('sidebar-toggle-btn');
+    if (sidebarToggleBtn && !sidebarToggleListenerAttached) {
+        console.log('[setupEventListeners] Setting up sidebar toggle (one-time)...');
+        sidebarToggleListenerAttached = true;
+
+        sidebarToggleBtn.addEventListener('click', () => {
+            // Find the current sidebar dynamically (it's inside activeContainer)
+            const sidebar = activeContainer?.querySelector('#sidebar');
+            if (!sidebar) {
+                console.warn('[Sidebar] No sidebar found in active container');
+                return;
+            }
+            console.log('[Sidebar] Toggle button clicked!');
+            sidebar.classList.toggle('collapsed');
+            sidebarToggleBtn.classList.toggle('active');
+            localStorage.setItem('sidebar_collapsed', sidebar.classList.contains('collapsed'));
+            // Trigger canvas resize and force layout recalculation
+            const triggerResize = () => {
+                window.dispatchEvent(new Event('resize'));
+                if (canvas) {
+                    canvas.resizeCanvas();
+                    canvas.needsRender = true;
+                }
+            };
+            // Resize multiple times to handle CSS transition
+            triggerResize();
+            setTimeout(triggerResize, 100);
+            setTimeout(triggerResize, 250);
+        });
+    }
 
     const bgColorInput = $('bg-color');
     if (bgColorInput) {
@@ -590,9 +676,12 @@ function setupEventListeners(container) {
                 const drawingToolbar = $('drawing-toolbar');
                 const toolsSidebar = document.querySelector('.tools-sidebar');
                 const sizeSlider = $('draw-size-slider-container');
-                if (drawingToolbar) drawingToolbar.style.display = 'flex';
+                const opacitySlider = $('draw-opacity-slider-container');
+                // Restore display but keep visibility controlled by drawing mode
+                if (drawingToolbar) drawingToolbar.style.display = '';
                 if (toolsSidebar) toolsSidebar.style.display = 'flex';
                 if (sizeSlider) sizeSlider.style.display = '';
+                if (opacitySlider) opacitySlider.style.display = '';
             } else if (tab === 'assets') {
                 // Show assets library view
                 $('canvas-container').style.display = 'none';
@@ -600,9 +689,41 @@ function setupEventListeners(container) {
                 const drawingToolbar = $('drawing-toolbar');
                 const toolsSidebar = document.querySelector('.tools-sidebar');
                 const sizeSlider = $('draw-size-slider-container');
-                if (drawingToolbar) drawingToolbar.style.display = 'none';
+                const opacitySlider = $('draw-opacity-slider-container');
+                const drawingModeBtn = getElement('drawing-mode-btn');
+
+                // Hide all drawing controls
+                if (drawingToolbar) {
+                    drawingToolbar.style.display = 'none';
+                    drawingToolbar.classList.remove('visible');
+                }
                 if (toolsSidebar) toolsSidebar.style.display = 'none';
-                if (sizeSlider) sizeSlider.style.display = 'none';
+                if (sizeSlider) {
+                    sizeSlider.style.display = 'none';
+                    sizeSlider.classList.remove('visible');
+                }
+                if (opacitySlider) {
+                    opacitySlider.style.display = 'none';
+                    opacitySlider.classList.remove('visible');
+                }
+
+                // Disable all tools when switching to assets
+                canvas.setDrawingMode(null);
+                if (canvas.objectsManager) {
+                    canvas.objectsManager.setTool(null);
+                }
+                // Remove active state from all tool buttons
+                const penBtn = document.querySelector('.draw-tool-option[data-tool="pen"]');
+                const highlighterBtn = document.querySelector('.draw-tool-option[data-tool="highlighter"]');
+                const eraserBtn = document.querySelector('.draw-tool-option[data-tool="eraser"]');
+                const textToolBtn = getElement('text-tool-btn');
+                const shapeToolBtn = getElement('shape-tool-btn');
+                penBtn?.classList.remove('active');
+                highlighterBtn?.classList.remove('active');
+                eraserBtn?.classList.remove('active');
+                textToolBtn?.classList.remove('active');
+                shapeToolBtn?.classList.remove('active');
+                drawingModeBtn?.classList.remove('active');
 
                 // Load assets into library view
                 loadAssetsLibrary();
@@ -663,8 +784,8 @@ function setupEventListeners(container) {
 
                 const isCollapsed = content.classList.contains('collapsed');
                 btn.innerHTML = isCollapsed
-                    ? '<img src="assets/expand.svg" alt="Expand" class="collapse-icon" width="14" height="14"/>'
-                    : '<img src="assets/collapse.svg" alt="Collapse" class="collapse-icon" width="14" height="14"/>';
+                    ? '<img src="/assets/expand.svg" alt="Expand" class="collapse-icon" width="14" height="14"/>'
+                    : '<img src="/assets/collapse.svg" alt="Collapse" class="collapse-icon" width="14" height="14"/>';
             }
         });
     }
@@ -682,7 +803,17 @@ function setupEventListeners(container) {
         scheduleSave();
         syncBoardAssetsWithCanvas();
     });
-    
+
+    canvas.canvas.addEventListener('imageDropped', (e) => {
+        // Broadcast to floating windows so they add the image too
+        if (syncChannel) {
+            syncChannel.postMessage({
+                type: 'image_added',
+                image: e.detail
+            });
+        }
+    });
+
     canvas.canvas.addEventListener('imageSelected', (e) => {
         highlightLayer(e.detail ? e.detail.id : null);
     });
@@ -860,6 +991,16 @@ function setupDrawingToolbar() {
         } else {
             currentTool = tool;
             canvas.setDrawingMode(tool);
+
+            // Deactivate text and shape tools when activating a drawing tool
+            const textToolBtn = getElement('text-tool-btn');
+            const shapeToolBtn = getElement('shape-tool-btn');
+            if (textToolBtn) textToolBtn.classList.remove('active');
+            if (shapeToolBtn) shapeToolBtn.classList.remove('active');
+            if (canvas.objectsManager) {
+                canvas.objectsManager.setTool(null);
+            }
+            hidePropertiesPanel();
 
             // Add active class to the clicked button
             if (tool === 'pen') penBtn?.classList.add('active');
@@ -1069,7 +1210,7 @@ async function saveNow() {
         const layer = {
             id: img.id,
             name: img.name,
-            src: img.img.src,
+            src: img.filePath || img.img.src,
             x: img.x,
             y: img.y,
             width: img.width,
@@ -1180,7 +1321,7 @@ function createLayerItem(img, images) {
     // Layer icon (image icon)
     const layerIcon = document.createElement('img');
     layerIcon.className = 'layer-icon';
-    layerIcon.src = 'assets/layericon.svg';
+    layerIcon.src = '/assets/layericon.svg';
 
     const layerContent = document.createElement('div');
     layerContent.className = 'layer-content';
@@ -1473,11 +1614,11 @@ function createObjectLayerItem(obj, objects) {
     const layerIcon = document.createElement('img');
     layerIcon.className = 'layer-icon';
     if (obj.type === 'text') {
-        layerIcon.src = 'assets/TextIcon.svg';
+        layerIcon.src = '/assets/TextIcon.svg';
     } else if (obj.type === 'shape') {
-        layerIcon.src = 'assets/ShapeIcon.svg';
+        layerIcon.src = '/assets/ShapeIcon.svg';
     } else if (obj.type === 'colorPalette') {
-        layerIcon.src = 'assets/ColorPalette.svg';
+        layerIcon.src = '/assets/ColorPalette.svg';
     }
 
     const layerContent = document.createElement('div');
@@ -1819,8 +1960,8 @@ function createGroupElement(group, allLayers, images, objects) {
     // Create icon that toggles between collapse and expand
     const updateToggleIcon = (collapsed) => {
         collapseToggle.innerHTML = collapsed
-            ? '<img src="assets/expand.svg" alt="Expand" class="group-toggle-icon" width="16" height="16"/>'
-            : '<img src="assets/collapse.svg" alt="Collapse" class="group-toggle-icon" width="16" height="16"/>';
+            ? '<img src="/assets/expand.svg" alt="Expand" class="group-toggle-icon" width="16" height="16"/>'
+            : '<img src="/assets/collapse.svg" alt="Collapse" class="group-toggle-icon" width="16" height="16"/>';
         collapseToggle.title = collapsed ? 'Expand group' : 'Collapse group';
     };
 
@@ -1847,7 +1988,7 @@ function createGroupElement(group, allLayers, images, objects) {
     // Group icon
     const groupIcon = document.createElement('img');
     groupIcon.className = 'layer-icon';
-    groupIcon.src = 'assets/foldericon.svg';
+    groupIcon.src = '/assets/foldericon.svg';
 
     // Group content (name wrapper)
     const groupContent = document.createElement('div');
@@ -2815,11 +2956,15 @@ async function renderAssets() {
     }
     
     assetsGrid.innerHTML = '';
-    assets.forEach(asset => {
+
+    // Resolve file references for display
+    const resolvedSrcs = await Promise.all(assets.map(a => boardManager.resolveImageSrc(a.src)));
+
+    assets.forEach((asset, idx) => {
         const assetItem = document.createElement('div');
         assetItem.className = 'asset-item';
         const img = document.createElement('img');
-        img.src = asset.src;
+        img.src = resolvedSrcs[idx];
         img.draggable = false;
         
         const deleteBtn = document.createElement('button');
@@ -2857,9 +3002,11 @@ async function renderAssets() {
         assetItem.appendChild(deleteBtn);
         
         assetItem.addEventListener('click', async () => {
+            const resolvedAssetSrc = await boardManager.resolveImageSrc(asset.src);
             const imgElement = new Image();
             imgElement.onload = async () => {
-                canvas.addImage(imgElement, 100, 100, asset.name);
+                const added = canvas.addImage(imgElement, 100, 100, asset.name);
+                if (asset.src && !asset.src.startsWith('data:')) added.filePath = asset.src;
                 renderLayers();
 
                 if (showAllAssets) {
@@ -2877,7 +3024,7 @@ async function renderAssets() {
                     }
                 }
             };
-            imgElement.src = asset.src;
+            imgElement.src = resolvedAssetSrc;
         });
         
         assetsGrid.appendChild(assetItem);
@@ -3067,7 +3214,7 @@ function setupContextMenu() {
 
     editImageItem.addEventListener('click', () => {
         if (canvas.contextMenuImage) {
-            showImageEditModal(canvas.contextMenuImage);
+            showImageEditPanel(canvas.contextMenuImage);
         }
         contextMenu.classList.remove('show');
     });
@@ -3219,21 +3366,26 @@ function importAssets() {
         files.forEach(file => {
             const reader = new FileReader();
             reader.onload = async (event) => {
+                const dataUrl = event.target.result;
                 const board = boardManager.currentBoard;
                 const currentAssets = board.assets || [];
 
                 const existsInBoard = currentAssets.some(a => a.name === file.name);
                 if (!existsInBoard) {
+                    // Save image file to disk if possible
+                    const filePath = await boardManager.saveImageFile(dataUrl, file.name);
+                    const srcForStorage = filePath || dataUrl;
+
                     const newAsset = {
                         id: Date.now() + Math.random(),
-                        src: event.target.result,
+                        src: srcForStorage,
                         name: file.name
                     };
                     const updatedAssets = [...currentAssets, newAsset];
 
                     // Update backend
                     await boardManager.updateBoard(currentBoardId, { assets: updatedAssets });
-                    const allAsset = await boardManager.addToAllAssets(file.name, event.target.result);
+                    const allAsset = await boardManager.addToAllAssets(file.name, srcForStorage);
 
                     // Add to DOM immediately - use the asset from "All Assets" if available
                     const assetToDisplay = (showAllAssets && allAsset) ? allAsset : newAsset;
@@ -3248,14 +3400,14 @@ function importAssets() {
 }
 
 // Helper function to append a single asset to DOM
-function appendAssetToDOM(asset, container) {
+async function appendAssetToDOM(asset, container) {
     const assetItem = document.createElement('div');
     assetItem.className = 'asset-item';
     assetItem.style.opacity = '0';
     assetItem.style.transform = 'scale(0.8)';
 
     const img = document.createElement('img');
-    img.src = asset.src;
+    img.src = await boardManager.resolveImageSrc(asset.src);
     img.draggable = false;
 
     const deleteBtn = document.createElement('button');
@@ -3289,9 +3441,11 @@ function appendAssetToDOM(asset, container) {
     assetItem.appendChild(deleteBtn);
 
     assetItem.addEventListener('click', async () => {
+        const resolvedAssetSrc = await boardManager.resolveImageSrc(asset.src);
         const imgElement = new Image();
         imgElement.onload = async () => {
-            canvas.addImage(imgElement, 100, 100, asset.name);
+            const added = canvas.addImage(imgElement, 100, 100, asset.name);
+            if (asset.src && !asset.src.startsWith('data:')) added.filePath = asset.src;
             renderLayers();
 
             if (showAllAssets) {
@@ -3308,7 +3462,7 @@ function appendAssetToDOM(asset, container) {
                 }
             }
         };
-        imgElement.src = asset.src;
+        imgElement.src = resolvedAssetSrc;
     });
 
     container.appendChild(assetItem);
@@ -3359,8 +3513,8 @@ async function syncBoardAssetsWithCanvas() {
     const board = boardManager.currentBoard;
     if (!board) return;
 
-    // Get all image sources currently on the canvas
-    const canvasImageSources = new Set(canvas.images.map(img => img.img.src));
+    // Get all image sources currently on the canvas (use filePath for file-backed images)
+    const canvasImageSources = new Set(canvas.images.map(img => img.filePath || img.img.src));
 
     // Filter board assets to only include those that exist on the canvas
     const syncedAssets = (board.assets || []).filter(asset => canvasImageSources.has(asset.src));
@@ -3583,12 +3737,12 @@ async function loadAssetsLibrary(searchQuery = '') {
     });
 }
 
-function appendAssetToLibrary(asset, container, isAllAssets) {
+async function appendAssetToLibrary(asset, container, isAllAssets) {
     const assetItem = document.createElement('div');
     assetItem.className = 'assets-library-item';
 
     const img = document.createElement('img');
-    img.src = asset.src;
+    img.src = await boardManager.resolveImageSrc(asset.src);
     img.draggable = false;
 
     const deleteBtn = document.createElement('button');
@@ -3655,14 +3809,19 @@ function importAssetsToLibrary() {
         for (const file of files) {
             const reader = new FileReader();
             reader.onload = async (event) => {
+                const dataUrl = event.target.result;
                 const board = boardManager.currentBoard;
                 const currentAssets = board.assets || [];
 
                 const existsInBoard = currentAssets.some(a => a.name === file.name);
                 if (!existsInBoard) {
+                    // Save image file to disk if possible
+                    const filePath = await boardManager.saveImageFile(dataUrl, file.name);
+                    const srcForStorage = filePath || dataUrl;
+
                     const newAsset = {
                         id: Date.now() + Math.random(),
-                        src: event.target.result,
+                        src: srcForStorage,
                         name: file.name,
                         tags: [],
                         metadata: {
@@ -3676,11 +3835,11 @@ function importAssetsToLibrary() {
 
                     // Add to all assets with tags and metadata
                     let allAssets = await boardManager.getAllAssets();
-                    const existsInAll = allAssets.some(a => a.name === file.name && a.src === event.target.result);
+                    const existsInAll = allAssets.some(a => a.name === file.name && a.src === srcForStorage);
                     if (!existsInAll) {
                         allAssets.push(newAsset);
                         if (window.__TAURI__) {
-                            await boardManager.invoke('add_to_all_assets', { name: file.name, src: event.target.result, tags: [], metadata: { created: Date.now() } });
+                            await boardManager.invoke('add_to_all_assets', { name: file.name, src: srcForStorage, tags: [], metadata: { created: Date.now() } });
                         } else {
                             localStorage.setItem(boardManager.ALL_ASSETS_KEY, JSON.stringify(allAssets));
                         }
@@ -3879,7 +4038,7 @@ async function showAssetSidebar(asset, isAllAssets) {
     const nameInput = getElement('asset-sidebar-name');
 
     // Set preview image
-    preview.src = freshAsset.src;
+    preview.src = await boardManager.resolveImageSrc(freshAsset.src);
 
     // Set name
     nameInput.value = freshAsset.name || '';
@@ -4714,64 +4873,201 @@ function setupTextFloatingToolbar(obj) {
     const fontDropdownContainer = getElement('floating-font-dropdown-container');
     const fontSize = getElement('floating-font-size');
     const boldBtn = getElement('floating-text-bold');
+    const italicBtn = getElement('floating-text-italic');
+    const underlineBtn = getElement('floating-text-underline');
     const colorInput = getElement('floating-text-color');
     const alignLeft = getElement('floating-text-align-left');
     const alignCenter = getElement('floating-text-align-center');
     const alignRight = getElement('floating-text-align-right');
 
+    // Prevent toolbar from stealing focus from the text editor
+    const toolbar = getElement('floating-text-toolbar');
+    if (toolbar && !toolbar._mousedownHandlerAdded) {
+        toolbar.addEventListener('mousedown', (e) => {
+            // Prevent focus loss, but allow inputs to receive focus for typing
+            if (e.target.tagName !== 'INPUT') {
+                e.preventDefault();
+            }
+        });
+        toolbar._mousedownHandlerAdded = true;
+    }
+
+    // Get default style from object or create default
+    const defaultStyle = obj.defaultStyle || canvas.objectsManager.getDefaultTextStyle();
+
     // Initialize or update floating font dropdown
     const instance = getEditorInstance(activeContainer);
     if (!instance.floatingFontDropdown && fontDropdownContainer) {
         instance.floatingFontDropdown = new FontDropdown(fontDropdownContainer, {
-            initialValue: obj.fontFamily || "'Roboto', sans-serif",
+            initialValue: defaultStyle.fontFamily || "'Roboto', sans-serif",
             onChange: (value) => {
-                canvas.objectsManager.updateSelectedObject({ fontFamily: value });
+                applyFormatToSelection('fontFamily', value);
             }
         });
     } else if (instance.floatingFontDropdown) {
-        // Update the dropdown value without triggering onChange
-        instance.floatingFontDropdown.setValue(obj.fontFamily || "'Roboto', sans-serif", false);
+        instance.floatingFontDropdown.setValue(defaultStyle.fontFamily || "'Roboto', sans-serif", false);
     }
 
-    // Set current values
-    fontSize.value = obj.fontSize || 32;
-    colorInput.value = obj.color || '#000000';
+    // Set current values from default style
+    fontSize.value = defaultStyle.fontSize || 32;
+    colorInput.value = defaultStyle.color || '#000000';
 
-    // Update bold button state
-    if (obj.fontWeight === 'bold') {
-        boldBtn.classList.add('active');
-    } else {
-        boldBtn.classList.remove('active');
-    }
+    // Update button states
+    boldBtn.classList.toggle('active', defaultStyle.fontWeight === 'bold');
+    if (italicBtn) italicBtn.classList.toggle('active', defaultStyle.fontStyle === 'italic');
+    if (underlineBtn) underlineBtn.classList.toggle('active', defaultStyle.textDecoration === 'underline');
 
     // Update alignment buttons
     alignLeft.classList.toggle('active', obj.textAlign === 'left' || !obj.textAlign);
     alignCenter.classList.toggle('active', obj.textAlign === 'center');
     alignRight.classList.toggle('active', obj.textAlign === 'right');
 
-    // Event listeners
-    fontSize.oninput = () => canvas.objectsManager.updateSelectedObject({ fontSize: parseInt(fontSize.value) });
+    // Helper to apply formatting to selection in contenteditable
+    function applyFormatToSelection(property, value) {
+        const editor = document.querySelector('.rich-text-editor');
+        if (!editor) {
+            // Not editing - update default style AND apply to all existing text content
+            if (obj.defaultStyle) {
+                obj.defaultStyle[property] = value;
+            }
+            // Also update all content spans with the new value
+            if (obj.content && Array.isArray(obj.content)) {
+                obj.content.forEach(span => {
+                    if (span.style) {
+                        span.style[property] = value;
+                    }
+                });
+                canvas.needsRender = true;
+                canvas.objectsManager.dispatchObjectsChanged();
+            }
+            return;
+        }
+
+        // Refocus editor
+        editor.focus();
+
+        const selection = window.getSelection();
+        const textObj = canvas.objectsManager.editingTextObject;
+
+        // Check if there's an actual selection (not collapsed)
+        const hasSelection = selection.rangeCount > 0 && !selection.isCollapsed;
+
+        if (hasSelection) {
+            // Apply to selection using execCommand or wrapSelectionWithStyle
+            if (property === 'fontWeight') {
+                document.execCommand('bold', false, null);
+            } else if (property === 'fontStyle') {
+                document.execCommand('italic', false, null);
+            } else if (property === 'textDecoration' && value === 'underline') {
+                document.execCommand('underline', false, null);
+            } else if (property === 'color') {
+                document.execCommand('foreColor', false, value);
+            } else if (property === 'fontFamily') {
+                document.execCommand('fontName', false, value);
+            } else if (property === 'fontSize') {
+                // execCommand fontSize is limited (1-7), so we wrap selection with span
+                wrapSelectionWithStyle(selection, { fontSize: value + 'px' });
+            }
+
+            // Sync back to content model
+            if (textObj) {
+                textObj.content = canvas.objectsManager.htmlToContent(editor, textObj.defaultStyle || canvas.objectsManager.getDefaultTextStyle());
+                canvas.needsRender = true;
+            }
+        } else {
+            // No selection - apply to all content
+            if (textObj && textObj.content && Array.isArray(textObj.content)) {
+                // Update default style
+                if (textObj.defaultStyle) {
+                    textObj.defaultStyle[property] = value;
+                }
+                // Update all content spans
+                textObj.content.forEach(span => {
+                    if (span.style) {
+                        span.style[property] = value;
+                    }
+                });
+                // Re-render the editor HTML with updated content
+                const zoom = canvas.zoom;
+                editor.innerHTML = canvas.objectsManager.contentToHTMLWithZoom(textObj.content, zoom);
+                canvas.needsRender = true;
+            }
+        }
+    }
+
+    // Helper to wrap selection with inline style
+    function wrapSelectionWithStyle(selection, styles) {
+        if (!selection.rangeCount || selection.isCollapsed) return;
+
+        const range = selection.getRangeAt(0);
+        const span = document.createElement('span');
+
+        for (const [key, value] of Object.entries(styles)) {
+            span.style[key] = value;
+        }
+
+        try {
+            range.surroundContents(span);
+        } catch (e) {
+            // If surroundContents fails (crosses element boundaries), use alternative
+            const contents = range.extractContents();
+            span.appendChild(contents);
+            range.insertNode(span);
+        }
+
+        // Restore selection
+        selection.removeAllRanges();
+        const newRange = document.createRange();
+        newRange.selectNodeContents(span);
+        selection.addRange(newRange);
+    }
+
+    // Event listeners for formatting buttons
+    fontSize.oninput = () => applyFormatToSelection('fontSize', parseInt(fontSize.value));
+
     boldBtn.onclick = () => {
-        const newWeight = obj.fontWeight === 'bold' ? 'normal' : 'bold';
-        canvas.objectsManager.updateSelectedObject({ fontWeight: newWeight });
+        applyFormatToSelection('fontWeight', 'bold');
         boldBtn.classList.toggle('active');
     };
-    colorInput.oninput = () => canvas.objectsManager.updateSelectedObject({ color: colorInput.value });
 
+    if (italicBtn) {
+        italicBtn.onclick = () => {
+            applyFormatToSelection('fontStyle', 'italic');
+            italicBtn.classList.toggle('active');
+        };
+    }
+
+    if (underlineBtn) {
+        underlineBtn.onclick = () => {
+            applyFormatToSelection('textDecoration', 'underline');
+            underlineBtn.classList.toggle('active');
+        };
+    }
+
+    colorInput.oninput = () => applyFormatToSelection('color', colorInput.value);
+
+    // Alignment applies to the whole text object (block-level)
     alignLeft.onclick = () => {
         canvas.objectsManager.updateSelectedObject({ textAlign: 'left' });
+        // Also update editor if active
+        const editor = document.querySelector('.rich-text-editor');
+        if (editor) editor.style.textAlign = 'left';
         alignLeft.classList.add('active');
         alignCenter.classList.remove('active');
         alignRight.classList.remove('active');
     };
     alignCenter.onclick = () => {
         canvas.objectsManager.updateSelectedObject({ textAlign: 'center' });
+        const editor = document.querySelector('.rich-text-editor');
+        if (editor) editor.style.textAlign = 'center';
         alignLeft.classList.remove('active');
         alignCenter.classList.add('active');
         alignRight.classList.remove('active');
     };
     alignRight.onclick = () => {
         canvas.objectsManager.updateSelectedObject({ textAlign: 'right' });
+        const editor = document.querySelector('.rich-text-editor');
+        if (editor) editor.style.textAlign = 'right';
         alignLeft.classList.remove('active');
         alignCenter.classList.remove('active');
         alignRight.classList.add('active');
@@ -4973,11 +5269,19 @@ function setupTextTool() {
             canvas.objectsManager.setTool(null);
             textToolBtn.classList.remove('active');
         } else {
-            // Deactivate other tools first
+            // Deactivate all other tools first
             const shapeToolBtn = getElement('shape-tool-btn');
             if (shapeToolBtn) {
                 shapeToolBtn.classList.remove('active');
             }
+            // Deactivate drawing tools
+            canvas.setDrawingMode(null);
+            const penBtn = document.querySelector('.draw-tool-option[data-tool="pen"]');
+            const highlighterBtn = document.querySelector('.draw-tool-option[data-tool="highlighter"]');
+            const eraserBtn = document.querySelector('.draw-tool-option[data-tool="eraser"]');
+            penBtn?.classList.remove('active');
+            highlighterBtn?.classList.remove('active');
+            eraserBtn?.classList.remove('active');
             hidePropertiesPanel();
 
             canvas.objectsManager.setTool('text');
@@ -5113,11 +5417,19 @@ function setupShapeTool() {
             shapeToolBtn.classList.remove('active');
             hidePropertiesPanel();
         } else {
-            // Deactivate other tools first
+            // Deactivate all other tools first
             const textToolBtn = getElement('text-tool-btn');
             if (textToolBtn) {
                 textToolBtn.classList.remove('active');
             }
+            // Deactivate drawing tools
+            canvas.setDrawingMode(null);
+            const penBtn = document.querySelector('.draw-tool-option[data-tool="pen"]');
+            const highlighterBtn = document.querySelector('.draw-tool-option[data-tool="highlighter"]');
+            const eraserBtn = document.querySelector('.draw-tool-option[data-tool="eraser"]');
+            penBtn?.classList.remove('active');
+            highlighterBtn?.classList.remove('active');
+            eraserBtn?.classList.remove('active');
 
             canvas.objectsManager.setTool('shape');
             shapeToolBtn.classList.add('active');
@@ -5755,162 +6067,255 @@ function showPaletteModal(paletteObj) {
     });
 }
 
-function showImageEditModal(imageObj) {
-    // Remove any existing edit modals
-    const existingModals = document.querySelectorAll('.modal-overlay');
-    existingModals.forEach(m => {
-        if (m.querySelector('#edit-apply')) {
-            m.remove();
-        }
-    });
+function showImageEditPanel(imageObj) {
+    // Remove any existing edit panels
+    const existingPanel = document.querySelector('.image-edit-panel');
+    if (existingPanel) {
+        existingPanel.remove();
+    }
 
-    const modal = document.createElement('div');
-    modal.className = 'modal-overlay';
-    modal.innerHTML = `
-        <div class="modal" style="max-width: 500px;">
-            <div class="modal-header">
-                <h2>Edit Image</h2>
+    // Store original values for cancel
+    const originalValues = {
+        brightness: imageObj.brightness || 100,
+        contrast: imageObj.contrast || 100,
+        saturation: imageObj.saturation || 100,
+        hue: imageObj.hue || 0,
+        blur: imageObj.blur || 0,
+        opacity: imageObj.opacity !== undefined ? imageObj.opacity : 100,
+        grayscale: imageObj.grayscale || false,
+        invert: imageObj.invert || false,
+        mirror: imageObj.mirror || false
+    };
+
+    const panel = document.createElement('div');
+    panel.className = 'image-edit-panel';
+    panel.innerHTML = `
+        <div class="image-edit-panel-header">
+            <span class="image-edit-panel-title">Edit Image</span>
+            <button class="image-edit-panel-close">&times;</button>
+        </div>
+        <div class="image-edit-panel-body">
+            <div class="edit-control">
+                <label>Brightness <span class="edit-value" id="brightness-value">${originalValues.brightness}%</span></label>
+                <input type="range" id="edit-brightness" min="0" max="200" value="${originalValues.brightness}" class="themed-slider">
             </div>
-            <div class="modal-body" style="padding: 24px;">
-                <div style="margin-bottom: 20px;">
-                    <label style="display: block; margin-bottom: 8px; font-weight: 500;">Brightness</label>
-                    <input type="range" id="edit-brightness" min="0" max="200" value="100" class="themed-slider" style="width: 100%;">
-                    <div style="text-align: center; margin-top: 4px; font-size: 14px; color: var(--text-secondary);">
-                        <span id="brightness-value">100%</span>
-                    </div>
-                </div>
-
-                <div style="margin-bottom: 20px;">
-                    <label style="display: block; margin-bottom: 8px; font-weight: 500;">Contrast</label>
-                    <input type="range" id="edit-contrast" min="0" max="200" value="100" class="themed-slider" style="width: 100%;">
-                    <div style="text-align: center; margin-top: 4px; font-size: 14px; color: var(--text-secondary);">
-                        <span id="contrast-value">100%</span>
-                    </div>
-                </div>
-
-                <div style="margin-bottom: 20px;">
-                    <label style="display: block; margin-bottom: 8px; font-weight: 500;">Saturation</label>
-                    <input type="range" id="edit-saturation" min="0" max="200" value="100" class="themed-slider" style="width: 100%;">
-                    <div style="text-align: center; margin-top: 4px; font-size: 14px; color: var(--text-secondary);">
-                        <span id="saturation-value">100%</span>
-                    </div>
-                </div>
-
-                <div style="margin-bottom: 20px;">
-                    <label style="display: block; margin-bottom: 8px; font-weight: 500;">Hue Rotate</label>
-                    <input type="range" id="edit-hue" min="0" max="360" value="0" class="themed-slider" style="width: 100%;">
-                    <div style="text-align: center; margin-top: 4px; font-size: 14px; color: var(--text-secondary);">
-                        <span id="hue-value">0°</span>
-                    </div>
-                </div>
-
-                <div style="margin-bottom: 20px;">
-                    <label style="display: block; margin-bottom: 8px; font-weight: 500;">Blur</label>
-                    <input type="range" id="edit-blur" min="0" max="10" value="0" step="0.5" class="themed-slider" style="width: 100%;">
-                    <div style="text-align: center; margin-top: 4px; font-size: 14px; color: var(--text-secondary);">
-                        <span id="blur-value">0px</span>
-                    </div>
-                </div>
-
-                <div style="margin-bottom: 20px;">
-                    <label style="display: block; margin-bottom: 8px; font-weight: 500;">Opacity</label>
-                    <input type="range" id="edit-opacity" min="0" max="100" value="100" class="themed-slider" style="width: 100%;">
-                    <div style="text-align: center; margin-top: 4px; font-size: 14px; color: var(--text-secondary);">
-                        <span id="opacity-value">100%</span>
-                    </div>
-                </div>
-
-                <div style="margin-bottom: 20px;">
-                    <label style="display: flex; align-items: center; justify-content: space-between; cursor: pointer;">
-                        <span style="font-weight: 500;">Grayscale</span>
-                        <label class="toggle-switch">
-                            <input type="checkbox" id="edit-grayscale">
-                            <span class="toggle-slider"></span>
-                        </label>
-                    </label>
-                </div>
-
-                <div style="margin-bottom: 20px;">
-                    <label style="display: flex; align-items: center; justify-content: space-between; cursor: pointer;">
-                        <span style="font-weight: 500;">Invert Colors</span>
-                        <label class="toggle-switch">
-                            <input type="checkbox" id="edit-invert">
-                            <span class="toggle-slider"></span>
-                        </label>
-                    </label>
-                </div>
-
-                <div style="margin-bottom: 20px;">
-                    <label style="display: flex; align-items: center; justify-content: space-between; cursor: pointer;">
-                        <span style="font-weight: 500;">Mirror</span>
-                        <label class="toggle-switch">
-                            <input type="checkbox" id="edit-mirror">
-                            <span class="toggle-slider"></span>
-                        </label>
-                    </label>
-                </div>
+            <div class="edit-control">
+                <label>Contrast <span class="edit-value" id="contrast-value">${originalValues.contrast}%</span></label>
+                <input type="range" id="edit-contrast" min="0" max="200" value="${originalValues.contrast}" class="themed-slider">
             </div>
-            <div class="modal-footer">
-                <button class="modal-btn modal-btn-secondary" id="edit-reset">Reset</button>
-                <button class="modal-btn modal-btn-primary" id="edit-apply">Apply</button>
-                <button class="modal-btn modal-btn-secondary" id="edit-cancel">Cancel</button>
+            <div class="edit-control">
+                <label>Saturation <span class="edit-value" id="saturation-value">${originalValues.saturation}%</span></label>
+                <input type="range" id="edit-saturation" min="0" max="200" value="${originalValues.saturation}" class="themed-slider">
             </div>
+            <div class="edit-control">
+                <label>Hue <span class="edit-value" id="hue-value">${originalValues.hue}°</span></label>
+                <input type="range" id="edit-hue" min="0" max="360" value="${originalValues.hue}" class="themed-slider">
+            </div>
+            <div class="edit-control">
+                <label>Blur <span class="edit-value" id="blur-value">${originalValues.blur}px</span></label>
+                <input type="range" id="edit-blur" min="0" max="10" value="${originalValues.blur}" step="0.5" class="themed-slider">
+            </div>
+            <div class="edit-control">
+                <label>Opacity <span class="edit-value" id="opacity-value">${originalValues.opacity}%</span></label>
+                <input type="range" id="edit-opacity" min="0" max="100" value="${originalValues.opacity}" class="themed-slider">
+            </div>
+            <div class="edit-checkbox-row">
+                <label><input type="checkbox" id="edit-grayscale" ${originalValues.grayscale ? 'checked' : ''}> Grayscale</label>
+                <label><input type="checkbox" id="edit-invert" ${originalValues.invert ? 'checked' : ''}> Invert</label>
+                <label><input type="checkbox" id="edit-mirror" ${originalValues.mirror ? 'checked' : ''}> Mirror</label>
+            </div>
+        </div>
+        <div class="image-edit-panel-footer">
+            <button class="edit-btn edit-btn-secondary" id="edit-reset">Reset</button>
+            <button class="edit-btn edit-btn-secondary" id="edit-cancel">Cancel</button>
+            <button class="edit-btn edit-btn-primary" id="edit-apply">Apply</button>
         </div>
     `;
 
-    document.body.appendChild(modal);
-    modal.style.display = 'flex';
+    // Add panel styles if not already present
+    if (!document.querySelector('#image-edit-panel-styles')) {
+        const style = document.createElement('style');
+        style.id = 'image-edit-panel-styles';
+        style.textContent = `
+            .image-edit-panel {
+                position: fixed;
+                top: 80px;
+                right: 20px;
+                width: 280px;
+                background: var(--bg-primary, #ffffff);
+                border: 1px solid var(--border-color, #e0e0e0);
+                border-radius: 8px;
+                box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+                z-index: 1000;
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                user-select: none;
+            }
+            .image-edit-panel-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                padding: 12px 16px;
+                border-bottom: 1px solid var(--border-color, #e0e0e0);
+                cursor: move;
+                background: var(--bg-secondary, #f5f5f5);
+                border-radius: 8px 8px 0 0;
+            }
+            .image-edit-panel-title {
+                font-weight: 600;
+                font-size: 14px;
+                color: var(--text-primary, #1a1a1a);
+            }
+            .image-edit-panel-close {
+                background: none;
+                border: none;
+                font-size: 20px;
+                cursor: pointer;
+                color: var(--text-secondary, #666);
+                padding: 0;
+                line-height: 1;
+            }
+            .image-edit-panel-close:hover {
+                color: var(--text-primary, #1a1a1a);
+            }
+            .image-edit-panel-body {
+                padding: 16px;
+            }
+            .edit-control {
+                margin-bottom: 14px;
+            }
+            .edit-control label {
+                display: flex;
+                justify-content: space-between;
+                font-size: 12px;
+                font-weight: 500;
+                margin-bottom: 6px;
+                color: var(--text-primary, #1a1a1a);
+            }
+            .edit-value {
+                color: var(--text-secondary, #666);
+                font-weight: 400;
+            }
+            .edit-control input[type="range"] {
+                width: 100%;
+            }
+            .edit-checkbox-row {
+                display: flex;
+                gap: 12px;
+                flex-wrap: wrap;
+                padding-top: 8px;
+                border-top: 1px solid var(--border-color, #e0e0e0);
+            }
+            .edit-checkbox-row label {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                font-size: 12px;
+                color: var(--text-primary, #1a1a1a);
+                cursor: pointer;
+                padding: 6px 10px;
+                border-radius: 6px;
+                background: var(--bg-secondary, #f5f5f5);
+                border: 1px solid var(--border-color, #e0e0e0);
+                transition: all 0.15s ease;
+            }
+            .edit-checkbox-row label:hover {
+                background: var(--bg-hover, #e8e8e8);
+            }
+            .edit-checkbox-row label:has(input:checked) {
+                background: var(--accent-color, #007AFF);
+                color: white;
+                border-color: var(--accent-color, #007AFF);
+            }
+            .edit-checkbox-row input[type="checkbox"] {
+                display: none;
+            }
+            .image-edit-panel-footer {
+                display: flex;
+                gap: 8px;
+                padding: 12px 16px;
+                border-top: 1px solid var(--border-color, #e0e0e0);
+                justify-content: flex-end;
+            }
+            .edit-btn {
+                padding: 6px 12px;
+                border-radius: 4px;
+                font-size: 12px;
+                font-weight: 500;
+                cursor: pointer;
+                border: 1px solid var(--border-color, #e0e0e0);
+            }
+            .edit-btn-primary {
+                background: var(--accent-color, #007AFF);
+                color: white;
+                border-color: var(--accent-color, #007AFF);
+            }
+            .edit-btn-primary:hover {
+                background: var(--accent-hover, #0056b3);
+            }
+            .edit-btn-secondary {
+                background: var(--bg-primary, #ffffff);
+                color: var(--text-primary, #1a1a1a);
+            }
+            .edit-btn-secondary:hover {
+                background: var(--bg-secondary, #f5f5f5);
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    document.body.appendChild(panel);
+
+    // Make panel draggable
+    const header = panel.querySelector('.image-edit-panel-header');
+    let isDragging = false;
+    let dragOffsetX = 0;
+    let dragOffsetY = 0;
+
+    header.addEventListener('mousedown', (e) => {
+        if (e.target.classList.contains('image-edit-panel-close')) return;
+        isDragging = true;
+        dragOffsetX = e.clientX - panel.offsetLeft;
+        dragOffsetY = e.clientY - panel.offsetTop;
+        e.preventDefault();
+    });
+
+    document.addEventListener('mousemove', (e) => {
+        if (!isDragging) return;
+        panel.style.left = (e.clientX - dragOffsetX) + 'px';
+        panel.style.top = (e.clientY - dragOffsetY) + 'px';
+        panel.style.right = 'auto';
+    });
+
+    document.addEventListener('mouseup', () => {
+        isDragging = false;
+    });
 
     // Get controls
-    const brightnessSlider = modal.querySelector('#edit-brightness');
-    const contrastSlider = modal.querySelector('#edit-contrast');
-    const saturationSlider = modal.querySelector('#edit-saturation');
-    const hueSlider = modal.querySelector('#edit-hue');
-    const blurSlider = modal.querySelector('#edit-blur');
-    const opacitySlider = modal.querySelector('#edit-opacity');
-    const grayscaleCheckbox = modal.querySelector('#edit-grayscale');
-    const invertCheckbox = modal.querySelector('#edit-invert');
-    const mirrorCheckbox = modal.querySelector('#edit-mirror');
-    const brightnessValue = modal.querySelector('#brightness-value');
-    const contrastValue = modal.querySelector('#contrast-value');
-    const saturationValue = modal.querySelector('#saturation-value');
-    const hueValue = modal.querySelector('#hue-value');
-    const blurValue = modal.querySelector('#blur-value');
-    const opacityValue = modal.querySelector('#opacity-value');
-    const resetBtn = modal.querySelector('#edit-reset');
-    const applyBtn = modal.querySelector('#edit-apply');
-    const cancelBtn = modal.querySelector('#edit-cancel');
+    const brightnessSlider = panel.querySelector('#edit-brightness');
+    const contrastSlider = panel.querySelector('#edit-contrast');
+    const saturationSlider = panel.querySelector('#edit-saturation');
+    const hueSlider = panel.querySelector('#edit-hue');
+    const blurSlider = panel.querySelector('#edit-blur');
+    const opacitySlider = panel.querySelector('#edit-opacity');
+    const grayscaleCheckbox = panel.querySelector('#edit-grayscale');
+    const invertCheckbox = panel.querySelector('#edit-invert');
+    const mirrorCheckbox = panel.querySelector('#edit-mirror');
+    const brightnessValue = panel.querySelector('#brightness-value');
+    const contrastValue = panel.querySelector('#contrast-value');
+    const saturationValue = panel.querySelector('#saturation-value');
+    const hueValue = panel.querySelector('#hue-value');
+    const blurValue = panel.querySelector('#blur-value');
+    const opacityValue = panel.querySelector('#opacity-value');
+    const resetBtn = panel.querySelector('#edit-reset');
+    const applyBtn = panel.querySelector('#edit-apply');
+    const cancelBtn = panel.querySelector('#edit-cancel');
+    const closeBtn = panel.querySelector('.image-edit-panel-close');
 
-    // Store original values for cancel
-    imageObj.originalBrightness = imageObj.brightness || 100;
-    imageObj.originalContrast = imageObj.contrast || 100;
-    imageObj.originalSaturation = imageObj.saturation || 100;
-    imageObj.originalHue = imageObj.hue || 0;
-    imageObj.originalBlur = imageObj.blur || 0;
-    imageObj.originalOpacity = imageObj.opacity !== undefined ? imageObj.opacity : 100;
-    imageObj.originalGrayscale = imageObj.grayscale || false;
-    imageObj.originalInvert = imageObj.invert || false;
-    imageObj.originalMirror = imageObj.mirror || false;
+    // Debounce timer for expensive filter operations
+    let filterDebounceTimer = null;
 
-    // Initialize with current values if they exist
-    brightnessSlider.value = (imageObj.brightness || 100);
-    contrastSlider.value = (imageObj.contrast || 100);
-    saturationSlider.value = (imageObj.saturation || 100);
-    hueSlider.value = (imageObj.hue || 0);
-    blurSlider.value = (imageObj.blur || 0);
-    opacitySlider.value = (imageObj.opacity !== undefined ? imageObj.opacity : 100);
-    grayscaleCheckbox.checked = imageObj.grayscale || false;
-    invertCheckbox.checked = imageObj.invert || false;
-    mirrorCheckbox.checked = imageObj.mirror || false;
-    brightnessValue.textContent = `${brightnessSlider.value}%`;
-    contrastValue.textContent = `${contrastSlider.value}%`;
-    saturationValue.textContent = `${saturationSlider.value}%`;
-    hueValue.textContent = `${hueSlider.value}°`;
-    blurValue.textContent = `${blurSlider.value}px`;
-    opacityValue.textContent = `${opacitySlider.value}%`;
-
-    // Update preview as sliders change
-    function updatePreview() {
+    // Update values immediately for responsive UI, but debounce filter operations
+    function updatePreview(immediate = false) {
         const brightness = parseInt(brightnessSlider.value);
         const contrast = parseInt(contrastSlider.value);
         const saturation = parseInt(saturationSlider.value);
@@ -5921,6 +6326,7 @@ function showImageEditModal(imageObj) {
         const invert = invertCheckbox.checked;
         const mirror = mirrorCheckbox.checked;
 
+        // Update labels immediately for responsive feedback
         brightnessValue.textContent = `${brightness}%`;
         contrastValue.textContent = `${contrast}%`;
         saturationValue.textContent = `${saturation}%`;
@@ -5928,7 +6334,7 @@ function showImageEditModal(imageObj) {
         blurValue.textContent = `${blur}px`;
         opacityValue.textContent = `${opacity}%`;
 
-        // Apply filters to image
+        // Apply to image object
         imageObj.brightness = brightness;
         imageObj.contrast = contrast;
         imageObj.saturation = saturation;
@@ -5939,20 +6345,37 @@ function showImageEditModal(imageObj) {
         imageObj.invert = invert;
         imageObj.mirror = mirror;
 
-        canvas.needsRender = true;
+        // Debounce the expensive filter operations
+        if (filterDebounceTimer) {
+            clearTimeout(filterDebounceTimer);
+        }
+
+        const applyFilters = () => {
+            canvas.clearFilterCache(imageObj);
+            canvas.applyFilters(imageObj);
+            canvas.needsRender = true;
+        };
+
+        if (immediate) {
+            applyFilters();
+        } else {
+            filterDebounceTimer = setTimeout(applyFilters, 50);
+        }
     }
 
-    brightnessSlider.addEventListener('input', updatePreview);
-    contrastSlider.addEventListener('input', updatePreview);
-    saturationSlider.addEventListener('input', updatePreview);
-    hueSlider.addEventListener('input', updatePreview);
-    blurSlider.addEventListener('input', updatePreview);
-    opacitySlider.addEventListener('input', updatePreview);
-    grayscaleCheckbox.addEventListener('change', updatePreview);
-    invertCheckbox.addEventListener('change', updatePreview);
-    mirrorCheckbox.addEventListener('change', updatePreview);
+    // Use 'input' for sliders (fires while dragging) with debounce
+    brightnessSlider.addEventListener('input', () => updatePreview(false));
+    contrastSlider.addEventListener('input', () => updatePreview(false));
+    saturationSlider.addEventListener('input', () => updatePreview(false));
+    hueSlider.addEventListener('input', () => updatePreview(false));
+    blurSlider.addEventListener('input', () => updatePreview(false));
+    opacitySlider.addEventListener('input', () => updatePreview(false));
+    // Checkboxes apply immediately
+    grayscaleCheckbox.addEventListener('change', () => updatePreview(true));
+    invertCheckbox.addEventListener('change', () => updatePreview(true));
+    mirrorCheckbox.addEventListener('change', () => updatePreview(true));
 
-    // Reset button
+    // Reset to defaults
     resetBtn.addEventListener('click', () => {
         brightnessSlider.value = 100;
         contrastSlider.value = 100;
@@ -5966,89 +6389,39 @@ function showImageEditModal(imageObj) {
         updatePreview();
     });
 
-    // Apply button - force save all current slider values
+    // Apply and close
     applyBtn.addEventListener('click', async () => {
-        // Get current values from controls
-        const brightness = parseInt(brightnessSlider.value);
-        const contrast = parseInt(contrastSlider.value);
-        const saturation = parseInt(saturationSlider.value);
-        const hue = parseInt(hueSlider.value);
-        const blur = parseFloat(blurSlider.value);
-        const opacity = parseInt(opacitySlider.value);
-        const grayscale = grayscaleCheckbox.checked;
-        const invert = invertCheckbox.checked;
-        const mirror = mirrorCheckbox.checked;
-
-        // Find the actual image in the canvas images array by ID
-        const images = canvas.getImages();
-        const actualImage = images.find(img => img.id === imageObj.id);
-
-        if (actualImage) {
-            // Force set all values on the actual image object
-            actualImage.brightness = brightness;
-            actualImage.contrast = contrast;
-            actualImage.saturation = saturation;
-            actualImage.hue = hue;
-            actualImage.blur = blur;
-            actualImage.opacity = opacity;
-            actualImage.grayscale = grayscale;
-            actualImage.invert = invert;
-            actualImage.mirror = mirror;
-        }
-
-        // Also update imageObj reference
-        imageObj.brightness = brightness;
-        imageObj.contrast = contrast;
-        imageObj.saturation = saturation;
-        imageObj.hue = hue;
-        imageObj.blur = blur;
-        imageObj.opacity = opacity;
-        imageObj.grayscale = grayscale;
-        imageObj.invert = invert;
-        imageObj.mirror = mirror;
-
+        // Values already applied via updatePreview, just save
+        canvas.clearFilterCache(imageObj);
+        canvas.applyFilters(imageObj);
         canvas.needsRender = true;
-        modal.remove();
+        panel.remove();
 
-        // Force immediate save - bypass pendingSave flag
         pendingSave = true;
         await saveNow();
         showToast('Image filters applied', 'success', 2000);
     });
 
-    // Cancel button
-    cancelBtn.addEventListener('click', () => {
-        // Revert to original values
-        imageObj.brightness = imageObj.originalBrightness || 100;
-        imageObj.contrast = imageObj.originalContrast || 100;
-        imageObj.saturation = imageObj.originalSaturation || 100;
-        imageObj.hue = imageObj.originalHue || 0;
-        imageObj.blur = imageObj.originalBlur || 0;
-        imageObj.opacity = imageObj.originalOpacity !== undefined ? imageObj.originalOpacity : 100;
-        imageObj.grayscale = imageObj.originalGrayscale || false;
-        imageObj.invert = imageObj.originalInvert || false;
-        imageObj.mirror = imageObj.originalMirror || false;
+    // Cancel - revert to original
+    function cancelEdit() {
+        imageObj.brightness = originalValues.brightness;
+        imageObj.contrast = originalValues.contrast;
+        imageObj.saturation = originalValues.saturation;
+        imageObj.hue = originalValues.hue;
+        imageObj.blur = originalValues.blur;
+        imageObj.opacity = originalValues.opacity;
+        imageObj.grayscale = originalValues.grayscale;
+        imageObj.invert = originalValues.invert;
+        imageObj.mirror = originalValues.mirror;
+
+        canvas.clearFilterCache(imageObj);
+        canvas.applyFilters(imageObj);
         canvas.needsRender = true;
-        modal.remove();
-    });
+        panel.remove();
+    }
 
-    // Store original values for cancel
-    imageObj.originalBrightness = imageObj.brightness || 100;
-    imageObj.originalContrast = imageObj.contrast || 100;
-    imageObj.originalSaturation = imageObj.saturation || 100;
-    imageObj.originalHue = imageObj.hue || 0;
-    imageObj.originalBlur = imageObj.blur || 0;
-    imageObj.originalOpacity = imageObj.opacity !== undefined ? imageObj.opacity : 100;
-    imageObj.originalGrayscale = imageObj.grayscale || false;
-    imageObj.originalInvert = imageObj.invert || false;
-    imageObj.originalMirror = imageObj.originalMirror || false;
-
-    // Close modal on overlay click
-    modal.addEventListener('click', (e) => {
-        if (e.target === modal) {
-            cancelBtn.click();
-        }
-    });
+    cancelBtn.addEventListener('click', cancelEdit);
+    closeBtn.addEventListener('click', cancelEdit);
 }
 
 function hexToRgb(hex) {

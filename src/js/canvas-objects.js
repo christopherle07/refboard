@@ -17,6 +17,7 @@ export class CanvasObjectsManager {
         this.resizeStart = { x: 0, y: 0, width: 0, height: 0 };
         this.isBoxSelecting = false;
         this.selectionBox = null;
+        this.editingTextObject = null;
     }
 
     setTool(tool) {
@@ -276,15 +277,13 @@ export class CanvasObjectsManager {
 
             // Only create if dragged a reasonable size
             if (width > 30 && height > 20) {
+                const defaultStyle = this.getDefaultTextStyle();
                 const textObj = {
                     id: this.generateId(),
                     type: 'text',
                     x, y, width, height,
-                    text: 'Double-click to edit',
-                    fontSize: 32,
-                    fontFamily: 'Arial',
-                    fontWeight: 'normal',
-                    color: '#000000',
+                    content: [{ text: 'Double-click to edit', style: { ...defaultStyle } }],
+                    defaultStyle: { ...defaultStyle },
                     textAlign: 'left',
                     visible: true,
                     zIndex: this.getNextZIndex()
@@ -409,56 +408,148 @@ export class CanvasObjectsManager {
             detail: textObj
         }));
 
-        // Create visible textarea for editing
-        const textarea = document.createElement('textarea');
-        textarea.className = 'inline-text-editor-visible';
-        textarea.value = textObj.text || '';
+        // Migrate if needed
+        this.migrateTextObject(textObj);
 
-        // Position the textarea at the text object's location
-        const rect = this.canvas.canvas.getBoundingClientRect();
-        const screenPos = this.canvas.worldToScreen(textObj.x, textObj.y);
-        const scaledWidth = textObj.width * this.canvas.zoom;
-        const scaledHeight = textObj.height * this.canvas.zoom;
+        // Create contenteditable div for rich text editing
+        const editor = document.createElement('div');
+        editor.className = 'rich-text-editor';
+        editor.contentEditable = 'true';
+        editor.spellcheck = false;
 
-        textarea.style.position = 'absolute';
-        textarea.style.left = `${rect.left + screenPos.x}px`;
-        textarea.style.top = `${rect.top + screenPos.y}px`;
-        textarea.style.width = `${scaledWidth}px`;
-        textarea.style.height = `${scaledHeight}px`;
-        textarea.style.fontSize = `${(textObj.fontSize || 32) * this.canvas.zoom}px`;
-        textarea.style.fontFamily = textObj.fontFamily || 'Arial';
-        textarea.style.fontWeight = textObj.fontWeight || 'normal';
-        textarea.style.color = textObj.color || '#000000';
-        textarea.style.textAlign = textObj.textAlign || 'left';
-        textarea.style.padding = `${10 * this.canvas.zoom}px`;
-        textarea.style.lineHeight = '1.2';
+        // Function to position/size the editor based on current zoom/pan
+        const updateEditorPosition = () => {
+            const rect = this.canvas.canvas.getBoundingClientRect();
+            const screenPos = this.canvas.worldToScreen(textObj.x, textObj.y);
+            const zoom = this.canvas.zoom;
+            const scaledWidth = textObj.width * zoom;
+            const scaledHeight = textObj.height * zoom;
 
-        document.body.appendChild(textarea);
-        textarea.focus();
-        textarea.select();
+            editor.style.position = 'absolute';
+            editor.style.left = `${rect.left + screenPos.x}px`;
+            editor.style.top = `${rect.top + screenPos.y}px`;
+            editor.style.width = `${scaledWidth}px`;
+            editor.style.height = `${scaledHeight}px`;
+            editor.style.padding = `${10 * zoom}px`;
+            editor.style.textAlign = textObj.textAlign || 'left';
 
-        // Update text as user types
-        textarea.addEventListener('input', () => {
-            textObj.text = textarea.value;
+            // Update font sizes to match new zoom
+            editor.innerHTML = this.contentToHTMLWithZoom(textObj.content, zoom);
+        };
+
+        // Initial positioning
+        updateEditorPosition();
+
+        document.body.appendChild(editor);
+        this.activeEditor = editor;
+
+        // Focus and select all
+        editor.focus();
+        const range = document.createRange();
+        range.selectNodeContents(editor);
+        const selection = window.getSelection();
+        selection.removeAllRanges();
+        selection.addRange(range);
+
+        // Sync changes back to content model
+        const syncContent = () => {
+            textObj.content = this.htmlToContent(editor, textObj.defaultStyle || this.getDefaultTextStyle());
             this.canvas.needsRender = true;
-        });
+        };
+
+        editor.addEventListener('input', syncContent);
+
+        // Handle view changes (zoom/pan) - update editor position
+        const handleViewChange = () => {
+            if (this.activeEditor === editor) {
+                // Save selection before updating
+                const sel = window.getSelection();
+                const hadFocus = document.activeElement === editor;
+
+                // Sync content before repositioning
+                syncContent();
+
+                // Update position and content
+                updateEditorPosition();
+
+                // Restore focus
+                if (hadFocus) {
+                    editor.focus();
+                    // Move cursor to end
+                    if (sel && editor.lastChild) {
+                        const newRange = document.createRange();
+                        newRange.selectNodeContents(editor);
+                        newRange.collapse(false);
+                        sel.removeAllRanges();
+                        sel.addRange(newRange);
+                    }
+                }
+            }
+        };
+
+        this.canvas.canvas.addEventListener('viewChanged', handleViewChange);
 
         // Finish editing
         const finishEditing = () => {
+            if (!textObj.isEditing) return; // Prevent double-finish
             textObj.isEditing = false;
             this.editingTextObject = null;
-            textarea.remove();
+            this.activeEditor = null;
+            this.canvas.canvas.removeEventListener('viewChanged', handleViewChange);
+            editor.remove();
             this.canvas.needsRender = true;
             this.dispatchObjectsChanged();
         };
 
-        textarea.addEventListener('blur', finishEditing);
-        textarea.addEventListener('keydown', (e) => {
+        // Handle blur - but ignore if clicking on toolbar
+        editor.addEventListener('blur', (e) => {
+            // Delay to check if focus moved to toolbar
+            setTimeout(() => {
+                const active = document.activeElement;
+                const toolbar = document.getElementById('floating-text-toolbar');
+                if (toolbar && (toolbar.contains(active) || toolbar.contains(e.relatedTarget))) {
+                    // Focus moved to toolbar, don't finish editing
+                    editor.focus();
+                    return;
+                }
+                finishEditing();
+            }, 100);
+        });
+
+        editor.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
                 e.preventDefault();
                 finishEditing();
             }
         });
+
+        // Store finish function for external access
+        this.finishCurrentEdit = finishEditing;
+    }
+
+    // Convert content to HTML with zoom scaling applied to font sizes
+    contentToHTMLWithZoom(content, zoom) {
+        if (!Array.isArray(content)) return '';
+        return content.map(span => {
+            const style = span.style || {};
+            const styleStr = [
+                `font-size: ${(style.fontSize || 32) * zoom}px`,
+                `font-family: ${style.fontFamily || 'Arial'}`,
+                `font-weight: ${style.fontWeight || 'normal'}`,
+                `font-style: ${style.fontStyle || 'normal'}`,
+                `color: ${style.color || '#000000'}`,
+                `text-decoration: ${style.textDecoration || 'none'}`
+            ].join('; ');
+
+            // Escape HTML and convert newlines to <br>
+            const text = span.text
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/\n/g, '<br>');
+
+            return `<span style="${styleStr}">${text}</span>`;
+        }).join('');
     }
 
     getObjectAtPoint(x, y) {
@@ -1064,75 +1155,173 @@ export class CanvasObjectsManager {
             ctx.globalAlpha = 0.7;
         }
 
-        const text = textObj.text || '';
-        const fontSize = textObj.fontSize || 32;
-        const fontFamily = textObj.fontFamily || 'Arial';
-        const fontWeight = textObj.fontWeight || 'normal';
-        const color = textObj.color || '#000000';
+        // Don't render text content while editing (contenteditable overlay shows it)
+        if (textObj.isEditing) {
+            return;
+        }
+
         const textAlign = textObj.textAlign || 'left';
-
-        ctx.font = `${fontWeight} ${fontSize}px ${fontFamily}`;
-        ctx.fillStyle = color;
-        ctx.textAlign = textAlign;
-        ctx.textBaseline = 'top';
-
-        const lineHeight = fontSize * 1.2;
         const padding = 10;
-        const maxWidth = textObj.width - (padding * 2); // Padding from edges
+        const maxWidth = textObj.width - (padding * 2);
 
-        // Calculate text alignment offset
-        let xOffset = padding; // Left padding
-        if (textAlign === 'center') {
-            xOffset = textObj.width / 2;
-        } else if (textAlign === 'right') {
-            xOffset = textObj.width - padding;
-        }
-
-        // Word wrap text to fit within textbox width
-        const paragraphs = text.split('\n');
-        const wrappedLines = [];
-
-        for (const paragraph of paragraphs) {
-            if (paragraph.trim() === '') {
-                wrappedLines.push('');
-                continue;
+        // Handle both legacy format and new rich text format
+        const content = Array.isArray(textObj.content) ? textObj.content : [{
+            text: textObj.text || '',
+            style: {
+                fontSize: textObj.fontSize || 32,
+                fontFamily: textObj.fontFamily || 'Arial',
+                fontWeight: textObj.fontWeight || 'normal',
+                fontStyle: 'normal',
+                color: textObj.color || '#000000',
+                textDecoration: 'none'
             }
+        }];
 
-            const words = paragraph.split(' ');
-            let currentLine = '';
+        // Get base font size for line height calculation
+        const baseFontSize = content.length > 0 ? (content[0].style?.fontSize || 32) : 32;
+        const lineHeight = baseFontSize * 1.2;
 
-            for (let i = 0; i < words.length; i++) {
-                const testLine = currentLine ? currentLine + ' ' + words[i] : words[i];
-                const metrics = ctx.measureText(testLine);
-
-                if (metrics.width > maxWidth && currentLine) {
-                    wrappedLines.push(currentLine);
-                    currentLine = words[i];
-                } else {
-                    currentLine = testLine;
+        // Convert content to styled segments (handling newlines)
+        const segments = [];
+        for (const span of content) {
+            const parts = span.text.split('\n');
+            parts.forEach((part, i) => {
+                if (part || i < parts.length - 1) {
+                    segments.push({
+                        text: part,
+                        style: span.style,
+                        isLineBreak: i < parts.length - 1
+                    });
                 }
-            }
-
-            if (currentLine) {
-                wrappedLines.push(currentLine);
-            }
+            });
         }
 
-        // Clip to textbox boundaries to prevent overflow
+        // Word-wrap with style awareness
+        const lines = this.wrapStyledText(ctx, segments, maxWidth);
+
+        // Clip to textbox boundaries
         ctx.save();
         ctx.beginPath();
         ctx.rect(textObj.x, textObj.y, textObj.width, textObj.height);
         ctx.clip();
 
-        // Draw each wrapped line (only if not editing - when editing, textarea shows the text)
-        if (!textObj.isEditing) {
-            wrappedLines.forEach((line, i) => {
-                const y = textObj.y + padding + i * lineHeight; // Top padding
-                ctx.fillText(line, textObj.x + xOffset, y);
-            });
+        // Draw each line
+        ctx.textBaseline = 'top';
+        let y = textObj.y + padding;
+
+        for (const line of lines) {
+            if (line.segments.length === 0) {
+                y += lineHeight;
+                continue;
+            }
+
+            // Calculate line width for alignment
+            let lineWidth = 0;
+            for (const seg of line.segments) {
+                ctx.font = this.styleToFont(seg.style);
+                lineWidth += ctx.measureText(seg.text).width;
+            }
+
+            // Calculate starting x position based on alignment
+            let x = textObj.x + padding;
+            if (textAlign === 'center') {
+                x = textObj.x + (textObj.width - lineWidth) / 2;
+            } else if (textAlign === 'right') {
+                x = textObj.x + textObj.width - padding - lineWidth;
+            }
+
+            // Render each segment in the line
+            for (const seg of line.segments) {
+                const style = seg.style || {};
+                ctx.font = this.styleToFont(style);
+                ctx.fillStyle = style.color || '#000000';
+
+                ctx.fillText(seg.text, x, y);
+
+                const segWidth = ctx.measureText(seg.text).width;
+
+                // Handle underline
+                if (style.textDecoration === 'underline') {
+                    ctx.strokeStyle = style.color || '#000000';
+                    ctx.lineWidth = 1;
+                    ctx.beginPath();
+                    ctx.moveTo(x, y + (style.fontSize || 32) * 0.9);
+                    ctx.lineTo(x + segWidth, y + (style.fontSize || 32) * 0.9);
+                    ctx.stroke();
+                }
+
+                // Handle strikethrough
+                if (style.textDecoration === 'line-through') {
+                    ctx.strokeStyle = style.color || '#000000';
+                    ctx.lineWidth = 1;
+                    ctx.beginPath();
+                    ctx.moveTo(x, y + (style.fontSize || 32) * 0.5);
+                    ctx.lineTo(x + segWidth, y + (style.fontSize || 32) * 0.5);
+                    ctx.stroke();
+                }
+
+                x += segWidth;
+            }
+
+            y += lineHeight;
         }
 
         ctx.restore();
+    }
+
+    // Convert style object to canvas font string
+    styleToFont(style) {
+        const fontStyle = style?.fontStyle || 'normal';
+        const fontWeight = style?.fontWeight || 'normal';
+        const fontSize = style?.fontSize || 32;
+        const fontFamily = style?.fontFamily || 'Arial';
+        return `${fontStyle} ${fontWeight} ${fontSize}px ${fontFamily}`;
+    }
+
+    // Word-wrap styled text segments
+    wrapStyledText(ctx, segments, maxWidth) {
+        const lines = [];
+        let currentLine = { segments: [], width: 0 };
+
+        for (const segment of segments) {
+            if (segment.isLineBreak) {
+                // Push current line and start new one
+                lines.push(currentLine);
+                currentLine = { segments: [], width: 0 };
+                continue;
+            }
+
+            if (!segment.text) continue;
+
+            ctx.font = this.styleToFont(segment.style);
+
+            // Split into words
+            const words = segment.text.split(/(\s+)/);
+
+            for (const word of words) {
+                if (!word) continue;
+
+                const wordWidth = ctx.measureText(word).width;
+
+                // Check if word fits on current line
+                if (currentLine.width + wordWidth > maxWidth && currentLine.segments.length > 0) {
+                    // Push current line and start new one
+                    lines.push(currentLine);
+                    currentLine = { segments: [], width: 0 };
+                }
+
+                // Add word to current line
+                currentLine.segments.push({ text: word, style: segment.style });
+                currentLine.width += wordWidth;
+            }
+        }
+
+        // Don't forget the last line
+        if (currentLine.segments.length > 0) {
+            lines.push(currentLine);
+        }
+
+        return lines;
     }
 
     renderColorPalette(ctx, palette, isPreview) {
@@ -1507,6 +1696,8 @@ export class CanvasObjectsManager {
 
     loadObjects(objects) {
         this.objects = objects || [];
+        // Migrate any legacy text objects to new rich text format
+        this.objects.forEach(obj => this.migrateTextObject(obj));
         this.canvas.needsRender = true;
     }
 
@@ -1517,6 +1708,7 @@ export class CanvasObjectsManager {
     }
 
     addText(x, y) {
+        const defaultStyle = this.getDefaultTextStyle();
         const textObj = {
             id: this.generateId(),
             type: 'text',
@@ -1524,12 +1716,11 @@ export class CanvasObjectsManager {
             y: y,
             width: 300,
             height: 100,
-            text: 'Double-click to edit',
-            fontSize: 32,
-            fontFamily: 'Arial',
-            fontWeight: 'normal',
-            color: '#000000',
-            textAlign: 'left'
+            content: [{ text: 'Double-click to edit', style: { ...defaultStyle } }],
+            defaultStyle: { ...defaultStyle },
+            textAlign: 'left',
+            visible: true,
+            zIndex: this.getNextZIndex()
         };
 
         this.objects.push(textObj);
@@ -1538,6 +1729,178 @@ export class CanvasObjectsManager {
         this.dispatchObjectsChanged();
 
         return textObj;
+    }
+
+    // Get default text style
+    getDefaultTextStyle() {
+        return {
+            fontSize: 32,
+            fontFamily: 'Arial',
+            fontWeight: 'normal',
+            fontStyle: 'normal',
+            color: '#000000',
+            textDecoration: 'none'
+        };
+    }
+
+    // Migrate legacy text object to new rich text format
+    migrateTextObject(obj) {
+        if (obj.type !== 'text') return obj;
+
+        // Already migrated (has content array)
+        if (Array.isArray(obj.content)) return obj;
+
+        // Legacy format - convert
+        const legacyText = obj.text || 'Double-click to edit';
+        const legacyStyle = {
+            fontSize: obj.fontSize || 32,
+            fontFamily: obj.fontFamily || 'Arial',
+            fontWeight: obj.fontWeight || 'normal',
+            fontStyle: 'normal',
+            color: obj.color || '#000000',
+            textDecoration: 'none'
+        };
+
+        // Convert to new format
+        obj.content = [{
+            text: legacyText,
+            style: { ...legacyStyle }
+        }];
+        obj.defaultStyle = { ...legacyStyle };
+
+        // Remove legacy properties (keep textAlign as it's still used)
+        delete obj.text;
+        delete obj.fontSize;
+        delete obj.fontFamily;
+        delete obj.fontWeight;
+        delete obj.color;
+
+        return obj;
+    }
+
+    // Convert content array to plain text (for backwards compatibility)
+    getPlainText(content) {
+        if (!Array.isArray(content)) return content || '';
+        return content.map(span => span.text).join('');
+    }
+
+    // Convert content array to HTML for contenteditable
+    contentToHTML(content) {
+        if (!Array.isArray(content)) return '';
+        return content.map(span => {
+            const style = span.style || {};
+            const styleStr = [
+                `font-size: ${style.fontSize || 32}px`,
+                `font-family: ${style.fontFamily || 'Arial'}`,
+                `font-weight: ${style.fontWeight || 'normal'}`,
+                `font-style: ${style.fontStyle || 'normal'}`,
+                `color: ${style.color || '#000000'}`,
+                `text-decoration: ${style.textDecoration || 'none'}`
+            ].join('; ');
+
+            // Escape HTML and convert newlines to <br>
+            const text = span.text
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/\n/g, '<br>');
+
+            return `<span style="${styleStr}">${text}</span>`;
+        }).join('');
+    }
+
+    // Convert HTML from contenteditable back to content array
+    htmlToContent(editorElement, defaultStyle) {
+        const content = [];
+
+        const processNode = (node) => {
+            if (node.nodeType === Node.TEXT_NODE) {
+                if (node.textContent) {
+                    // Get computed style from parent element
+                    const parent = node.parentElement;
+                    const style = parent ? this.extractStyleFromElement(parent, defaultStyle) : { ...defaultStyle };
+                    content.push({ text: node.textContent, style });
+                }
+            } else if (node.nodeName === 'BR') {
+                // Add newline
+                if (content.length > 0) {
+                    content[content.length - 1].text += '\n';
+                } else {
+                    content.push({ text: '\n', style: { ...defaultStyle } });
+                }
+            } else if (node.nodeType === Node.ELEMENT_NODE) {
+                // Process children
+                for (const child of node.childNodes) {
+                    processNode(child);
+                }
+            }
+        };
+
+        for (const child of editorElement.childNodes) {
+            processNode(child);
+        }
+
+        // Merge adjacent spans with same style
+        return this.mergeAdjacentSpans(content);
+    }
+
+    // Extract style from DOM element
+    extractStyleFromElement(element, defaultStyle) {
+        const computed = window.getComputedStyle(element);
+        // Font size in the editor is scaled by zoom, so we need to unscale it
+        const zoom = this.canvas.zoom || 1;
+        const rawFontSize = parseInt(computed.fontSize) || (defaultStyle.fontSize * zoom);
+        const fontSize = Math.round(rawFontSize / zoom);
+
+        return {
+            fontSize: fontSize,
+            fontFamily: computed.fontFamily || defaultStyle.fontFamily,
+            fontWeight: computed.fontWeight === '700' || computed.fontWeight === 'bold' ? 'bold' : 'normal',
+            fontStyle: computed.fontStyle || 'normal',
+            color: this.rgbToHex(computed.color) || defaultStyle.color,
+            textDecoration: computed.textDecorationLine || computed.textDecoration?.split(' ')[0] || 'none'
+        };
+    }
+
+    // Merge adjacent spans with identical styles
+    mergeAdjacentSpans(content) {
+        if (content.length === 0) return content;
+
+        const merged = [content[0]];
+        for (let i = 1; i < content.length; i++) {
+            const prev = merged[merged.length - 1];
+            const curr = content[i];
+
+            if (this.stylesEqual(prev.style, curr.style)) {
+                prev.text += curr.text;
+            } else {
+                merged.push(curr);
+            }
+        }
+        return merged;
+    }
+
+    // Check if two styles are equal
+    stylesEqual(a, b) {
+        return a.fontSize === b.fontSize &&
+               a.fontFamily === b.fontFamily &&
+               a.fontWeight === b.fontWeight &&
+               a.fontStyle === b.fontStyle &&
+               a.color === b.color &&
+               a.textDecoration === b.textDecoration;
+    }
+
+    // Convert RGB color to hex
+    rgbToHex(rgb) {
+        if (!rgb || rgb.startsWith('#')) return rgb;
+        const match = rgb.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+        if (match) {
+            const r = parseInt(match[1]).toString(16).padStart(2, '0');
+            const g = parseInt(match[2]).toString(16).padStart(2, '0');
+            const b = parseInt(match[3]).toString(16).padStart(2, '0');
+            return `#${r}${g}${b}`;
+        }
+        return rgb;
     }
 
 }

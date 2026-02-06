@@ -1,12 +1,21 @@
 .sidebar {
     width: 260px;
+    min-width: 260px;
     background: var(--bg-primary);
     border-right: 1px solid var(--border-color);
     display: flex;
     flex-direction: column;
     color: var(--text-primary);
     overflow: hidden;
+    transition: transform 0.2s ease, margin-left 0.2s ease;
 }
+
+.sidebar.collapsed {
+    transform: translateX(-260px);
+    margin-left: -260px;
+    pointer-events: none;
+}
+
 
 /* Hide all scrollbars in sidebar */
 .sidebar *,
@@ -33,6 +42,97 @@
     align-items: center;
     gap: 0;
     background: transparent;
+}
+
+.sidebar-collapse-btn {
+    position: static !important;
+    width: 28px;
+    height: 28px;
+    min-width: 28px;
+    min-height: 28px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    padding: 4px;
+    margin-right: 4px;
+    border-radius: 6px;
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s ease;
+    flex-shrink: 0;
+    visibility: visible !important;
+    opacity: 1 !important;
+}
+
+.sidebar-collapse-btn:hover {
+    background: var(--bg-hover);
+}
+
+.back-arrow-btn {
+    width: 28px;
+    height: 28px;
+    min-width: 28px;
+    min-height: 28px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    padding: 4px;
+    margin-right: 8px;
+    border-radius: 6px;
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s ease;
+    flex-shrink: 0;
+    visibility: visible !important;
+    opacity: 1 !important;
+}
+
+.back-arrow-btn:hover {
+    background: var(--bg-hover);
+}
+
+.back-arrow-icon {
+    width: 18px;
+    height: 18px;
+}
+
+/* Light theme: dark back arrow icon */
+html:not([data-theme="dark"]):not([data-theme="purplexing"]) .back-arrow-icon {
+    filter: brightness(0) invert(0.3);
+}
+
+/* Dark theme: light back arrow icon */
+html[data-theme="dark"] .back-arrow-icon {
+    filter: invert(1) brightness(0.9);
+}
+
+/* Purplexing theme: purple back arrow icon */
+html[data-theme="purplexing"] .back-arrow-icon {
+    filter: brightness(0) saturate(100%) invert(71%) sepia(35%) saturate(738%) hue-rotate(207deg) brightness(93%) contrast(91%);
+}
+
+.sidebar-collapse-icon {
+    width: 18px;
+    height: 18px;
+    color: var(--text-secondary);
+    transition: transform 0.2s ease;
+}
+
+/* Light theme: dark icon */
+html:not([data-theme="dark"]):not([data-theme="purplexing"]) .sidebar-collapse-icon {
+    filter: brightness(0) invert(0.3);
+}
+
+/* Dark theme: light icon */
+html[data-theme="dark"] .sidebar-collapse-icon {
+    filter: invert(1) brightness(0.9);
+}
+
+/* Purplexing theme: purple icon */
+html[data-theme="purplexing"] .sidebar-collapse-icon {
+    filter: brightness(0) saturate(100%) invert(71%) sepia(35%) saturate(738%) hue-rotate(207deg) brightness(93%) contrast(91%);
 }
 
 .toolbar-toggle-btn {
@@ -1327,6 +1427,38 @@ html[data-theme="purplexing"] .group-toggle-icon {
 
 .tool-btn.active .tool-icon {
     opacity: 1;
+}
+
+/* Tool Button Tooltips */
+.tool-btn[data-tooltip] {
+    position: relative;
+}
+
+.tool-btn[data-tooltip]::before {
+    content: attr(data-tooltip);
+    position: absolute;
+    right: calc(100% + 12px);
+    top: 50%;
+    transform: translateY(-50%);
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    white-space: nowrap;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    border: 1px solid var(--border-color);
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.15s ease, visibility 0.15s ease;
+    pointer-events: none;
+    z-index: 1000;
+}
+
+.tool-btn[data-tooltip]:hover::before {
+    opacity: 1;
+    visibility: visible;
 }
 
 /* Color Palette Popup */

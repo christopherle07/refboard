@@ -18,6 +18,11 @@ pub fn run() {
             commands::update_asset,
             commands::get_tag_presets,
             commands::save_tag_presets,
+            commands::save_image_file,
+            commands::get_images_dir,
+            commands::get_image_file_path,
+            commands::fetch_page_html,
+            commands::fetch_image_url,
         ])
         .setup(|app| {
             database::init_storage(app.handle())?;

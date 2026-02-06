@@ -1,6 +1,169 @@
 import { Canvas } from './canvas.js';
 import { boardManager } from './board-manager.js';
 
+function extractImageUrlsFromHtml(html) {
+    const urls = [];
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, 'text/html');
+
+    // Extract from img tags - prioritize srcset for higher resolution
+    doc.querySelectorAll('img').forEach(img => {
+        // Check srcset first for highest resolution
+        if (img.srcset) {
+            const srcsetParts = img.srcset.split(',').map(s => s.trim());
+            // Sort by descriptor (2x, 3x, or width like 1200w) to get highest res
+            const sorted = srcsetParts.sort((a, b) => {
+                const aMatch = a.match(/(\d+)(x|w)/);
+                const bMatch = b.match(/(\d+)(x|w)/);
+                const aVal = aMatch ? parseInt(aMatch[1]) : 0;
+                const bVal = bMatch ? parseInt(bMatch[1]) : 0;
+                return bVal - aVal;
+            });
+            if (sorted.length > 0) {
+                const url = sorted[0].split(/\s+/)[0];
+                if (url && url.startsWith('http')) urls.push(url);
+            }
+        }
+        // Fallback to src
+        if (img.src && img.src.startsWith('http')) {
+            urls.push(img.src);
+        }
+        // Check data-src for lazy loading
+        const dataSrc = img.getAttribute('data-src') || img.getAttribute('data-original');
+        if (dataSrc && dataSrc.startsWith('http')) {
+            urls.push(dataSrc);
+        }
+    });
+
+    // Extract from background-image styles
+    doc.querySelectorAll('[style*="background"]').forEach(el => {
+        const style = el.getAttribute('style');
+        const match = style.match(/url\(['"]?(https?:\/\/[^'")\s]+)['"]?\)/);
+        if (match) urls.push(match[1]);
+    });
+
+    // Extract from anchor tags that wrap images (Pinterest pattern)
+    doc.querySelectorAll('a[href*=".jpg"], a[href*=".png"], a[href*=".gif"], a[href*=".webp"]').forEach(a => {
+        if (a.href.startsWith('http')) urls.push(a.href);
+    });
+
+    // Extract any URLs containing pinimg.com (Pinterest CDN)
+    const pinimgMatches = html.match(/https?:\/\/[^"'\s]*pinimg\.com[^"'\s]*/gi);
+    if (pinimgMatches) {
+        urls.push(...pinimgMatches);
+    }
+
+    // Extract any image URLs from the raw HTML (fallback)
+    const rawUrlMatches = html.match(/https?:\/\/[^"'\s<>]+\.(jpg|jpeg|png|gif|webp)[^"'\s<>]*/gi);
+    if (rawUrlMatches) {
+        urls.push(...rawUrlMatches);
+    }
+
+    // Dedupe while preserving order, and filter for valid URLs
+    const uniqueUrls = [...new Set(urls)].filter(url => {
+        try {
+            new URL(url);
+            return true;
+        } catch {
+            return false;
+        }
+    });
+
+    // Prioritize higher resolution images (larger dimension indicators in URL)
+    uniqueUrls.sort((a, b) => {
+        // Pinterest URLs often have resolution like /236x/ or /564x/ or /originals/
+        const aMatch = a.match(/\/(\d+)x\//);
+        const bMatch = b.match(/\/(\d+)x\//);
+        const aHasOriginals = a.includes('/originals/') ? 10000 : 0;
+        const bHasOriginals = b.includes('/originals/') ? 10000 : 0;
+        const aVal = (aMatch ? parseInt(aMatch[1]) : 0) + aHasOriginals;
+        const bVal = (bMatch ? parseInt(bMatch[1]) : 0) + bHasOriginals;
+        return bVal - aVal;
+    });
+
+    return uniqueUrls;
+}
+
+async function extractImageFromPinterestPin(pinUrl) {
+    try {
+        console.log('Fetching Pinterest page:', pinUrl);
+        const html = await window.__TAURI__.core.invoke('fetch_page_html', { url: pinUrl });
+
+        // Extract pin ID from URL
+        const pinIdMatch = pinUrl.match(/\/pin\/(\d+)/);
+        const pinId = pinIdMatch ? pinIdMatch[1] : null;
+        console.log('Pin ID:', pinId);
+
+        // Pinterest embeds JSON data in script tags - look for __PWS_DATA__ or similar
+        // The JSON contains "orig" image URLs which are the highest quality
+
+        // Method 1: Look for the specific pin's image in JSON data
+        // Pinterest JSON often has structure like: "images":{"orig":{"url":"..."}}
+        const origUrlPattern = /"orig"\s*:\s*\{\s*[^}]*"url"\s*:\s*"(https:\/\/i\.pinimg\.com\/originals\/[^"]+)"/g;
+        const origMatches = [...html.matchAll(origUrlPattern)];
+        if (origMatches.length > 0) {
+            // Get unique URLs
+            const urls = [...new Set(origMatches.map(m => m[1]))];
+            console.log('Found orig URLs in JSON:', urls);
+            // Return the first one (should be the pin's image)
+            return urls[0];
+        }
+
+        // Method 2: Look for "url" fields with originals path in JSON context
+        const jsonOriginalsPattern = /"url"\s*:\s*"(https:\/\/i\.pinimg\.com\/originals\/[^"]+)"/g;
+        const jsonOrigMatches = [...html.matchAll(jsonOriginalsPattern)];
+        if (jsonOrigMatches.length > 0) {
+            const urls = [...new Set(jsonOrigMatches.map(m => m[1]))];
+            console.log('Found originals in JSON url fields:', urls);
+            return urls[0];
+        }
+
+        // Method 3: Look for high-res URLs (736x or higher) in JSON
+        const highResPattern = /"url"\s*:\s*"(https:\/\/i\.pinimg\.com\/\d+x\/[^"]+)"/g;
+        const highResMatches = [...html.matchAll(highResPattern)];
+        if (highResMatches.length > 0) {
+            const urls = [...new Set(highResMatches.map(m => m[1]))];
+            // Sort by resolution
+            urls.sort((a, b) => {
+                const aRes = parseInt(a.match(/\/(\d+)x\//)?.[1] || '0');
+                const bRes = parseInt(b.match(/\/(\d+)x\//)?.[1] || '0');
+                return bRes - aRes;
+            });
+            console.log('Found high-res URLs in JSON:', urls[0]);
+            return urls[0];
+        }
+
+        // Method 4: Fallback - look for any pinimg URL that's not a small thumbnail
+        const allPinimgPattern = /https:\/\/i\.pinimg\.com\/(?:originals|\d+x)\/[a-f0-9\/]+\.[a-z]+/gi;
+        const allMatches = [...new Set(html.match(allPinimgPattern) || [])];
+        if (allMatches.length > 0) {
+            // Filter out small sizes (75x, 140x, 236x) and sort by size
+            const filtered = allMatches.filter(url => {
+                const sizeMatch = url.match(/\/(\d+)x\//);
+                if (!sizeMatch) return true; // originals
+                return parseInt(sizeMatch[1]) >= 474;
+            });
+            filtered.sort((a, b) => {
+                if (a.includes('/originals/')) return -1;
+                if (b.includes('/originals/')) return 1;
+                const aRes = parseInt(a.match(/\/(\d+)x\//)?.[1] || '0');
+                const bRes = parseInt(b.match(/\/(\d+)x\//)?.[1] || '0');
+                return bRes - aRes;
+            });
+            if (filtered.length > 0) {
+                console.log('Found pinimg URL (fallback):', filtered[0]);
+                return filtered[0];
+            }
+        }
+
+        console.log('No image URL found in Pinterest page');
+        return null;
+    } catch (err) {
+        console.error('Failed to fetch Pinterest page:', err);
+        return null;
+    }
+}
+
 let canvas;
 let currentBoardId;
 let isPinned = false;
@@ -17,7 +180,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     syncChannel = new BroadcastChannel('board_sync_' + currentBoardId);
     
-    syncChannel.onmessage = (event) => {
+    syncChannel.onmessage = async (event) => {
         if (event.data.type === 'layer_visibility_changed') {
             const img = canvas.images.find(i => i.id === event.data.layerId);
             if (img) {
@@ -49,6 +212,20 @@ document.addEventListener('DOMContentLoaded', async () => {
             canvas.invalidateCullCache();
             canvas.needsRender = true;
             canvas.render();
+        } else if (event.data.type === 'image_added') {
+            // Image added in editor — add it here too
+            const data = event.data.image;
+            const resolvedSrc = await boardManager.resolveImageSrc(data.src);
+            const img = new Image();
+            img.onload = () => {
+                const added = canvas.addImageSilent(img, data.x, data.y, data.name, data.width, data.height);
+                added.id = data.id;
+                if (data.src && !data.src.startsWith('data:')) added.filePath = data.src;
+                canvas.invalidateCullCache();
+                canvas.needsRender = true;
+                canvas.render();
+            };
+            img.src = resolvedSrc;
         } else if (event.data.type === 'sync_state_response') {
             // Received current state from editor
             console.log('Floating window received state sync:', event.data.updates);
@@ -124,9 +301,15 @@ async function initFloatingWindow() {
 }
 
 function setupDragAndDrop() {
+    // Disable canvas.js built-in drop handler since we manage drops here
+    canvas.externalDropHandler = true;
+
     canvas.canvas.addEventListener('dragenter', (e) => {
         e.preventDefault();
-        if (e.dataTransfer.types.includes('Files')) {
+        // Show overlay for files, HTML (website drags), or URI lists
+        if (e.dataTransfer.types.includes('Files') ||
+            e.dataTransfer.types.includes('text/html') ||
+            e.dataTransfer.types.includes('text/uri-list')) {
             canvas.showDragOverlay();
         }
     });
@@ -145,69 +328,206 @@ function setupDragAndDrop() {
     canvas.canvas.addEventListener('drop', async (e) => {
         e.preventDefault();
         canvas.hideDragOverlay();
-        
-        const files = Array.from(e.dataTransfer.files);
-        const imageFiles = files.filter(f => f.type.startsWith('image/'));
-        
+
         const rect = canvas.canvas.getBoundingClientRect();
         const { x, y } = canvas.screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
-        
-        for (const file of imageFiles) {
-            const reader = new FileReader();
-            reader.onload = async (event) => {
+
+        const files = Array.from(e.dataTransfer.files);
+        const imageFiles = files.filter(f => f.type.startsWith('image/'));
+
+        // Handle file drops (existing behavior)
+        if (imageFiles.length > 0) {
+            for (const file of imageFiles) {
+                const reader = new FileReader();
+                reader.onload = async (event) => {
+                    const dataUrl = event.target.result;
+
+                    // Try to save as file on disk
+                    let filePath = await boardManager.saveImageFile(dataUrl, file.name);
+                    let imgSrc = dataUrl;
+                    if (filePath) {
+                        imgSrc = await boardManager.resolveImageSrc(filePath);
+                    }
+
+                    const img = new Image();
+                    img.onload = async () => {
+                        const added = canvas.addImage(img, x, y, file.name);
+                        if (filePath) added.filePath = filePath;
+
+                        const srcForSync = filePath || dataUrl;
+
+                        // Broadcast to editor so it adds the image too
+                        if (syncChannel) {
+                            syncChannel.postMessage({
+                                type: 'image_added',
+                                image: {
+                                    id: added.id,
+                                    name: added.name,
+                                    src: srcForSync,
+                                    x: added.x,
+                                    y: added.y,
+                                    width: added.width,
+                                    height: added.height
+                                }
+                            });
+                        }
+
+                        const board = await boardManager.getBoard(currentBoardId);
+                        const currentAssets = board.assets || [];
+
+                        const assetExists = currentAssets.some(a => a.name === file.name);
+                        if (!assetExists) {
+                            const updatedAssets = [...currentAssets, {
+                                id: Date.now() + Math.random(),
+                                src: srcForSync,
+                                name: file.name
+                            }];
+                            await boardManager.updateBoard(currentBoardId, { assets: updatedAssets });
+                            await boardManager.addToAllAssets(file.name, srcForSync);
+                        }
+                    };
+                    img.src = imgSrc;
+                };
+                reader.readAsDataURL(file);
+            }
+            return;
+        }
+
+        // Handle URL drops from websites (text/html or text/uri-list)
+        let imageUrls = [];
+
+        // Try to extract from HTML first (most reliable for complex sites like Pinterest)
+        const html = e.dataTransfer.getData('text/html');
+        if (html) {
+            imageUrls = extractImageUrlsFromHtml(html);
+        }
+
+        // Fallback to uri-list or plain text
+        if (imageUrls.length === 0) {
+            const uriList = e.dataTransfer.getData('text/uri-list') || e.dataTransfer.getData('text/plain');
+            if (uriList) {
+                const urls = uriList.split('\n').filter(u => u.trim() && !u.startsWith('#'));
+                for (const url of urls) {
+                    const trimmed = url.trim();
+                    if (trimmed.match(/^https?:\/\/.+\.(jpg|jpeg|png|gif|webp|bmp|svg)/i) ||
+                        trimmed.match(/^https?:\/\/.+\/image/i) ||
+                        trimmed.match(/^https?:\/\/.*pinimg\.com/i)) {
+                        imageUrls.push(trimmed);
+                    }
+                    // Check for Pinterest pin page URLs - we'll need to fetch and parse these
+                    else if (trimmed.match(/^https?:\/\/(www\.)?pinterest\.[a-z]+\/pin\//i)) {
+                        console.log('Detected Pinterest pin URL, will fetch page to extract image');
+                        try {
+                            const extractedUrl = await extractImageFromPinterestPin(trimmed);
+                            if (extractedUrl) {
+                                imageUrls.push(extractedUrl);
+                            }
+                        } catch (err) {
+                            console.error('Failed to extract image from Pinterest pin:', err);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Fetch and add images from URLs
+        if (imageUrls.length > 0) {
+            try {
+                const url = imageUrls[0];
+                const dataUrl = await window.__TAURI__.core.invoke('fetch_image_url', { url });
+
+                // Generate a filename from URL
+                const urlObj = new URL(url);
+                let filename = urlObj.pathname.split('/').pop() || 'image';
+                if (!filename.match(/\.(jpg|jpeg|png|gif|webp|bmp)$/i)) {
+                    filename += '.png';
+                }
+
+                let filePath = await boardManager.saveImageFile(dataUrl, filename);
+                let imgSrc = dataUrl;
+                if (filePath) {
+                    imgSrc = await boardManager.resolveImageSrc(filePath);
+                }
+
                 const img = new Image();
                 img.onload = async () => {
-                    canvas.addImage(img, x, y, file.name);
-                    
+                    const added = canvas.addImage(img, x, y, filename);
+                    if (filePath) added.filePath = filePath;
+
+                    const srcForSync = filePath || dataUrl;
+
+                    // Broadcast to editor so it adds the image too
+                    if (syncChannel) {
+                        syncChannel.postMessage({
+                            type: 'image_added',
+                            image: {
+                                id: added.id,
+                                name: added.name,
+                                src: srcForSync,
+                                x: added.x,
+                                y: added.y,
+                                width: added.width,
+                                height: added.height
+                            }
+                        });
+                    }
+
                     const board = await boardManager.getBoard(currentBoardId);
                     const currentAssets = board.assets || [];
 
-                    const assetExists = currentAssets.some(a => a.name === file.name);
+                    const assetExists = currentAssets.some(a => a.name === filename);
                     if (!assetExists) {
                         const updatedAssets = [...currentAssets, {
                             id: Date.now() + Math.random(),
-                            src: event.target.result,
-                            name: file.name
+                            src: srcForSync,
+                            name: filename
                         }];
                         await boardManager.updateBoard(currentBoardId, { assets: updatedAssets });
-                        await boardManager.addToAllAssets(file.name, event.target.result);
+                        await boardManager.addToAllAssets(filename, srcForSync);
                     }
                 };
-                img.src = event.target.result;
-            };
-            reader.readAsDataURL(file);
+                img.src = imgSrc;
+            } catch (err) {
+                console.error('Failed to add image from URL drop:', err);
+            }
         }
     });
 }
 
-function loadLayers(layers, viewState = null) {
+async function loadLayers(layers, viewState = null) {
+    canvas.clear();
+
+    // Restore view state immediately after clear
+    if (viewState) {
+        if (viewState.pan) {
+            canvas.pan.x = viewState.pan.x;
+            canvas.pan.y = viewState.pan.y;
+        }
+        if (viewState.zoom) {
+            canvas.zoom = viewState.zoom;
+        }
+    }
+
+    if (!layers || !layers.length) {
+        // Force initial render
+        canvas.invalidateCullCache();
+        canvas.needsRender = true;
+        canvas.render();
+        return;
+    }
+
+    // Resolve all image sources (file refs → asset URLs) up front
+    const resolvedLayers = await Promise.all(layers.map(async (layer) => {
+        const resolvedSrc = await boardManager.resolveImageSrc(layer.src);
+        const filePath = (layer.src && !layer.src.startsWith('data:')) ? layer.src : null;
+        return { layer, resolvedSrc, filePath };
+    }));
+
     return new Promise(resolve => {
-        canvas.clear();
-
-        // Restore view state immediately after clear
-        if (viewState) {
-            if (viewState.pan) {
-                canvas.pan.x = viewState.pan.x;
-                canvas.pan.y = viewState.pan.y;
-            }
-            if (viewState.zoom) {
-                canvas.zoom = viewState.zoom;
-            }
-        }
-
-        if (!layers || !layers.length) {
-            // Force initial render
-            canvas.invalidateCullCache();
-            canvas.needsRender = true;
-            canvas.render();
-            resolve();
-            return;
-        }
-
         let loaded = 0;
-        const total = layers.length;
+        const total = resolvedLayers.length;
 
-        layers.forEach(layer => {
+        resolvedLayers.forEach(({ layer, resolvedSrc, filePath }) => {
             const img = new Image();
             img.onload = () => {
                 const visible = layer.visible !== false;
@@ -215,6 +535,7 @@ function loadLayers(layers, viewState = null) {
                 added.id = layer.id;
                 added.zIndex = layer.zIndex || 0;
                 added.rotation = layer.rotation || 0;
+                if (filePath) added.filePath = filePath;
                 // Restore filter properties (only if they exist and are not null)
                 if (layer.brightness != null) added.brightness = layer.brightness;
                 if (layer.contrast != null) added.contrast = layer.contrast;
@@ -225,6 +546,11 @@ function loadLayers(layers, viewState = null) {
                 if (layer.grayscale === true) added.grayscale = true;
                 if (layer.invert === true) added.invert = true;
                 if (layer.mirror === true) added.mirror = true;
+
+                // Build filter cache at load time if image has non-default filter values
+                if (canvas.buildFilterString(added)) {
+                    canvas.applyFilters(added);
+                }
 
                 loaded++;
                 if (loaded >= total) {
@@ -246,7 +572,7 @@ function loadLayers(layers, viewState = null) {
                     resolve();
                 }
             };
-            img.src = layer.src;
+            img.src = resolvedSrc;
         });
     });
 }
@@ -421,7 +747,7 @@ function setupContextMenu() {
             canvas.resetView();
             contextMenu.classList.remove('show');
         } else if (action === 'edit-image' && clickedImageObj) {
-            showImageEditModal(clickedImageObj);
+            showImageEditPanel(clickedImageObj);
             contextMenu.classList.remove('show');
         } else if (action === 'hide-image' && clickedImageId) {
             canvas.toggleVisibility(clickedImageId);
@@ -491,7 +817,7 @@ function saveNow() {
         const layer = {
             id: img.id,
             name: img.name,
-            src: img.img.src,
+            src: img.filePath || img.img.src,
             x: img.x,
             y: img.y,
             width: img.width,
@@ -565,131 +891,12 @@ function setupToolbarToggle() {
     });
 }
 
-function showImageEditModal(imageObj) {
-    // Remove any existing edit modals
-    const existingModals = document.querySelectorAll('.modal-overlay');
-    existingModals.forEach(m => {
-        if (m.querySelector('#edit-apply')) {
-            m.remove();
-        }
-    });
-
-    const modal = document.createElement('div');
-    modal.className = 'modal-overlay';
-    modal.innerHTML = `
-        <div class="modal" style="max-width: 500px;">
-            <div class="modal-header">
-                <h2>Edit Image</h2>
-            </div>
-            <div class="modal-body" style="padding: 24px;">
-                <div style="margin-bottom: 20px;">
-                    <label style="display: block; margin-bottom: 8px; font-weight: 500;">Brightness</label>
-                    <input type="range" id="edit-brightness" min="0" max="200" value="100" class="themed-slider" style="width: 100%;">
-                    <div style="text-align: center; margin-top: 4px; font-size: 14px; color: var(--text-secondary);">
-                        <span id="brightness-value">100%</span>
-                    </div>
-                </div>
-
-                <div style="margin-bottom: 20px;">
-                    <label style="display: block; margin-bottom: 8px; font-weight: 500;">Contrast</label>
-                    <input type="range" id="edit-contrast" min="0" max="200" value="100" class="themed-slider" style="width: 100%;">
-                    <div style="text-align: center; margin-top: 4px; font-size: 14px; color: var(--text-secondary);">
-                        <span id="contrast-value">100%</span>
-                    </div>
-                </div>
-
-                <div style="margin-bottom: 20px;">
-                    <label style="display: block; margin-bottom: 8px; font-weight: 500;">Saturation</label>
-                    <input type="range" id="edit-saturation" min="0" max="200" value="100" class="themed-slider" style="width: 100%;">
-                    <div style="text-align: center; margin-top: 4px; font-size: 14px; color: var(--text-secondary);">
-                        <span id="saturation-value">100%</span>
-                    </div>
-                </div>
-
-                <div style="margin-bottom: 20px;">
-                    <label style="display: block; margin-bottom: 8px; font-weight: 500;">Hue Rotate</label>
-                    <input type="range" id="edit-hue" min="0" max="360" value="0" class="themed-slider" style="width: 100%;">
-                    <div style="text-align: center; margin-top: 4px; font-size: 14px; color: var(--text-secondary);">
-                        <span id="hue-value">0°</span>
-                    </div>
-                </div>
-
-                <div style="margin-bottom: 20px;">
-                    <label style="display: block; margin-bottom: 8px; font-weight: 500;">Blur</label>
-                    <input type="range" id="edit-blur" min="0" max="10" value="0" step="0.5" class="themed-slider" style="width: 100%;">
-                    <div style="text-align: center; margin-top: 4px; font-size: 14px; color: var(--text-secondary);">
-                        <span id="blur-value">0px</span>
-                    </div>
-                </div>
-
-                <div style="margin-bottom: 20px;">
-                    <label style="display: block; margin-bottom: 8px; font-weight: 500;">Opacity</label>
-                    <input type="range" id="edit-opacity" min="0" max="100" value="100" class="themed-slider" style="width: 100%;">
-                    <div style="text-align: center; margin-top: 4px; font-size: 14px; color: var(--text-secondary);">
-                        <span id="opacity-value">100%</span>
-                    </div>
-                </div>
-
-                <div style="margin-bottom: 20px;">
-                    <label style="display: flex; align-items: center; justify-content: space-between; cursor: pointer;">
-                        <span style="font-weight: 500;">Grayscale</span>
-                        <label class="toggle-switch">
-                            <input type="checkbox" id="edit-grayscale">
-                            <span class="toggle-slider"></span>
-                        </label>
-                    </label>
-                </div>
-
-                <div style="margin-bottom: 20px;">
-                    <label style="display: flex; align-items: center; justify-content: space-between; cursor: pointer;">
-                        <span style="font-weight: 500;">Invert Colors</span>
-                        <label class="toggle-switch">
-                            <input type="checkbox" id="edit-invert">
-                            <span class="toggle-slider"></span>
-                        </label>
-                    </label>
-                </div>
-
-                <div style="margin-bottom: 20px;">
-                    <label style="display: flex; align-items: center; justify-content: space-between; cursor: pointer;">
-                        <span style="font-weight: 500;">Mirror</span>
-                        <label class="toggle-switch">
-                            <input type="checkbox" id="edit-mirror">
-                            <span class="toggle-slider"></span>
-                        </label>
-                    </label>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button class="modal-btn modal-btn-secondary" id="edit-reset">Reset</button>
-                <button class="modal-btn modal-btn-primary" id="edit-apply">Apply</button>
-                <button class="modal-btn modal-btn-secondary" id="edit-cancel">Cancel</button>
-            </div>
-        </div>
-    `;
-
-    document.body.appendChild(modal);
-    modal.style.display = 'flex';
-
-    // Get controls
-    const brightnessSlider = modal.querySelector('#edit-brightness');
-    const contrastSlider = modal.querySelector('#edit-contrast');
-    const saturationSlider = modal.querySelector('#edit-saturation');
-    const hueSlider = modal.querySelector('#edit-hue');
-    const blurSlider = modal.querySelector('#edit-blur');
-    const opacitySlider = modal.querySelector('#edit-opacity');
-    const grayscaleCheckbox = modal.querySelector('#edit-grayscale');
-    const invertCheckbox = modal.querySelector('#edit-invert');
-    const mirrorCheckbox = modal.querySelector('#edit-mirror');
-    const brightnessValue = modal.querySelector('#brightness-value');
-    const contrastValue = modal.querySelector('#contrast-value');
-    const saturationValue = modal.querySelector('#saturation-value');
-    const hueValue = modal.querySelector('#hue-value');
-    const blurValue = modal.querySelector('#blur-value');
-    const opacityValue = modal.querySelector('#opacity-value');
-    const resetBtn = modal.querySelector('#edit-reset');
-    const applyBtn = modal.querySelector('#edit-apply');
-    const cancelBtn = modal.querySelector('#edit-cancel');
+function showImageEditPanel(imageObj) {
+    // Remove any existing edit panels
+    const existingPanel = document.querySelector('.image-edit-panel');
+    if (existingPanel) {
+        existingPanel.remove();
+    }
 
     // Store original values for cancel
     const originalValues = {
@@ -704,24 +911,215 @@ function showImageEditModal(imageObj) {
         mirror: imageObj.mirror || false
     };
 
-    // Initialize with current values if they exist
-    brightnessSlider.value = originalValues.brightness;
-    contrastSlider.value = originalValues.contrast;
-    saturationSlider.value = originalValues.saturation;
-    hueSlider.value = originalValues.hue;
-    blurSlider.value = originalValues.blur;
-    opacitySlider.value = originalValues.opacity;
-    grayscaleCheckbox.checked = originalValues.grayscale;
-    invertCheckbox.checked = originalValues.invert;
-    mirrorCheckbox.checked = originalValues.mirror;
-    brightnessValue.textContent = `${brightnessSlider.value}%`;
-    contrastValue.textContent = `${contrastSlider.value}%`;
-    saturationValue.textContent = `${saturationSlider.value}%`;
-    hueValue.textContent = `${hueSlider.value}°`;
-    blurValue.textContent = `${blurSlider.value}px`;
-    opacityValue.textContent = `${opacitySlider.value}%`;
+    const panel = document.createElement('div');
+    panel.className = 'image-edit-panel';
+    panel.innerHTML = `
+        <div class="image-edit-panel-header">
+            <span class="image-edit-panel-title">Edit Image</span>
+            <button class="image-edit-panel-close">&times;</button>
+        </div>
+        <div class="image-edit-panel-body">
+            <div class="edit-control">
+                <label>Brightness <span class="edit-value" id="brightness-value">${originalValues.brightness}%</span></label>
+                <input type="range" id="edit-brightness" min="0" max="200" value="${originalValues.brightness}" class="themed-slider">
+            </div>
+            <div class="edit-control">
+                <label>Contrast <span class="edit-value" id="contrast-value">${originalValues.contrast}%</span></label>
+                <input type="range" id="edit-contrast" min="0" max="200" value="${originalValues.contrast}" class="themed-slider">
+            </div>
+            <div class="edit-control">
+                <label>Saturation <span class="edit-value" id="saturation-value">${originalValues.saturation}%</span></label>
+                <input type="range" id="edit-saturation" min="0" max="200" value="${originalValues.saturation}" class="themed-slider">
+            </div>
+            <div class="edit-control">
+                <label>Hue <span class="edit-value" id="hue-value">${originalValues.hue}°</span></label>
+                <input type="range" id="edit-hue" min="0" max="360" value="${originalValues.hue}" class="themed-slider">
+            </div>
+            <div class="edit-control">
+                <label>Blur <span class="edit-value" id="blur-value">${originalValues.blur}px</span></label>
+                <input type="range" id="edit-blur" min="0" max="10" value="${originalValues.blur}" step="0.5" class="themed-slider">
+            </div>
+            <div class="edit-control">
+                <label>Opacity <span class="edit-value" id="opacity-value">${originalValues.opacity}%</span></label>
+                <input type="range" id="edit-opacity" min="0" max="100" value="${originalValues.opacity}" class="themed-slider">
+            </div>
+            <div class="edit-checkbox-row">
+                <label><input type="checkbox" id="edit-grayscale" ${originalValues.grayscale ? 'checked' : ''}> Grayscale</label>
+                <label><input type="checkbox" id="edit-invert" ${originalValues.invert ? 'checked' : ''}> Invert</label>
+                <label><input type="checkbox" id="edit-mirror" ${originalValues.mirror ? 'checked' : ''}> Mirror</label>
+            </div>
+        </div>
+        <div class="image-edit-panel-footer">
+            <button class="edit-btn edit-btn-secondary" id="edit-reset">Reset</button>
+            <button class="edit-btn edit-btn-secondary" id="edit-cancel">Cancel</button>
+            <button class="edit-btn edit-btn-primary" id="edit-apply">Apply</button>
+        </div>
+    `;
 
-    // Update preview as sliders change
+    // Add panel styles if not already present
+    if (!document.querySelector('#image-edit-panel-styles')) {
+        const style = document.createElement('style');
+        style.id = 'image-edit-panel-styles';
+        style.textContent = `
+            .image-edit-panel {
+                position: fixed;
+                top: 80px;
+                right: 20px;
+                width: 280px;
+                background: var(--bg-primary, #ffffff);
+                border: 1px solid var(--border-color, #e0e0e0);
+                border-radius: 8px;
+                box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+                z-index: 1000;
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                user-select: none;
+            }
+            .image-edit-panel-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                padding: 12px 16px;
+                border-bottom: 1px solid var(--border-color, #e0e0e0);
+                cursor: move;
+                background: var(--bg-secondary, #f5f5f5);
+                border-radius: 8px 8px 0 0;
+            }
+            .image-edit-panel-title {
+                font-weight: 600;
+                font-size: 14px;
+                color: var(--text-primary, #1a1a1a);
+            }
+            .image-edit-panel-close {
+                background: none;
+                border: none;
+                font-size: 20px;
+                cursor: pointer;
+                color: var(--text-secondary, #666);
+                padding: 0;
+                line-height: 1;
+            }
+            .image-edit-panel-close:hover {
+                color: var(--text-primary, #1a1a1a);
+            }
+            .image-edit-panel-body {
+                padding: 16px;
+            }
+            .edit-control {
+                margin-bottom: 14px;
+            }
+            .edit-control label {
+                display: flex;
+                justify-content: space-between;
+                font-size: 12px;
+                font-weight: 500;
+                margin-bottom: 6px;
+                color: var(--text-primary, #1a1a1a);
+            }
+            .edit-value {
+                color: var(--text-secondary, #666);
+                font-weight: 400;
+            }
+            .edit-control input[type="range"] {
+                width: 100%;
+            }
+            .edit-checkbox-row {
+                display: flex;
+                gap: 12px;
+                flex-wrap: wrap;
+                padding-top: 8px;
+                border-top: 1px solid var(--border-color, #e0e0e0);
+            }
+            .edit-checkbox-row label {
+                display: flex;
+                align-items: center;
+                gap: 4px;
+                font-size: 12px;
+                color: var(--text-primary, #1a1a1a);
+                cursor: pointer;
+            }
+            .image-edit-panel-footer {
+                display: flex;
+                gap: 8px;
+                padding: 12px 16px;
+                border-top: 1px solid var(--border-color, #e0e0e0);
+                justify-content: flex-end;
+            }
+            .edit-btn {
+                padding: 6px 12px;
+                border-radius: 4px;
+                font-size: 12px;
+                font-weight: 500;
+                cursor: pointer;
+                border: 1px solid var(--border-color, #e0e0e0);
+            }
+            .edit-btn-primary {
+                background: var(--accent-color, #007AFF);
+                color: white;
+                border-color: var(--accent-color, #007AFF);
+            }
+            .edit-btn-primary:hover {
+                background: var(--accent-hover, #0056b3);
+            }
+            .edit-btn-secondary {
+                background: var(--bg-primary, #ffffff);
+                color: var(--text-primary, #1a1a1a);
+            }
+            .edit-btn-secondary:hover {
+                background: var(--bg-secondary, #f5f5f5);
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    document.body.appendChild(panel);
+
+    // Make panel draggable
+    const header = panel.querySelector('.image-edit-panel-header');
+    let isDraggingPanel = false;
+    let dragOffsetX = 0;
+    let dragOffsetY = 0;
+
+    header.addEventListener('mousedown', (e) => {
+        if (e.target.classList.contains('image-edit-panel-close')) return;
+        isDraggingPanel = true;
+        dragOffsetX = e.clientX - panel.offsetLeft;
+        dragOffsetY = e.clientY - panel.offsetTop;
+        e.preventDefault();
+    });
+
+    document.addEventListener('mousemove', (e) => {
+        if (!isDraggingPanel) return;
+        panel.style.left = (e.clientX - dragOffsetX) + 'px';
+        panel.style.top = (e.clientY - dragOffsetY) + 'px';
+        panel.style.right = 'auto';
+    });
+
+    document.addEventListener('mouseup', () => {
+        isDraggingPanel = false;
+    });
+
+    // Get controls
+    const brightnessSlider = panel.querySelector('#edit-brightness');
+    const contrastSlider = panel.querySelector('#edit-contrast');
+    const saturationSlider = panel.querySelector('#edit-saturation');
+    const hueSlider = panel.querySelector('#edit-hue');
+    const blurSlider = panel.querySelector('#edit-blur');
+    const opacitySlider = panel.querySelector('#edit-opacity');
+    const grayscaleCheckbox = panel.querySelector('#edit-grayscale');
+    const invertCheckbox = panel.querySelector('#edit-invert');
+    const mirrorCheckbox = panel.querySelector('#edit-mirror');
+    const brightnessValue = panel.querySelector('#brightness-value');
+    const contrastValue = panel.querySelector('#contrast-value');
+    const saturationValue = panel.querySelector('#saturation-value');
+    const hueValue = panel.querySelector('#hue-value');
+    const blurValue = panel.querySelector('#blur-value');
+    const opacityValue = panel.querySelector('#opacity-value');
+    const resetBtn = panel.querySelector('#edit-reset');
+    const applyBtn = panel.querySelector('#edit-apply');
+    const cancelBtn = panel.querySelector('#edit-cancel');
+    const closeBtn = panel.querySelector('.image-edit-panel-close');
+
+    // Update live preview
     function updatePreview() {
         const brightness = parseInt(brightnessSlider.value);
         const contrast = parseInt(contrastSlider.value);
@@ -740,7 +1138,7 @@ function showImageEditModal(imageObj) {
         blurValue.textContent = `${blur}px`;
         opacityValue.textContent = `${opacity}%`;
 
-        // Apply filters to image
+        // Apply to image object
         imageObj.brightness = brightness;
         imageObj.contrast = contrast;
         imageObj.saturation = saturation;
@@ -751,6 +1149,9 @@ function showImageEditModal(imageObj) {
         imageObj.invert = invert;
         imageObj.mirror = mirror;
 
+        // Rebuild filter cache and render
+        canvas.clearFilterCache(imageObj);
+        canvas.applyFilters(imageObj);
         canvas.needsRender = true;
     }
 
@@ -764,7 +1165,7 @@ function showImageEditModal(imageObj) {
     invertCheckbox.addEventListener('change', updatePreview);
     mirrorCheckbox.addEventListener('change', updatePreview);
 
-    // Reset button
+    // Reset to defaults
     resetBtn.addEventListener('click', () => {
         brightnessSlider.value = 100;
         contrastSlider.value = 100;
@@ -778,49 +1179,13 @@ function showImageEditModal(imageObj) {
         updatePreview();
     });
 
-    // Apply button - force save all current slider values
+    // Apply and close
     applyBtn.addEventListener('click', async () => {
-        // Get current values from controls
-        const brightness = parseInt(brightnessSlider.value);
-        const contrast = parseInt(contrastSlider.value);
-        const saturation = parseInt(saturationSlider.value);
-        const hue = parseInt(hueSlider.value);
-        const blur = parseFloat(blurSlider.value);
-        const opacity = parseInt(opacitySlider.value);
-        const grayscale = grayscaleCheckbox.checked;
-        const invert = invertCheckbox.checked;
-        const mirror = mirrorCheckbox.checked;
-
-        // Find the actual image in the canvas images array by ID
-        const images = canvas.getImages();
-        const actualImage = images.find(img => img.id === imageObj.id);
-
-        if (actualImage) {
-            // Force set all values on the actual image object
-            actualImage.brightness = brightness;
-            actualImage.contrast = contrast;
-            actualImage.saturation = saturation;
-            actualImage.hue = hue;
-            actualImage.blur = blur;
-            actualImage.opacity = opacity;
-            actualImage.grayscale = grayscale;
-            actualImage.invert = invert;
-            actualImage.mirror = mirror;
-        }
-
-        // Also update imageObj reference
-        imageObj.brightness = brightness;
-        imageObj.contrast = contrast;
-        imageObj.saturation = saturation;
-        imageObj.hue = hue;
-        imageObj.blur = blur;
-        imageObj.opacity = opacity;
-        imageObj.grayscale = grayscale;
-        imageObj.invert = invert;
-        imageObj.mirror = mirror;
-
+        // Values already applied via updatePreview
+        canvas.clearFilterCache(imageObj);
+        canvas.applyFilters(imageObj);
         canvas.needsRender = true;
-        modal.remove();
+        panel.remove();
 
         // Broadcast filter changes to editor
         if (syncChannel) {
@@ -828,27 +1193,25 @@ function showImageEditModal(imageObj) {
                 type: 'image_filters_changed',
                 imageId: imageObj.id,
                 filters: {
-                    brightness,
-                    contrast,
-                    saturation,
-                    hue,
-                    blur,
-                    opacity,
-                    grayscale,
-                    invert,
-                    mirror
+                    brightness: imageObj.brightness,
+                    contrast: imageObj.contrast,
+                    saturation: imageObj.saturation,
+                    hue: imageObj.hue,
+                    blur: imageObj.blur,
+                    opacity: imageObj.opacity,
+                    grayscale: imageObj.grayscale,
+                    invert: imageObj.invert,
+                    mirror: imageObj.mirror
                 }
             });
         }
 
-        // Force immediate save
         pendingSave = true;
         saveNow();
     });
 
-    // Cancel button
-    cancelBtn.addEventListener('click', () => {
-        // Revert to original values
+    // Cancel - revert to original
+    function cancelEdit() {
         imageObj.brightness = originalValues.brightness;
         imageObj.contrast = originalValues.contrast;
         imageObj.saturation = originalValues.saturation;
@@ -858,14 +1221,13 @@ function showImageEditModal(imageObj) {
         imageObj.grayscale = originalValues.grayscale;
         imageObj.invert = originalValues.invert;
         imageObj.mirror = originalValues.mirror;
-        canvas.needsRender = true;
-        modal.remove();
-    });
 
-    // Close modal on overlay click
-    modal.addEventListener('click', (e) => {
-        if (e.target === modal) {
-            cancelBtn.click();
-        }
-    });
+        canvas.clearFilterCache(imageObj);
+        canvas.applyFilters(imageObj);
+        canvas.needsRender = true;
+        panel.remove();
+    }
+
+    cancelBtn.addEventListener('click', cancelEdit);
+    closeBtn.addEventListener('click', cancelEdit);
 }

@@ -65,6 +65,7 @@ export class Canvas {
         this.drawingCanvas = document.createElement('canvas');
         this.drawingCtx = this.drawingCanvas.getContext('2d');
 
+
         // Text and shapes manager
         this.objectsManager = new CanvasObjectsManager(this);
 
@@ -278,7 +279,10 @@ export class Canvas {
 
         this.canvas.addEventListener('dragenter', (e) => {
             e.preventDefault();
-            if (e.dataTransfer.types.includes('Files')) {
+            // Show overlay for files, HTML (website drags), or URI lists
+            if (e.dataTransfer.types.includes('Files') ||
+                e.dataTransfer.types.includes('text/html') ||
+                e.dataTransfer.types.includes('text/uri-list')) {
                 this.showDragOverlay();
             }
         });
@@ -290,7 +294,10 @@ export class Canvas {
         });
 
         this.canvas.addEventListener('drop', this.onDrop.bind(this));
-        
+
+        // Handle paste (Ctrl+V) for images
+        document.addEventListener('paste', this.onPaste.bind(this));
+
         document.addEventListener('keydown', (e) => {
             // Handle crop mode keys
             if (this.isCropping) {
@@ -1013,28 +1020,476 @@ export class Canvas {
         this.canvas.dispatchEvent(new CustomEvent('viewChanged'));
     }
 
-    onDrop(e) {
+    extractImageUrlsFromHtml(html) {
+        const urls = [];
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+
+        // Extract from img tags - prioritize srcset for higher resolution
+        doc.querySelectorAll('img').forEach(img => {
+            // Check srcset first for highest resolution
+            if (img.srcset) {
+                const srcsetParts = img.srcset.split(',').map(s => s.trim());
+                // Sort by descriptor (2x, 3x, or width like 1200w) to get highest res
+                const sorted = srcsetParts.sort((a, b) => {
+                    const aMatch = a.match(/(\d+)(x|w)/);
+                    const bMatch = b.match(/(\d+)(x|w)/);
+                    const aVal = aMatch ? parseInt(aMatch[1]) : 0;
+                    const bVal = bMatch ? parseInt(bMatch[1]) : 0;
+                    return bVal - aVal;
+                });
+                if (sorted.length > 0) {
+                    const url = sorted[0].split(/\s+/)[0];
+                    if (url && url.startsWith('http')) urls.push(url);
+                }
+            }
+            // Fallback to src
+            if (img.src && img.src.startsWith('http')) {
+                urls.push(img.src);
+            }
+            // Check data-src for lazy loading
+            const dataSrc = img.getAttribute('data-src') || img.getAttribute('data-original');
+            if (dataSrc && dataSrc.startsWith('http')) {
+                urls.push(dataSrc);
+            }
+        });
+
+        // Extract from background-image styles
+        doc.querySelectorAll('[style*="background"]').forEach(el => {
+            const style = el.getAttribute('style');
+            const match = style.match(/url\(['"]?(https?:\/\/[^'")\s]+)['"]?\)/);
+            if (match) urls.push(match[1]);
+        });
+
+        // Extract from anchor tags that wrap images (Pinterest pattern)
+        doc.querySelectorAll('a[href*=".jpg"], a[href*=".png"], a[href*=".gif"], a[href*=".webp"]').forEach(a => {
+            if (a.href.startsWith('http')) urls.push(a.href);
+        });
+
+        // Extract any URLs containing pinimg.com (Pinterest CDN)
+        const pinimgMatches = html.match(/https?:\/\/[^"'\s]*pinimg\.com[^"'\s]*/gi);
+        if (pinimgMatches) {
+            urls.push(...pinimgMatches);
+        }
+
+        // Extract any image URLs from the raw HTML (fallback)
+        const rawUrlMatches = html.match(/https?:\/\/[^"'\s<>]+\.(jpg|jpeg|png|gif|webp)[^"'\s<>]*/gi);
+        if (rawUrlMatches) {
+            urls.push(...rawUrlMatches);
+        }
+
+        // Dedupe while preserving order, and filter for valid URLs
+        const uniqueUrls = [...new Set(urls)].filter(url => {
+            try {
+                new URL(url);
+                return true;
+            } catch {
+                return false;
+            }
+        });
+
+        // Prioritize higher resolution images (larger dimension indicators in URL)
+        uniqueUrls.sort((a, b) => {
+            // Pinterest URLs often have resolution like /236x/ or /564x/ or /originals/
+            const aMatch = a.match(/\/(\d+)x\//);
+            const bMatch = b.match(/\/(\d+)x\//);
+            const aHasOriginals = a.includes('/originals/') ? 10000 : 0;
+            const bHasOriginals = b.includes('/originals/') ? 10000 : 0;
+            const aVal = (aMatch ? parseInt(aMatch[1]) : 0) + aHasOriginals;
+            const bVal = (bMatch ? parseInt(bMatch[1]) : 0) + bHasOriginals;
+            return bVal - aVal;
+        });
+
+        return uniqueUrls;
+    }
+
+    async extractImageFromPinterestPin(pinUrl) {
+        try {
+            console.log('Fetching Pinterest page:', pinUrl);
+            const html = await window.__TAURI__.core.invoke('fetch_page_html', { url: pinUrl });
+
+            // Extract pin ID from URL
+            const pinIdMatch = pinUrl.match(/\/pin\/(\d+)/);
+            const pinId = pinIdMatch ? pinIdMatch[1] : null;
+            console.log('Pin ID:', pinId);
+
+            // Pinterest embeds JSON data in script tags - look for __PWS_DATA__ or similar
+            // The JSON contains "orig" image URLs which are the highest quality
+
+            // Method 1: Look for the specific pin's image in JSON data
+            // Pinterest JSON often has structure like: "images":{"orig":{"url":"..."}}
+            const origUrlPattern = /"orig"\s*:\s*\{\s*[^}]*"url"\s*:\s*"(https:\/\/i\.pinimg\.com\/originals\/[^"]+)"/g;
+            const origMatches = [...html.matchAll(origUrlPattern)];
+            if (origMatches.length > 0) {
+                // Get unique URLs
+                const urls = [...new Set(origMatches.map(m => m[1]))];
+                console.log('Found orig URLs in JSON:', urls);
+                // Return the first one (should be the pin's image)
+                return urls[0];
+            }
+
+            // Method 2: Look for "url" fields with originals path in JSON context
+            const jsonOriginalsPattern = /"url"\s*:\s*"(https:\/\/i\.pinimg\.com\/originals\/[^"]+)"/g;
+            const jsonOrigMatches = [...html.matchAll(jsonOriginalsPattern)];
+            if (jsonOrigMatches.length > 0) {
+                const urls = [...new Set(jsonOrigMatches.map(m => m[1]))];
+                console.log('Found originals in JSON url fields:', urls);
+                return urls[0];
+            }
+
+            // Method 3: Look for high-res URLs (736x or higher) in JSON
+            const highResPattern = /"url"\s*:\s*"(https:\/\/i\.pinimg\.com\/\d+x\/[^"]+)"/g;
+            const highResMatches = [...html.matchAll(highResPattern)];
+            if (highResMatches.length > 0) {
+                const urls = [...new Set(highResMatches.map(m => m[1]))];
+                // Sort by resolution
+                urls.sort((a, b) => {
+                    const aRes = parseInt(a.match(/\/(\d+)x\//)?.[1] || '0');
+                    const bRes = parseInt(b.match(/\/(\d+)x\//)?.[1] || '0');
+                    return bRes - aRes;
+                });
+                console.log('Found high-res URLs in JSON:', urls[0]);
+                return urls[0];
+            }
+
+            // Method 4: Fallback - look for any pinimg URL that's not a small thumbnail
+            const allPinimgPattern = /https:\/\/i\.pinimg\.com\/(?:originals|\d+x)\/[a-f0-9\/]+\.[a-z]+/gi;
+            const allMatches = [...new Set(html.match(allPinimgPattern) || [])];
+            if (allMatches.length > 0) {
+                // Filter out small sizes (75x, 140x, 236x) and sort by size
+                const filtered = allMatches.filter(url => {
+                    const sizeMatch = url.match(/\/(\d+)x\//);
+                    if (!sizeMatch) return true; // originals
+                    return parseInt(sizeMatch[1]) >= 474;
+                });
+                filtered.sort((a, b) => {
+                    if (a.includes('/originals/')) return -1;
+                    if (b.includes('/originals/')) return 1;
+                    const aRes = parseInt(a.match(/\/(\d+)x\//)?.[1] || '0');
+                    const bRes = parseInt(b.match(/\/(\d+)x\//)?.[1] || '0');
+                    return bRes - aRes;
+                });
+                if (filtered.length > 0) {
+                    console.log('Found pinimg URL (fallback):', filtered[0]);
+                    return filtered[0];
+                }
+            }
+
+            console.log('No image URL found in Pinterest page');
+            return null;
+        } catch (err) {
+            console.error('Failed to fetch Pinterest page:', err);
+            return null;
+        }
+    }
+
+    async fetchAndAddImageFromUrl(url, x, y) {
+        try {
+            const dataUrl = await window.__TAURI__.core.invoke('fetch_image_url', { url });
+
+            // Generate a filename from URL
+            const urlObj = new URL(url);
+            let filename = urlObj.pathname.split('/').pop() || 'image';
+            if (!filename.match(/\.(jpg|jpeg|png|gif|webp|bmp)$/i)) {
+                filename += '.png';
+            }
+
+            const bm = window.boardManagerInstance;
+            let filePath = null;
+            let imgSrc = dataUrl;
+
+            if (bm) {
+                filePath = await bm.saveImageFile(dataUrl, filename);
+                if (filePath) {
+                    imgSrc = await bm.resolveImageSrc(filePath);
+                }
+            }
+
+            return new Promise((resolve, reject) => {
+                const img = new Image();
+                img.onload = () => {
+                    const added = this.addImage(img, x, y, filename);
+                    if (filePath) added.filePath = filePath;
+                    this.addToAssets(img, filePath || dataUrl, filename);
+                    this.canvas.dispatchEvent(new CustomEvent('imageDropped', {
+                        detail: {
+                            id: added.id,
+                            name: added.name,
+                            src: filePath || dataUrl,
+                            x: added.x,
+                            y: added.y,
+                            width: added.width,
+                            height: added.height
+                        }
+                    }));
+                    resolve(added);
+                };
+                img.onerror = () => reject(new Error('Failed to load image'));
+                img.src = imgSrc;
+            });
+        } catch (err) {
+            console.error('Failed to fetch image from URL:', url, err);
+            throw err;
+        }
+    }
+
+    async onDrop(e) {
+        if (this.externalDropHandler) return;
         e.preventDefault();
         this.hideDragOverlay();
-
-        const files = Array.from(e.dataTransfer.files);
-        const imageFiles = files.filter(f => f.type.startsWith('image/'));
 
         const rect = this.canvas.getBoundingClientRect();
         const { x, y } = this.screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
 
-        imageFiles.forEach(file => {
-            const reader = new FileReader();
-            reader.onload = (event) => {
-                const img = new Image();
-                img.onload = () => {
-                    this.addImage(img, x, y, file.name);
-                    this.addToAssets(img, event.target.result, file.name);
+        const files = Array.from(e.dataTransfer.files);
+        const imageFiles = files.filter(f => f.type.startsWith('image/'));
+
+        // Handle file drops 
+        if (imageFiles.length > 0) {
+            imageFiles.forEach(file => {
+                const reader = new FileReader();
+                reader.onload = async (event) => {
+                    const dataUrl = event.target.result;
+
+                    // Try to save as file on disk
+                    const bm = window.boardManagerInstance;
+                    let filePath = null;
+                    let imgSrc = dataUrl;
+                    if (bm) {
+                        filePath = await bm.saveImageFile(dataUrl, file.name);
+                        if (filePath) {
+                            imgSrc = await bm.resolveImageSrc(filePath);
+                        }
+                    }
+
+                    const img = new Image();
+                    img.onload = () => {
+                        const added = this.addImage(img, x, y, file.name);
+                        if (filePath) added.filePath = filePath;
+                        this.addToAssets(img, filePath || dataUrl, file.name);
+                        this.canvas.dispatchEvent(new CustomEvent('imageDropped', {
+                            detail: {
+                                id: added.id,
+                                name: added.name,
+                                src: filePath || dataUrl,
+                                x: added.x,
+                                y: added.y,
+                                width: added.width,
+                                height: added.height
+                            }
+                        }));
+                    };
+                    img.src = imgSrc;
                 };
-                img.src = event.target.result;
-            };
-            reader.readAsDataURL(file);
-        });
+                reader.readAsDataURL(file);
+            });
+            return;
+        }
+
+        // Handle URL drops from websites (text/html or text/uri-list)
+        let imageUrls = [];
+
+        // Debug: log all available data types
+        console.log('Drop event - available types:', e.dataTransfer.types);
+        for (const type of e.dataTransfer.types) {
+            const data = e.dataTransfer.getData(type);
+            console.log(`Drop data [${type}]:`, data.substring(0, 500));
+        }
+
+        // Try to extract from HTML first (most reliable for complex sites like Pinterest)
+        const html = e.dataTransfer.getData('text/html');
+        if (html) {
+            imageUrls = this.extractImageUrlsFromHtml(html);
+            console.log('Extracted URLs from HTML:', imageUrls);
+        }
+
+        // Fallback to uri-list or plain text
+        if (imageUrls.length === 0) {
+            const uriList = e.dataTransfer.getData('text/uri-list') || e.dataTransfer.getData('text/plain');
+            if (uriList) {
+                console.log('Checking uri-list/plain text:', uriList);
+                const urls = uriList.split('\n').filter(u => u.trim() && !u.startsWith('#'));
+                for (const url of urls) {
+                    const trimmed = url.trim();
+                    // Match common image URL patterns
+                    if (trimmed.match(/^https?:\/\/.+\.(jpg|jpeg|png|gif|webp|bmp|svg)/i) ||
+                        trimmed.match(/^https?:\/\/.+\/image/i) ||
+                        trimmed.match(/^https?:\/\/.*pinimg\.com/i)) {
+                        imageUrls.push(trimmed);
+                    }
+                    // Check for Pinterest pin page URLs - we'll need to fetch and parse these
+                    else if (trimmed.match(/^https?:\/\/(www\.)?pinterest\.[a-z]+\/pin\//i)) {
+                        console.log('Detected Pinterest pin URL, will fetch page to extract image');
+                        try {
+                            const extractedUrl = await this.extractImageFromPinterestPin(trimmed);
+                            if (extractedUrl) {
+                                imageUrls.push(extractedUrl);
+                            }
+                        } catch (err) {
+                            console.error('Failed to extract image from Pinterest pin:', err);
+                        }
+                    }
+                }
+            }
+        }
+
+        console.log('Final image URLs to fetch:', imageUrls);
+
+        // Fetch and add images from URLs
+        if (imageUrls.length > 0) {
+            // Use the first URL found (highest priority from extraction)
+            console.log('Attempting to fetch:', imageUrls[0]);
+            try {
+                await this.fetchAndAddImageFromUrl(imageUrls[0], x, y);
+            } catch (err) {
+                console.error('Failed to add image from URL drop:', err);
+            }
+        } else {
+            console.log('No image URLs found in drop data');
+        }
+    }
+
+    async onPaste(e) {
+        console.log('[Paste] Event triggered');
+
+        // Don't handle paste if editing text
+        if (this.objectsManager.editingTextObject !== null) {
+            console.log('[Paste] Skipping - editing text');
+            return;
+        }
+
+        const clipboardData = e.clipboardData;
+        if (!clipboardData) {
+            console.log('[Paste] No clipboard data');
+            return;
+        }
+
+        // Debug: log all available types
+        console.log('[Paste] Available types:', Array.from(clipboardData.types));
+
+        // Calculate center of current view for placing the image
+        const centerX = (this.canvas.width / 2 - this.pan.x) / this.zoom;
+        const centerY = (this.canvas.height / 2 - this.pan.y) / this.zoom;
+
+        // Check for direct image data (screenshots, copied images)
+        const items = clipboardData.items;
+        if (items && items.length > 0) {
+            console.log('[Paste] Clipboard items:', items.length);
+            for (let i = 0; i < items.length; i++) {
+                const item = items[i];
+                console.log(`[Paste] Item ${i}: kind=${item.kind}, type=${item.type}`);
+                if (item.type.startsWith('image/')) {
+                    e.preventDefault();
+                    const blob = item.getAsFile();
+                    console.log('[Paste] Got image blob:', blob);
+                    if (blob) {
+                        await this.pasteImageBlob(blob, centerX, centerY);
+                        return;
+                    }
+                }
+            }
+        }
+
+        // Check for image URL in text (e.g., "Copy Image Address")
+        const text = clipboardData.getData('text/plain');
+        console.log('[Paste] Text data:', text ? text.substring(0, 100) : '(none)');
+        if (text && this.isImageUrl(text)) {
+            console.log('[Paste] Detected image URL in text');
+            e.preventDefault();
+            await this.pasteImageFromUrl(text.trim(), centerX, centerY);
+            return;
+        }
+
+        // Check for HTML that might contain an image (Safari "Copy Image")
+        const html = clipboardData.getData('text/html');
+        console.log('[Paste] HTML data:', html ? html.substring(0, 200) : '(none)');
+        if (html) {
+            const imgMatch = html.match(/<img[^>]+src=["']([^"']+)["']/i);
+            if (imgMatch && imgMatch[1]) {
+                console.log('[Paste] Found image in HTML:', imgMatch[1].substring(0, 100));
+                e.preventDefault();
+                await this.pasteImageFromUrl(imgMatch[1], centerX, centerY);
+                return;
+            }
+        }
+
+        console.log('[Paste] No image data found to paste');
+    }
+
+    isImageUrl(url) {
+        if (!url) return false;
+        const trimmed = url.trim().toLowerCase();
+        // Check for common image extensions or data URLs
+        return trimmed.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)(\?.*)?$/i) ||
+               trimmed.startsWith('data:image/') ||
+               trimmed.includes('/image/') ||
+               trimmed.includes('images/');
+    }
+
+    async pasteImageBlob(blob, centerX, centerY) {
+        const reader = new FileReader();
+        reader.onload = async (event) => {
+            const dataUrl = event.target.result;
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+            const filename = `pasted-image-${timestamp}.png`;
+            await this.addPastedImage(dataUrl, filename, centerX, centerY);
+        };
+        reader.readAsDataURL(blob);
+    }
+
+    async pasteImageFromUrl(url, centerX, centerY) {
+        try {
+            // For data URLs, use directly
+            if (url.startsWith('data:')) {
+                const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+                const filename = `pasted-image-${timestamp}.png`;
+                await this.addPastedImage(url, filename, centerX, centerY);
+                return;
+            }
+
+            // For remote URLs, use Tauri backend to fetch (avoids CORS)
+            await this.fetchAndAddImageFromUrl(url, centerX, centerY);
+        } catch (err) {
+            console.error('Failed to paste image from URL:', err);
+        }
+    }
+
+    async addPastedImage(dataUrl, filename, centerX, centerY) {
+        const bm = window.boardManagerInstance;
+        let filePath = null;
+        let imgSrc = dataUrl;
+
+        if (bm) {
+            filePath = await bm.saveImageFile(dataUrl, filename);
+            if (filePath) {
+                imgSrc = await bm.resolveImageSrc(filePath);
+            }
+        }
+
+        const img = new Image();
+        img.onload = () => {
+            const x = centerX - img.width / 2;
+            const y = centerY - img.height / 2;
+
+            const added = this.addImage(img, x, y, filename);
+            if (filePath) added.filePath = filePath;
+            this.addToAssets(img, filePath || dataUrl, filename);
+            this.canvas.dispatchEvent(new CustomEvent('imageDropped', {
+                detail: {
+                    id: added.id,
+                    name: added.name,
+                    src: filePath || dataUrl,
+                    x: added.x,
+                    y: added.y,
+                    width: added.width,
+                    height: added.height
+                }
+            }));
+        };
+        img.onerror = () => {
+            console.error('Failed to load pasted image');
+        };
+        img.src = imgSrc;
     }
 
     addToAssets(img, src, name) {
@@ -2213,6 +2668,240 @@ export class Canvas {
         this.ctx.stroke();
     }
 
+    /**
+     * Build CSS filter string from image filter properties.
+     * Returns empty string if all filters are at default values.
+     */
+    buildFilterString(img) {
+        const filters = [];
+        if (img.brightness && img.brightness !== 100) {
+            filters.push(`brightness(${img.brightness}%)`);
+        }
+        if (img.contrast && img.contrast !== 100) {
+            filters.push(`contrast(${img.contrast}%)`);
+        }
+        if (img.saturation && img.saturation !== 100) {
+            filters.push(`saturate(${img.saturation}%)`);
+        }
+        if (img.hue && img.hue !== 0) {
+            filters.push(`hue-rotate(${img.hue}deg)`);
+        }
+        if (img.blur && img.blur > 0) {
+            filters.push(`blur(${img.blur}px)`);
+        }
+        if (img.grayscale) {
+            filters.push('grayscale(100%)');
+        }
+        if (img.invert) {
+            filters.push('invert(100%)');
+        }
+        return filters.length > 0 ? filters.join(' ') : '';
+    }
+
+    /**
+     * Apply filters to an image using an offscreen canvas.
+     * Creates a cached filtered canvas stored as img._filteredCanvas.
+     * Uses synchronous pixel manipulation for smooth live preview.
+     */
+    applyFilters(img) {
+        const filterStr = this.buildFilterString(img);
+        if (!filterStr) {
+            // No filters needed - clear any existing cache
+            delete img._filteredCanvas;
+            return;
+        }
+
+        const sourceImg = img.originalImg || img.img;
+        let sx = 0, sy = 0, sWidth = sourceImg.naturalWidth, sHeight = sourceImg.naturalHeight;
+
+        // Apply crop parameters if they exist
+        if (img.cropData) {
+            sx = img.cropData.offsetX * sourceImg.naturalWidth;
+            sy = img.cropData.offsetY * sourceImg.naturalHeight;
+            sWidth = img.cropData.cropWidth * sourceImg.naturalWidth;
+            sHeight = img.cropData.cropHeight * sourceImg.naturalHeight;
+        }
+
+        const fw = Math.ceil(sWidth);
+        const fh = Math.ceil(sHeight);
+        if (fw <= 0 || fh <= 0) return;
+
+        // Use synchronous pixel manipulation for smooth live preview
+        this._applyFiltersSync(img, sourceImg, sx, sy, sWidth, sHeight, fw, fh);
+    }
+
+    /**
+     * Apply filters synchronously using pixel manipulation.
+     * This provides smooth live preview without jitter.
+     */
+    _applyFiltersSync(img, sourceImg, sx, sy, sWidth, sHeight, fw, fh) {
+        // Create canvas and draw source image
+        const canvas = document.createElement('canvas');
+        canvas.width = fw;
+        canvas.height = fh;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(sourceImg, sx, sy, sWidth, sHeight, 0, 0, fw, fh);
+
+        // Get image data for pixel manipulation
+        const imageData = ctx.getImageData(0, 0, fw, fh);
+        const data = imageData.data;
+
+        // Pre-calculate filter values
+        const brightness = (img.brightness || 100) / 100;
+        const contrast = (img.contrast || 100) / 100;
+        const saturation = (img.saturation || 100) / 100;
+        const hue = (img.hue || 0) * Math.PI / 180; // Convert to radians
+        const grayscale = img.grayscale || false;
+        const invert = img.invert || false;
+
+        // Process each pixel
+        for (let i = 0; i < data.length; i += 4) {
+            let r = data[i];
+            let g = data[i + 1];
+            let b = data[i + 2];
+            // Alpha stays unchanged: data[i + 3]
+
+            // Apply brightness
+            if (brightness !== 1) {
+                r *= brightness;
+                g *= brightness;
+                b *= brightness;
+            }
+
+            // Apply contrast
+            if (contrast !== 1) {
+                r = (r - 128) * contrast + 128;
+                g = (g - 128) * contrast + 128;
+                b = (b - 128) * contrast + 128;
+            }
+
+            // Apply saturation (and grayscale if saturation = 0)
+            if (saturation !== 1 || grayscale) {
+                const gray = 0.299 * r + 0.587 * g + 0.114 * b;
+                const sat = grayscale ? 0 : saturation;
+                r = gray + sat * (r - gray);
+                g = gray + sat * (g - gray);
+                b = gray + sat * (b - gray);
+            }
+
+            // Apply hue rotation
+            if (hue !== 0) {
+                const cos = Math.cos(hue);
+                const sin = Math.sin(hue);
+                const rNew = r * (0.213 + cos * 0.787 - sin * 0.213) +
+                             g * (0.715 - cos * 0.715 - sin * 0.715) +
+                             b * (0.072 - cos * 0.072 + sin * 0.928);
+                const gNew = r * (0.213 - cos * 0.213 + sin * 0.143) +
+                             g * (0.715 + cos * 0.285 + sin * 0.140) +
+                             b * (0.072 - cos * 0.072 - sin * 0.283);
+                const bNew = r * (0.213 - cos * 0.213 - sin * 0.787) +
+                             g * (0.715 - cos * 0.715 + sin * 0.715) +
+                             b * (0.072 + cos * 0.928 + sin * 0.072);
+                r = rNew;
+                g = gNew;
+                b = bNew;
+            }
+
+            // Apply invert
+            if (invert) {
+                r = 255 - r;
+                g = 255 - g;
+                b = 255 - b;
+            }
+
+            // Clamp values to 0-255
+            data[i] = Math.max(0, Math.min(255, r));
+            data[i + 1] = Math.max(0, Math.min(255, g));
+            data[i + 2] = Math.max(0, Math.min(255, b));
+        }
+
+        // Put processed image data back
+        ctx.putImageData(imageData, 0, 0);
+
+        // Apply blur if needed (using simple box blur)
+        if (img.blur && img.blur > 0) {
+            this._applyBoxBlur(ctx, fw, fh, img.blur);
+        }
+
+        // Cache the result
+        img._filteredCanvas = canvas;
+        img._filteredCropData = img.cropData ? { ...img.cropData } : null;
+    }
+
+    /**
+     * Apply box blur (simple and reliable).
+     * Multiple passes approximate Gaussian blur.
+     */
+    _applyBoxBlur(ctx, width, height, radius) {
+        if (radius < 0.5) return;
+
+        const r = Math.max(1, Math.round(radius));
+        const passes = 2; // 2 passes for reasonable quality/speed balance
+
+        for (let pass = 0; pass < passes; pass++) {
+            const imageData = ctx.getImageData(0, 0, width, height);
+            const src = imageData.data;
+            const dst = new Uint8ClampedArray(src.length);
+
+            // Horizontal blur
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++) {
+                    let rSum = 0, gSum = 0, bSum = 0, aSum = 0, count = 0;
+
+                    for (let dx = -r; dx <= r; dx++) {
+                        const nx = Math.max(0, Math.min(width - 1, x + dx));
+                        const idx = (y * width + nx) * 4;
+                        rSum += src[idx];
+                        gSum += src[idx + 1];
+                        bSum += src[idx + 2];
+                        aSum += src[idx + 3];
+                        count++;
+                    }
+
+                    const idx = (y * width + x) * 4;
+                    dst[idx] = rSum / count;
+                    dst[idx + 1] = gSum / count;
+                    dst[idx + 2] = bSum / count;
+                    dst[idx + 3] = aSum / count;
+                }
+            }
+
+            // Vertical blur (using dst as source, writing back to src)
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++) {
+                    let rSum = 0, gSum = 0, bSum = 0, aSum = 0, count = 0;
+
+                    for (let dy = -r; dy <= r; dy++) {
+                        const ny = Math.max(0, Math.min(height - 1, y + dy));
+                        const idx = (ny * width + x) * 4;
+                        rSum += dst[idx];
+                        gSum += dst[idx + 1];
+                        bSum += dst[idx + 2];
+                        aSum += dst[idx + 3];
+                        count++;
+                    }
+
+                    const idx = (y * width + x) * 4;
+                    src[idx] = rSum / count;
+                    src[idx + 1] = gSum / count;
+                    src[idx + 2] = bSum / count;
+                    src[idx + 3] = aSum / count;
+                }
+            }
+
+            ctx.putImageData(imageData, 0, 0);
+        }
+    }
+
+    /**
+     * Clear the filter cache for an image.
+     * Call this before applyFilters when filter values change.
+     */
+    clearFilterCache(img) {
+        delete img._filteredCanvas;
+        delete img._filteredCropData;
+    }
+
     render() {
         const w = this.canvas.width;
         const h = this.canvas.height;
@@ -2241,58 +2930,48 @@ export class Canvas {
             if (item.type === 'image') {
                 const img = item.data;
                 try {
-                    // Save context for filters and rotation
+                    // Save context for opacity, mirror, and rotation
                     this.ctx.save();
 
-                    // Apply opacity if set
+                    // Apply opacity if set (works on desynchronized context)
                     if (img.opacity !== undefined && img.opacity !== 100) {
                         this.ctx.globalAlpha = img.opacity / 100;
                     }
 
-                    // Apply filters if they exist
-                    let filters = [];
-                    if (img.brightness && img.brightness !== 100) {
-                        filters.push(`brightness(${img.brightness}%)`);
-                    }
-                    if (img.contrast && img.contrast !== 100) {
-                        filters.push(`contrast(${img.contrast}%)`);
-                    }
-                    if (img.saturation && img.saturation !== 100) {
-                        filters.push(`saturate(${img.saturation}%)`);
-                    }
-                    if (img.hue && img.hue !== 0) {
-                        filters.push(`hue-rotate(${img.hue}deg)`);
-                    }
-                    if (img.blur && img.blur > 0) {
-                        filters.push(`blur(${img.blur}px)`);
-                    }
-                    if (img.grayscale) {
-                        filters.push('grayscale(100%)');
-                    }
-                    if (img.invert) {
-                        filters.push('invert(100%)');
-                    }
-                    if (filters.length > 0) {
-                        this.ctx.filter = filters.join(' ');
-                    }
-
-                    // Apply mirror transformation
+                    // Apply mirror transformation (works on desynchronized context)
                     if (img.mirror) {
                         this.ctx.translate(img.x + img.width, img.y);
                         this.ctx.scale(-1, 1);
                         this.ctx.translate(-img.x, -img.y);
                     }
 
-                    // Determine source image and crop parameters
-                    const sourceImg = img.originalImg || img.img;
-                    let sx = 0, sy = 0, sWidth = sourceImg.naturalWidth, sHeight = sourceImg.naturalHeight;
+                    // Determine draw source: use cached filtered canvas if available
+                    let drawSource, drawSx, drawSy, drawSw, drawSh;
 
-                    if (img.cropData) {
-                        // Apply crop from original image
-                        sx = img.cropData.offsetX * sourceImg.naturalWidth;
-                        sy = img.cropData.offsetY * sourceImg.naturalHeight;
-                        sWidth = img.cropData.cropWidth * sourceImg.naturalWidth;
-                        sHeight = img.cropData.cropHeight * sourceImg.naturalHeight;
+                    if (img._filteredCanvas) {
+                        // Use pre-rendered filtered canvas
+                        drawSource = img._filteredCanvas;
+                        drawSx = 0;
+                        drawSy = 0;
+                        drawSw = img._filteredCanvas.width;
+                        drawSh = img._filteredCanvas.height;
+                        // console.log('[render] using filtered canvas for', img.name);
+                    } else {
+                        // Draw directly from source image
+                        const sourceImg = img.originalImg || img.img;
+                        drawSource = sourceImg;
+                        drawSx = 0;
+                        drawSy = 0;
+                        drawSw = sourceImg.naturalWidth;
+                        drawSh = sourceImg.naturalHeight;
+
+                        // Apply crop parameters if no filter cache
+                        if (img.cropData) {
+                            drawSx = img.cropData.offsetX * sourceImg.naturalWidth;
+                            drawSy = img.cropData.offsetY * sourceImg.naturalHeight;
+                            drawSw = img.cropData.cropWidth * sourceImg.naturalWidth;
+                            drawSh = img.cropData.cropHeight * sourceImg.naturalHeight;
+                        }
                     }
 
                     if (img.rotation && img.rotation !== 0) {
@@ -2304,16 +2983,18 @@ export class Canvas {
                         // Rotate
                         this.ctx.rotate(img.rotation * Math.PI / 180);
 
-                        // Draw image centered at origin (with crop if applicable)
-                        this.ctx.drawImage(sourceImg, sx, sy, sWidth, sHeight, -img.width / 2, -img.height / 2, img.width, img.height);
+                        // Draw image centered at origin
+                        this.ctx.drawImage(drawSource, drawSx, drawSy, drawSw, drawSh, -img.width / 2, -img.height / 2, img.width, img.height);
                     } else {
-                        // Draw image (with crop if applicable)
-                        this.ctx.drawImage(sourceImg, sx, sy, sWidth, sHeight, img.x, img.y, img.width, img.height);
+                        // Draw image
+                        this.ctx.drawImage(drawSource, drawSx, drawSy, drawSw, drawSh, img.x, img.y, img.width, img.height);
                     }
 
-                    // Restore context state (removes filters and rotation)
-                    this.ctx.restore();
                 } catch (e) {
+                    console.error('Failed to render image:', img.name, e);
+                } finally {
+                    // Always restore context state (removes opacity, mirror, rotation)
+                    this.ctx.restore();
                 }
             } else if (item.type === 'object') {
                 this.objectsManager.renderSingle(this.ctx, item.data);
@@ -2934,12 +3615,14 @@ export class Canvas {
 
                     ctx.drawImage(sourceImg, sx, sy, sWidth, sHeight, img.x, img.y, img.width, img.height);
                 } catch (e) {
+                    console.error('Failed to draw thumbnail image:', e);
                 }
             }
-            
+
             ctx.restore();
             return tempCanvas.toDataURL('image/jpeg', this.thumbnailQuality);
         } catch (e) {
+            console.error('Failed to generate thumbnail:', e);
             return null;
         }
     }

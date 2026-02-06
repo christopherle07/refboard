@@ -20,6 +20,10 @@
     ],
     "security": {
       "csp": null,
+      "assetProtocol": {
+        "enable": true,
+        "scope": ["$APPDATA/**"]
+      },
       "capabilities": [
         {
           "identifier": "main-capability",

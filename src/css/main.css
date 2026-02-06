@@ -896,11 +896,44 @@ html[data-theme="purplexing"] .floating-canvas-icon {
     background: rgba(13, 110, 253, 0.3);
 }
 
+/* Rich Text Editor (contenteditable) */
+.rich-text-editor {
+    position: absolute;
+    background: transparent;
+    border: none;
+    outline: none;
+    z-index: 10000;
+    box-sizing: border-box;
+    overflow: hidden;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    cursor: text;
+    line-height: 1.2;
+}
+
+.rich-text-editor:focus {
+    outline: none;
+}
+
+.rich-text-editor::selection,
+.rich-text-editor *::selection {
+    background: rgba(13, 110, 253, 0.3);
+}
+
+.rich-text-editor::-moz-selection,
+.rich-text-editor *::-moz-selection {
+    background: rgba(13, 110, 253, 0.3);
+}
+
+.rich-text-editor span {
+    display: inline;
+}
+
 /* Floating Toolbars */
 .floating-toolbar {
     position: absolute;
     z-index: 9999;
-    pointer-events: all;
+    pointer-events: none;  /* Container doesn't block canvas interactions */
 }
 
 .floating-toolbar-content {
@@ -912,6 +945,7 @@ html[data-theme="purplexing"] .floating-canvas-icon {
     border-radius: 24px;
     padding: 6px 10px;
     box-shadow: 0 2px 12px rgba(0, 0, 0, 0.2);
+    pointer-events: auto;  /* Only the actual toolbar content is interactive */
 }
 
 .floating-select {

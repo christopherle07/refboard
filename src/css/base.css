@@ -6,6 +6,30 @@
     box-sizing: border-box;
 }
 
+/* Prevent icons and images in UI elements from being draggable */
+.titlebar-icon,
+.toolbar-icon,
+.tool-icon,
+.sidebar-toggle-icon,
+.sidebar-collapse-icon,
+.back-arrow-icon,
+.collapse-icon,
+.layer-icon,
+.group-toggle-icon,
+.draw-tool-icon,
+button img,
+.unified-titlebar img,
+.custom-titlebar img,
+.tools-sidebar img,
+.drawing-toolbar img,
+.toolbar-btn img {
+    -webkit-user-drag: none;
+    user-drag: none;
+    -webkit-user-select: none;
+    user-select: none;
+    pointer-events: none;
+}
+
 /* Light theme (default) */
 :root,
 html:not([data-theme="dark"]) {
