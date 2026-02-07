@@ -9,6 +9,7 @@ export class HistoryManager {
         this.undoStack = [];
         this.redoStack = [];
         this.canvas = null;
+        this.onChanged = null; // Callback when history state changes
     }
 
     /**
@@ -36,6 +37,8 @@ export class HistoryManager {
         if (this.undoStack.length > this.maxHistory) {
             this.undoStack.shift();
         }
+
+        if (this.onChanged) this.onChanged();
     }
 
     /**
@@ -52,6 +55,7 @@ export class HistoryManager {
         // Move to redo stack
         this.redoStack.push(action);
 
+        if (this.onChanged) this.onChanged();
         return true;
     }
 
@@ -68,6 +72,8 @@ export class HistoryManager {
 
         // Move back to undo stack
         this.undoStack.push(action);
+
+        if (this.onChanged) this.onChanged();
 
         return true;
     }
@@ -191,6 +197,38 @@ export class HistoryManager {
                     this.canvas.needsRender = true;
                 }
                 break;
+
+            case 'add_object':
+                // Undo add = delete the object
+                this.canvas.objectsManager.deleteObject(action.data.id, true);
+                break;
+
+            case 'delete_objects':
+                // Undo delete = restore all deleted objects
+                for (const objData of action.data) {
+                    this.canvas.objectsManager.objects.push({ ...objData });
+                }
+                this.canvas.objectsManager.dispatchObjectsChanged();
+                break;
+
+            case 'update_object': {
+                const obj = this.canvas.objectsManager.objects.find(o => o.id === action.data.id);
+                if (obj) {
+                    Object.assign(obj, action.data.oldProps);
+                    this.canvas.objectsManager.dispatchObjectsChanged();
+                }
+                break;
+            }
+
+            case 'object_visibility': {
+                const obj = this.canvas.objectsManager.objects.find(o => o.id === action.data.id);
+                if (obj) obj.visible = action.data.oldVisible;
+                break;
+            }
+
+            case 'reorder_layers':
+                this.applyZIndexes(action.data.oldOrder);
+                break;
         }
 
         this.canvas.needsRender = true;
@@ -302,30 +340,124 @@ export class HistoryManager {
                     this.canvas.needsRender = true;
                 }
                 break;
+
+            case 'add_object':
+                // Redo add = restore the object
+                this.canvas.objectsManager.objects.push({ ...action.data });
+                this.canvas.objectsManager.dispatchObjectsChanged();
+                break;
+
+            case 'delete_objects':
+                // Redo delete = remove the objects again
+                const idsToDelete = action.data.map(o => o.id);
+                this.canvas.objectsManager.objects = this.canvas.objectsManager.objects.filter(
+                    o => !idsToDelete.includes(o.id)
+                );
+                this.canvas.objectsManager.deselectAll();
+                this.canvas.objectsManager.dispatchObjectsChanged();
+                break;
+
+            case 'update_object': {
+                const obj = this.canvas.objectsManager.objects.find(o => o.id === action.data.id);
+                if (obj) {
+                    Object.assign(obj, action.data.newProps);
+                    this.canvas.objectsManager.dispatchObjectsChanged();
+                }
+                break;
+            }
+
+            case 'object_visibility': {
+                const obj = this.canvas.objectsManager.objects.find(o => o.id === action.data.id);
+                if (obj) obj.visible = action.data.newVisible;
+                break;
+            }
+
+            case 'reorder_layers':
+                this.applyZIndexes(action.data.newOrder);
+                break;
         }
 
         this.canvas.needsRender = true;
     }
 
     /**
-     * Restore a deleted image
+     * Apply zIndex values from an order array to images and objects
+     */
+    applyZIndexes(order) {
+        for (const item of order) {
+            if (item.type === 'image') {
+                const img = this.canvas.images.find(i => i.id === item.id);
+                if (img) img.zIndex = item.zIndex;
+            } else if (item.type === 'object') {
+                const obj = this.canvas.objectsManager.objects.find(o => o.id === item.id);
+                if (obj) obj.zIndex = item.zIndex;
+            }
+        }
+    }
+
+    /**
+     * Restore a deleted image (or video/gif)
      */
     restoreImage(imageData) {
-        const img = new Image();
-        img.onload = () => {
-            const restored = this.canvas.addImageSilent(
-                img,
-                imageData.x,
-                imageData.y,
-                imageData.name,
-                imageData.width,
-                imageData.height,
-                imageData.visible
-            );
-            restored.id = imageData.id;
-            this.canvas.needsRender = true;
-        };
-        img.src = imageData.src;
+        if (imageData.mediaType === 'video') {
+            const video = document.createElement('video');
+            video.preload = 'auto';
+            video.muted = true;
+            video.onloadedmetadata = () => {
+                const restored = this.canvas.addVideoSilent(
+                    video, imageData.x, imageData.y, imageData.name,
+                    imageData.width, imageData.height, imageData.visible
+                );
+                restored.id = imageData.id;
+                this.canvas.needsRender = true;
+            };
+            video.onerror = () => console.error('Failed to restore video:', imageData.name);
+            // Resolve src through board manager if available
+            if (window.boardManagerInstance) {
+                window.boardManagerInstance.resolveImageSrc(imageData.src).then(resolved => {
+                    video.src = resolved;
+                });
+            } else {
+                video.src = imageData.src;
+            }
+        } else if (imageData.mediaType === 'gif') {
+            const loadGif = async () => {
+                try {
+                    let src = imageData.src;
+                    if (window.boardManagerInstance) {
+                        src = await window.boardManagerInstance.resolveImageSrc(imageData.src);
+                    }
+                    const response = await fetch(src);
+                    const buffer = await response.arrayBuffer();
+                    const restored = this.canvas.addGifSilent(
+                        buffer, imageData.x, imageData.y, imageData.name, src
+                    );
+                    if (restored) {
+                        restored.id = imageData.id;
+                        this.canvas.needsRender = true;
+                    }
+                } catch (e) {
+                    console.error('Failed to restore GIF:', imageData.name, e);
+                }
+            };
+            loadGif();
+        } else {
+            const img = new Image();
+            img.onload = () => {
+                const restored = this.canvas.addImageSilent(
+                    img,
+                    imageData.x,
+                    imageData.y,
+                    imageData.name,
+                    imageData.width,
+                    imageData.height,
+                    imageData.visible
+                );
+                restored.id = imageData.id;
+                this.canvas.needsRender = true;
+            };
+            img.src = imageData.src;
+        }
     }
 
     /**

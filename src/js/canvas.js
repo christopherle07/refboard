@@ -61,6 +61,9 @@ export class Canvas {
         this.highlighterSize = 20;
         this.eraserSize = 20;
 
+        // Media playback state
+        this.hasPlayingMedia = false;
+
         // Create offscreen canvas for drawing layer
         this.drawingCanvas = document.createElement('canvas');
         this.drawingCtx = this.drawingCanvas.getContext('2d');
@@ -231,6 +234,10 @@ export class Canvas {
         const width = container.clientWidth;
         const height = container.clientHeight;
 
+        // Skip if dimensions haven't changed — setting canvas.width/height
+        // clears the canvas, causing a visible flicker before the next render
+        if (this.canvas.width === width && this.canvas.height === height) return;
+
         this.canvas.width = width;
         this.canvas.height = height;
 
@@ -249,13 +256,21 @@ export class Canvas {
 
     startRenderLoop() {
         const render = () => {
-            if (this.needsRender) {
+            if (this.needsRender || this.hasPlayingMedia) {
                 this.render();
                 this.needsRender = false;
+                if (this.mediaControls) this.mediaControls.tick();
             }
             this.animationFrame = requestAnimationFrame(render);
         };
         render();
+    }
+
+    updatePlayingMediaState() {
+        this.hasPlayingMedia = this.images.some(img =>
+            (img.mediaType === 'video' && img.isPlaying) ||
+            (img.mediaType === 'gif' && img.gifPlaying && img.visible !== false)
+        );
     }
 
     setupEventListeners() {
@@ -641,19 +656,18 @@ export class Canvas {
                 return;
             }
 
-            // Handle multi-select with Ctrl/Cmd
+            // Handle multi-select with Ctrl/Cmd or Shift
             if (e.ctrlKey || e.metaKey) {
                 this.selectImage(clickedImage, true);
-                // Also clear object selection when multi-selecting images
-                if (!clickedObject) {
-                    this.objectsManager.deselectAll();
-                }
                 return;
             }
 
-            // Handle range select with Shift
-            if (e.shiftKey && this.selectedImage) {
-                this.selectImagesInRange(this.selectedImage, clickedImage);
+            if (e.shiftKey) {
+                if (this.selectedImage) {
+                    this.selectImagesInRange(this.selectedImage, clickedImage);
+                } else {
+                    this.selectImage(clickedImage, true);
+                }
                 return;
             }
 
@@ -999,6 +1013,14 @@ export class Canvas {
     onDoubleClick(e) {
         const rect = this.canvas.getBoundingClientRect();
         const { x, y } = this.screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
+
+        // Check if double-clicking a video for fullscreen
+        const clickedImage = this.getImageAtPoint(x, y);
+        if (clickedImage && clickedImage.mediaType === 'video') {
+            this.openVideoFullscreen(clickedImage);
+            return;
+        }
+
         this.objectsManager.handleDoubleClick(e, { x, y });
     }
 
@@ -1258,46 +1280,117 @@ export class Canvas {
         const { x, y } = this.screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
 
         const files = Array.from(e.dataTransfer.files);
-        const imageFiles = files.filter(f => f.type.startsWith('image/'));
+        const mediaFiles = files.filter(f => f.type.startsWith('image/') || f.type.startsWith('video/'));
 
-        // Handle file drops 
-        if (imageFiles.length > 0) {
-            imageFiles.forEach(file => {
-                const reader = new FileReader();
-                reader.onload = async (event) => {
-                    const dataUrl = event.target.result;
+        // Handle file drops
+        if (mediaFiles.length > 0) {
+            mediaFiles.forEach(file => {
+                const isVideo = file.type.startsWith('video/');
+                const isGif = file.type === 'image/gif';
 
-                    // Try to save as file on disk
+                if (isVideo) {
+                    // Handle video file drop
                     const bm = window.boardManagerInstance;
-                    let filePath = null;
-                    let imgSrc = dataUrl;
-                    if (bm) {
-                        filePath = await bm.saveImageFile(dataUrl, file.name);
-                        if (filePath) {
-                            imgSrc = await bm.resolveImageSrc(filePath);
-                        }
-                    }
+                    const blobUrl = URL.createObjectURL(file);
+                    const video = document.createElement('video');
+                    video.preload = 'auto';
+                    video.muted = true;
+                    let videoHandled = false;
+                    video.onloadedmetadata = async () => {
+                        if (videoHandled) return; // Prevent re-entry
+                        videoHandled = true;
 
-                    const img = new Image();
-                    img.onload = () => {
-                        const added = this.addImage(img, x, y, file.name);
-                        if (filePath) added.filePath = filePath;
-                        this.addToAssets(img, filePath || dataUrl, file.name);
-                        this.canvas.dispatchEvent(new CustomEvent('imageDropped', {
-                            detail: {
-                                id: added.id,
-                                name: added.name,
-                                src: filePath || dataUrl,
-                                x: added.x,
-                                y: added.y,
-                                width: added.width,
-                                height: added.height
+                        const added = this.addVideo(video, x, y, file.name);
+                        added.videoSrc = blobUrl;
+
+                        // Save file to disk in background (don't change video.src)
+                        if (bm) {
+                            try {
+                                const reader = new FileReader();
+                                reader.onload = async (event) => {
+                                    const filePath = await bm.saveImageFile(event.target.result, file.name);
+                                    if (filePath) {
+                                        added.filePath = filePath;
+                                    }
+                                    this.addToAssets(added.img, filePath || blobUrl, file.name, 'video');
+                                };
+                                reader.readAsDataURL(file);
+                            } catch (err) {
+                                console.warn('Failed to save video file:', err);
                             }
+                        }
+
+                        this.canvas.dispatchEvent(new CustomEvent('imageDropped', {
+                            detail: { id: added.id, name: added.name, src: blobUrl, x: added.x, y: added.y, width: added.width, height: added.height }
                         }));
                     };
-                    img.src = imgSrc;
-                };
-                reader.readAsDataURL(file);
+                    video.src = blobUrl;
+                } else if (isGif) {
+                    // Handle GIF file drop — parse into frames
+                    const bm = window.boardManagerInstance;
+                    const reader = new FileReader();
+                    reader.onload = async (event) => {
+                        const dataUrl = event.target.result;
+                        let filePath = null;
+                        let blobUrl = dataUrl;
+                        if (bm) {
+                            filePath = await bm.saveImageFile(dataUrl, file.name);
+                            if (filePath) {
+                                blobUrl = await bm.resolveImageSrc(filePath);
+                            }
+                        }
+                        // Fetch as arrayBuffer for GIF parsing
+                        const response = await fetch(blobUrl);
+                        const arrayBuffer = await response.arrayBuffer();
+                        const added = this.addGif(arrayBuffer, x, y, file.name, blobUrl);
+                        if (added) {
+                            if (filePath) added.filePath = filePath;
+                            added.gifSrc = filePath || blobUrl;
+                            this.addToAssets(added.img, filePath || dataUrl, file.name, 'gif');
+                            this.canvas.dispatchEvent(new CustomEvent('imageDropped', {
+                                detail: { id: added.id, name: added.name, src: filePath || dataUrl, x: added.x, y: added.y, width: added.width, height: added.height }
+                            }));
+                        }
+                    };
+                    reader.readAsDataURL(file);
+                } else {
+                    // Handle regular image file drop
+                    const reader = new FileReader();
+                    reader.onload = async (event) => {
+                        const dataUrl = event.target.result;
+
+                        // Try to save as file on disk
+                        const bm = window.boardManagerInstance;
+                        let filePath = null;
+                        let imgSrc = dataUrl;
+                        if (bm) {
+                            filePath = await bm.saveImageFile(dataUrl, file.name);
+                            if (filePath) {
+                                imgSrc = await bm.resolveImageSrc(filePath);
+                            }
+                        }
+
+                        const img = new Image();
+                        img.onload = () => {
+                            const added = this.addImage(img, x, y, file.name);
+                            if (filePath) added.filePath = filePath;
+                            this.addToAssets(img, filePath || dataUrl, file.name);
+                            this.canvas.dispatchEvent(new CustomEvent('imageDropped', {
+                                detail: {
+                                    id: added.id,
+                                    name: added.name,
+                                    src: filePath || dataUrl,
+                                    x: added.x,
+                                    y: added.y,
+                                    width: added.width,
+                                    height: added.height
+                                }
+                            }));
+                        };
+                        img.src = imgSrc;
+                    };
+                    reader.readAsDataURL(file);
+                }
             });
             return;
         }
@@ -1508,7 +1601,7 @@ export class Canvas {
         img.src = imgSrc;
     }
 
-    addToAssets(img, src, name) {
+    addToAssets(img, src, name, mediaType = null) {
         const board = window.boardManagerInstance?.currentBoard;
         if (!board) return;
 
@@ -1517,11 +1610,16 @@ export class Canvas {
         const assetExists = currentAssets.some(a => a.name === name);
         if (assetExists) return;
 
-        const updatedAssets = [...currentAssets, {
+        const newAsset = {
             id: Date.now() + Math.random(),
             src: src,
             name: name
-        }];
+        };
+        if (mediaType) {
+            newAsset.metadata = { mediaType, created: Date.now() };
+        }
+
+        const updatedAssets = [...currentAssets, newAsset];
 
         if (window.boardManagerInstance && window.currentBoardId) {
             window.boardManagerInstance.updateBoard(window.currentBoardId, { assets: updatedAssets });
@@ -1537,7 +1635,7 @@ export class Canvas {
         if (!overlay) {
             overlay = document.createElement('div');
             overlay.id = 'drop-overlay';
-            overlay.innerHTML = '<div class="drop-message">Release to Drop Image onto Board</div>';
+            overlay.innerHTML = '<div class="drop-message">Release to Drop Media onto Board</div>';
             
             if (!document.querySelector('#drop-overlay-styles')) {
                 const style = document.createElement('style');
@@ -1643,6 +1741,371 @@ export class Canvas {
         this.images.push(imageData);
         this.needsRender = true;
         return imageData;
+    }
+
+    addVideo(videoElement, x, y, name = 'Video', width = null, height = null) {
+        // Generate poster as an offscreen canvas (no async load needed)
+        const posterCanvas = document.createElement('canvas');
+        posterCanvas.width = videoElement.videoWidth || 320;
+        posterCanvas.height = videoElement.videoHeight || 240;
+        try {
+            posterCanvas.getContext('2d').drawImage(videoElement, 0, 0, posterCanvas.width, posterCanvas.height);
+        } catch (e) { /* video may not be drawable yet */ }
+
+        const imageData = {
+            id: Date.now() + Math.random(),
+            name: name || `Video ${this.images.length + 1}`,
+            img: posterCanvas, // Use canvas directly as poster (avoids Image load timing)
+            videoElement: videoElement,
+            videoSrc: videoElement.src,
+            mediaType: 'video',
+            x, y,
+            width: width || videoElement.videoWidth || 320,
+            height: height || videoElement.videoHeight || 240,
+            rotation: 0,
+            visible: true,
+            isPlaying: false,
+            currentTime: 0,
+            duration: videoElement.duration || 0,
+            volume: 1,
+            muted: true,
+            videoWidth: videoElement.videoWidth,
+            videoHeight: videoElement.videoHeight
+        };
+
+        videoElement.muted = true;
+
+        this.images.push(imageData);
+        this.selectImage(imageData);
+        this.invalidateCullCache();
+        this.needsRender = true;
+        this.render();
+        this.notifyChange();
+
+        // 2K+ resolution warning
+        if (videoElement.videoWidth >= 2048 || videoElement.videoHeight >= 2048) {
+            this.canvas.dispatchEvent(new CustomEvent('videoResolutionWarning', {
+                detail: { width: videoElement.videoWidth, height: videoElement.videoHeight, name }
+            }));
+        }
+
+        if (this.historyManager) {
+            this.historyManager.pushAction({
+                type: 'add_image',
+                data: {
+                    id: imageData.id,
+                    name: imageData.name,
+                    src: imageData.videoSrc,
+                    x: imageData.x,
+                    y: imageData.y,
+                    width: imageData.width,
+                    height: imageData.height,
+                    visible: true,
+                    mediaType: 'video'
+                }
+            });
+        }
+
+        return imageData;
+    }
+
+    addVideoSilent(videoElement, x, y, name = 'Video', width = null, height = null, visible = true) {
+        const posterCanvas = document.createElement('canvas');
+        posterCanvas.width = videoElement.videoWidth || 320;
+        posterCanvas.height = videoElement.videoHeight || 240;
+        try {
+            posterCanvas.getContext('2d').drawImage(videoElement, 0, 0, posterCanvas.width, posterCanvas.height);
+        } catch (e) { /* video may not be drawable yet */ }
+
+        const imageData = {
+            id: Date.now() + Math.random(),
+            name: name || `Video ${this.images.length + 1}`,
+            img: posterCanvas,
+            videoElement: videoElement,
+            videoSrc: videoElement.src,
+            mediaType: 'video',
+            x, y,
+            width: width || videoElement.videoWidth || 320,
+            height: height || videoElement.videoHeight || 240,
+            rotation: 0,
+            visible: visible,
+            isPlaying: false,
+            currentTime: 0,
+            duration: videoElement.duration || 0,
+            volume: 1,
+            muted: true,
+            videoWidth: videoElement.videoWidth,
+            videoHeight: videoElement.videoHeight
+        };
+
+        videoElement.muted = true;
+
+        this.images.push(imageData);
+        this.needsRender = true;
+        return imageData;
+    }
+
+    addGif(gifArrayBuffer, x, y, name = 'GIF', blobUrl = null) {
+        const { parseGIF, decompressFrames } = window.GifuctJs;
+        const gif = parseGIF(gifArrayBuffer);
+        const frames = decompressFrames(gif, true);
+
+        if (!frames || frames.length === 0) {
+            console.error('Failed to parse GIF frames');
+            return null;
+        }
+
+        const gifWidth = gif.lsd.width;
+        const gifHeight = gif.lsd.height;
+
+        // Build composite frame canvases (handle disposal methods)
+        const compositeCanvas = document.createElement('canvas');
+        compositeCanvas.width = gifWidth;
+        compositeCanvas.height = gifHeight;
+        const compositeCtx = compositeCanvas.getContext('2d');
+
+        const frameCanvases = [];
+        const frameDelays = [];
+
+        for (const frame of frames) {
+            // Handle disposal before drawing new frame
+            if (frame.disposalType === 2) {
+                compositeCtx.clearRect(0, 0, gifWidth, gifHeight);
+            }
+
+            const frameImageData = new ImageData(
+                new Uint8ClampedArray(frame.patch),
+                frame.dims.width,
+                frame.dims.height
+            );
+
+            // Create temp canvas for frame patch
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = frame.dims.width;
+            tempCanvas.height = frame.dims.height;
+            tempCanvas.getContext('2d').putImageData(frameImageData, 0, 0);
+
+            compositeCtx.drawImage(tempCanvas, frame.dims.left, frame.dims.top);
+
+            // Snapshot the composite
+            const fc = document.createElement('canvas');
+            fc.width = gifWidth;
+            fc.height = gifHeight;
+            fc.getContext('2d').drawImage(compositeCanvas, 0, 0);
+            frameCanvases.push(fc);
+            frameDelays.push(frame.delay || 100);
+        }
+
+        // First frame as poster
+        const posterImg = new Image();
+        posterImg.src = frameCanvases[0].toDataURL();
+
+        const imageData = {
+            id: Date.now() + Math.random(),
+            name: name || `GIF ${this.images.length + 1}`,
+            img: posterImg,
+            mediaType: 'gif',
+            x, y,
+            width: gifWidth,
+            height: gifHeight,
+            rotation: 0,
+            visible: true,
+            gifFrameCanvases: frameCanvases,
+            gifCurrentFrame: 0,
+            gifTotalFrames: frameCanvases.length,
+            gifPlaying: true,
+            gifLastFrameTime: performance.now(),
+            gifFrameDelays: frameDelays,
+            gifSrc: blobUrl
+        };
+
+        this.images.push(imageData);
+        this.selectImage(imageData);
+        this.invalidateCullCache();
+        this.needsRender = true;
+        this.updatePlayingMediaState();
+        this.render();
+        this.notifyChange();
+
+        if (this.historyManager) {
+            this.historyManager.pushAction({
+                type: 'add_image',
+                data: {
+                    id: imageData.id,
+                    name: imageData.name,
+                    src: blobUrl,
+                    x: imageData.x,
+                    y: imageData.y,
+                    width: imageData.width,
+                    height: imageData.height,
+                    visible: true,
+                    mediaType: 'gif'
+                }
+            });
+        }
+
+        return imageData;
+    }
+
+    addGifSilent(gifArrayBuffer, x, y, name = 'GIF', blobUrl = null) {
+        const { parseGIF, decompressFrames } = window.GifuctJs;
+        const gif = parseGIF(gifArrayBuffer);
+        const frames = decompressFrames(gif, true);
+
+        if (!frames || frames.length === 0) return null;
+
+        const gifWidth = gif.lsd.width;
+        const gifHeight = gif.lsd.height;
+
+        const compositeCanvas = document.createElement('canvas');
+        compositeCanvas.width = gifWidth;
+        compositeCanvas.height = gifHeight;
+        const compositeCtx = compositeCanvas.getContext('2d');
+
+        const frameCanvases = [];
+        const frameDelays = [];
+
+        for (const frame of frames) {
+            if (frame.disposalType === 2) {
+                compositeCtx.clearRect(0, 0, gifWidth, gifHeight);
+            }
+            const frameImageData = new ImageData(
+                new Uint8ClampedArray(frame.patch),
+                frame.dims.width,
+                frame.dims.height
+            );
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = frame.dims.width;
+            tempCanvas.height = frame.dims.height;
+            tempCanvas.getContext('2d').putImageData(frameImageData, 0, 0);
+            compositeCtx.drawImage(tempCanvas, frame.dims.left, frame.dims.top);
+
+            const fc = document.createElement('canvas');
+            fc.width = gifWidth;
+            fc.height = gifHeight;
+            fc.getContext('2d').drawImage(compositeCanvas, 0, 0);
+            frameCanvases.push(fc);
+            frameDelays.push(frame.delay || 100);
+        }
+
+        const posterImg = new Image();
+        posterImg.src = frameCanvases[0].toDataURL();
+
+        const imageData = {
+            id: Date.now() + Math.random(),
+            name: name || `GIF ${this.images.length + 1}`,
+            img: posterImg,
+            mediaType: 'gif',
+            x, y,
+            width: gifWidth,
+            height: gifHeight,
+            rotation: 0,
+            visible: true,
+            gifFrameCanvases: frameCanvases,
+            gifCurrentFrame: 0,
+            gifTotalFrames: frameCanvases.length,
+            gifPlaying: true,
+            gifLastFrameTime: performance.now(),
+            gifFrameDelays: frameDelays,
+            gifSrc: blobUrl
+        };
+
+        this.images.push(imageData);
+        this.needsRender = true;
+        this.updatePlayingMediaState();
+        return imageData;
+    }
+
+    toggleVideoPlayback(img) {
+        if (!img || img.mediaType !== 'video' || !img.videoElement) return;
+        if (img.isPlaying) {
+            img.videoElement.pause();
+            img.isPlaying = false;
+            img.currentTime = img.videoElement.currentTime;
+        } else {
+            img.videoElement.currentTime = img.currentTime || 0;
+            img.videoElement.play().catch(e => console.warn('Video play failed:', e));
+            img.isPlaying = true;
+        }
+        this.updatePlayingMediaState();
+        this.needsRender = true;
+    }
+
+    toggleGifPlayback(img) {
+        if (!img || img.mediaType !== 'gif') return;
+        img.gifPlaying = !img.gifPlaying;
+        if (img.gifPlaying) {
+            img.gifLastFrameTime = performance.now();
+        }
+        this.updatePlayingMediaState();
+        this.needsRender = true;
+    }
+
+    stepGifFrame(img, direction = 1) {
+        if (!img || img.mediaType !== 'gif' || !img.gifFrameCanvases) return;
+        img.gifPlaying = false;
+        img.gifCurrentFrame = (img.gifCurrentFrame + direction + img.gifTotalFrames) % img.gifTotalFrames;
+        this.updatePlayingMediaState();
+        this.needsRender = true;
+    }
+
+    setGifFrame(img, frameIndex) {
+        if (!img || img.mediaType !== 'gif' || !img.gifFrameCanvases) return;
+        img.gifCurrentFrame = Math.max(0, Math.min(frameIndex, img.gifTotalFrames - 1));
+        this.needsRender = true;
+    }
+
+    openVideoFullscreen(img) {
+        if (!img || img.mediaType !== 'video') return;
+        const overlay = document.createElement('div');
+        overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.9);z-index:99999;display:flex;align-items:center;justify-content:center;';
+
+        const video = document.createElement('video');
+        video.src = img.videoSrc || img.videoElement.src;
+        video.controls = true;
+        video.autoplay = true;
+        video.style.cssText = 'max-width:95%;max-height:95%;';
+        video.currentTime = img.videoElement?.currentTime || img.currentTime || 0;
+
+        overlay.appendChild(video);
+        document.body.appendChild(overlay);
+
+        const close = () => {
+            // Sync time back
+            if (img.videoElement) {
+                img.videoElement.currentTime = video.currentTime;
+                img.currentTime = video.currentTime;
+            }
+            video.pause();
+            overlay.remove();
+            this.needsRender = true;
+        };
+
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) close();
+        });
+
+        document.addEventListener('keydown', function escHandler(e) {
+            if (e.key === 'Escape') {
+                close();
+                document.removeEventListener('keydown', escHandler);
+            }
+        });
+    }
+
+    // Pause all playing media (for board switching)
+    pauseAllMedia() {
+        for (const img of this.images) {
+            if (img.mediaType === 'video' && img.isPlaying) {
+                img.videoElement?.pause();
+                img.isPlaying = false;
+                img.currentTime = img.videoElement?.currentTime || 0;
+            }
+            if (img.mediaType === 'gif') {
+                img.gifPlaying = false;
+            }
+        }
+        this.hasPlayingMedia = false;
     }
 
     selectImage(img, multiSelect = false) {
@@ -1752,23 +2215,47 @@ export class Canvas {
         const img = this.images.find(img => img.id === id);
         if (!img) return;
 
+        // Pause video before removing
+        if (img.mediaType === 'video' && img.videoElement) {
+            img.videoElement.pause();
+            img.isPlaying = false;
+        }
+
         if (this.historyManager && !skipHistory) {
+            // Determine src based on media type
+            let src;
+            if (img.mediaType === 'video') {
+                src = img.filePath || img.videoSrc || img.videoElement?.src || '';
+            } else if (img.mediaType === 'gif') {
+                src = img.filePath || img.gifSrc || '';
+            } else {
+                src = img.filePath || img.img?.src || '';
+            }
+
+            const historyData = {
+                id: img.id,
+                name: img.name,
+                src,
+                x: img.x,
+                y: img.y,
+                width: img.width,
+                height: img.height,
+                visible: img.visible
+            };
+            if (img.mediaType) historyData.mediaType = img.mediaType;
+
             this.historyManager.pushAction({
                 type: 'delete_image',
-                data: {
-                    id: img.id,
-                    name: img.name,
-                    src: img.img.src,
-                    x: img.x,
-                    y: img.y,
-                    width: img.width,
-                    height: img.height,
-                    visible: img.visible
-                }
+                data: historyData
             });
         }
 
         this.images = this.images.filter(img => img.id !== id);
+        this.updatePlayingMediaState();
+
+        if (this.mediaControls) {
+            this.mediaControls.dismiss();
+        }
 
         if (this.selectedImage && this.selectedImage.id === id) {
             this.selectedImage = null;
@@ -2961,17 +3448,44 @@ export class Canvas {
                         this.ctx.translate(-img.x, -img.y);
                     }
 
-                    // Determine draw source: use cached filtered canvas if available
+                    // Determine draw source based on media type
                     let drawSource, drawSx, drawSy, drawSw, drawSh;
 
-                    if (img._filteredCanvas) {
+                    if (img.mediaType === 'video' && img.videoElement) {
+                        // VIDEO: use video element when ready, poster canvas as fallback
+                        if (img.videoElement.readyState >= 2) {
+                            drawSource = img.videoElement;
+                            drawSx = 0; drawSy = 0;
+                            drawSw = img.videoElement.videoWidth;
+                            drawSh = img.videoElement.videoHeight;
+                        } else {
+                            // Poster canvas fallback
+                            drawSource = img.img;
+                            drawSx = 0; drawSy = 0;
+                            drawSw = img.img.width;
+                            drawSh = img.img.height;
+                        }
+                    } else if (img.mediaType === 'gif' && img.gifFrameCanvases) {
+                        // GIF: advance frame and draw current frame
+                        if (img.gifPlaying) {
+                            const now = performance.now();
+                            const delay = img.gifFrameDelays[img.gifCurrentFrame] || 100;
+                            if (now - img.gifLastFrameTime >= delay) {
+                                img.gifCurrentFrame = (img.gifCurrentFrame + 1) % img.gifTotalFrames;
+                                img.gifLastFrameTime = now;
+                            }
+                        }
+                        drawSource = img.gifFrameCanvases[img.gifCurrentFrame];
+                        drawSx = 0; drawSy = 0;
+                        drawSw = drawSource.width;
+                        drawSh = drawSource.height;
+                    } else if (img._filteredCanvas) {
                         // Use pre-rendered filtered canvas
                         drawSource = img._filteredCanvas;
                         drawSx = 0;
                         drawSy = 0;
                         drawSw = img._filteredCanvas.width;
                         drawSh = img._filteredCanvas.height;
-                        // console.log('[render] using filtered canvas for', img.name);
                     } else {
                         // Draw directly from source image
                         const sourceImg = img.originalImg || img.img;
@@ -3004,6 +3518,28 @@ export class Canvas {
                     } else {
                         // Draw image
                         this.ctx.drawImage(drawSource, drawSx, drawSy, drawSw, drawSh, img.x, img.y, img.width, img.height);
+                    }
+
+                    // Draw play overlay on paused videos
+                    if (img.mediaType === 'video' && !img.isPlaying) {
+                        this.ctx.save();
+                        const cx = img.x + img.width / 2;
+                        const cy = img.y + img.height / 2;
+                        const r = Math.min(img.width, img.height) * 0.12;
+                        // Semi-transparent circle
+                        this.ctx.fillStyle = 'rgba(0,0,0,0.5)';
+                        this.ctx.beginPath();
+                        this.ctx.arc(cx, cy, r, 0, Math.PI * 2);
+                        this.ctx.fill();
+                        // Play triangle
+                        this.ctx.fillStyle = 'rgba(255,255,255,0.9)';
+                        this.ctx.beginPath();
+                        this.ctx.moveTo(cx - r * 0.35, cy - r * 0.5);
+                        this.ctx.lineTo(cx - r * 0.35, cy + r * 0.5);
+                        this.ctx.lineTo(cx + r * 0.55, cy);
+                        this.ctx.closePath();
+                        this.ctx.fill();
+                        this.ctx.restore();
                     }
 
                 } catch (e) {
@@ -3512,6 +4048,7 @@ export class Canvas {
     }
 
     clear() {
+        this.pauseAllMedia();
         this.images = [];
         this.selectedImage = null;
         this.selectedImages = [];

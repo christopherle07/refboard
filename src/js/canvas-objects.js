@@ -18,6 +18,11 @@ export class CanvasObjectsManager {
         this.isBoxSelecting = false;
         this.selectionBox = null;
         this.editingTextObject = null;
+
+        // Throttling for snapping calculations
+        this.lastSnapTime = 0;
+        this.snapThrottleMs = 16; // ~60fps max for snapping calculations
+        this.cachedSnapResult = null;
     }
 
     setTool(tool) {
@@ -89,8 +94,9 @@ export class CanvasObjectsManager {
                 this.selectObject(clickedObject, multiSelect);
             }
 
-            // Clear image selection when selecting objects (but not if group is selected)
-            if (this.canvas.selectedImages.length > 0 && !this.canvas.selectedGroup) {
+            // Clear image selection when selecting objects (but not during multi-select or group)
+            const isMultiSelect = e.shiftKey || e.ctrlKey || e.metaKey;
+            if (this.canvas.selectedImages.length > 0 && !this.canvas.selectedGroup && !isMultiSelect) {
                 this.canvas.selectImage(null);
             }
 
@@ -132,7 +138,8 @@ export class CanvasObjectsManager {
             // Resize the selected object
             this.resizeObject(this.selectedObject, this.resizeHandle, worldPos.x, worldPos.y);
             this.canvas.needsRender = true;
-            this.dispatchObjectsChanged();
+            // Don't dispatch objectsChanged during resize - it triggers expensive layer re-renders
+            // The event will be dispatched in handleMouseUp when resize ends
         } else if (this.isDragging && this.selectedObjects.length > 0) {
             // Drag all selected objects
             let finalX = worldPos.x;
@@ -145,9 +152,27 @@ export class CanvasObjectsManager {
                 if (offset) {
                     const tentativeX = worldPos.x - offset.x;
                     const tentativeY = worldPos.y - offset.y;
-                    const snapResult = this.canvas.snapToObjects(tentativeX, tentativeY, primaryObj);
-                    finalX = snapResult.x + offset.x;
-                    finalY = snapResult.y + offset.y;
+
+                    // Throttle snapping calculations to reduce CPU usage
+                    const now = performance.now();
+                    if (now - this.lastSnapTime >= this.snapThrottleMs || !this.cachedSnapResult) {
+                        this.cachedSnapResult = this.canvas.snapToObjects(tentativeX, tentativeY, primaryObj);
+                        this.lastSnapTime = now;
+                    }
+
+                    // Use cached snap result, but adjust for current position
+                    const snapResult = this.cachedSnapResult;
+                    const snapDeltaX = snapResult.x - tentativeX;
+                    const snapDeltaY = snapResult.y - tentativeY;
+
+                    // Only apply snap if within threshold
+                    const threshold = this.canvas.snapThreshold / this.canvas.zoom;
+                    if (Math.abs(snapDeltaX) < threshold) {
+                        finalX = snapResult.x + offset.x;
+                    }
+                    if (Math.abs(snapDeltaY) < threshold) {
+                        finalY = snapResult.y + offset.y;
+                    }
                     this.canvas.snapLines = snapResult.guides;
                 }
             } else {
@@ -198,7 +223,8 @@ export class CanvasObjectsManager {
             }
 
             this.canvas.needsRender = true;
-            this.dispatchObjectsChanged();
+            // Don't dispatch objectsChanged during drag - it triggers expensive layer re-renders
+            // The event will be dispatched in handleMouseUp when drag ends
         } else if (this.isDrawing && this.currentTool === 'text' && this.startPoint) {
             // Preview text box as user drags
             const x = Math.min(this.startPoint.x, worldPos.x);
@@ -262,10 +288,16 @@ export class CanvasObjectsManager {
         if (this.isResizing) {
             this.isResizing = false;
             this.resizeHandle = null;
+            // Dispatch objectsChanged now that resize is complete
+            this.dispatchObjectsChanged();
             return true;
         }
         if (this.isDragging) {
             this.isDragging = false;
+            // Clear cached snap result
+            this.cachedSnapResult = null;
+            // Dispatch objectsChanged now that drag is complete
+            this.dispatchObjectsChanged();
             return true;
         }
         if (this.isDrawing && this.currentTool === 'text' && this.startPoint) {
@@ -292,6 +324,12 @@ export class CanvasObjectsManager {
                 this.objects.push(textObj);
                 this.selectObject(textObj);
                 this.dispatchObjectsChanged();
+                if (this.canvas.historyManager) {
+                    this.canvas.historyManager.pushAction({
+                        type: 'add_object',
+                        data: JSON.parse(JSON.stringify(textObj))
+                    });
+                }
 
                 // Exit text tool mode after creating textbox
                 this.setTool(null);
@@ -364,6 +402,12 @@ export class CanvasObjectsManager {
                 this.objects.push(shapeObj);
                 this.selectObject(shapeObj);
                 this.dispatchObjectsChanged();
+                if (this.canvas.historyManager) {
+                    this.canvas.historyManager.pushAction({
+                        type: 'add_object',
+                        data: JSON.parse(JSON.stringify(shapeObj))
+                    });
+                }
 
                 // Exit shape tool mode after creating shape
                 this.setTool(null);
@@ -990,8 +1034,23 @@ export class CanvasObjectsManager {
         this.canvas.canvas.dispatchEvent(event);
     }
 
-    updateSelectedObject(properties) {
+    updateSelectedObject(properties, skipHistory = false) {
         if (this.selectedObject) {
+            // Capture old values for undo
+            if (!skipHistory && this.canvas.historyManager) {
+                const oldProps = {};
+                for (const key of Object.keys(properties)) {
+                    oldProps[key] = this.selectedObject[key];
+                }
+                this.canvas.historyManager.pushAction({
+                    type: 'update_object',
+                    data: {
+                        id: this.selectedObject.id,
+                        oldProps,
+                        newProps: { ...properties }
+                    }
+                });
+            }
             Object.assign(this.selectedObject, properties);
 
             // If the object is currently being edited (textarea is visible), update textarea styling
@@ -1023,22 +1082,35 @@ export class CanvasObjectsManager {
 
     deleteSelectedObject() {
         if (this.selectedObjects.length > 0) {
-            // Delete all selected objects
+            const deleted = this.selectedObjects.map(obj => JSON.parse(JSON.stringify(obj)));
             const idsToDelete = this.selectedObjects.map(obj => obj.id);
             this.objects = this.objects.filter(obj => !idsToDelete.includes(obj.id));
             this.deselectAll();
             this.dispatchObjectsChanged();
+            if (this.canvas.historyManager) {
+                this.canvas.historyManager.pushAction({
+                    type: 'delete_objects',
+                    data: deleted
+                });
+            }
         }
     }
 
-    deleteObject(id) {
+    deleteObject(id, skipHistory = false) {
         const index = this.objects.findIndex(obj => obj.id === id);
         if (index > -1) {
+            const deleted = JSON.parse(JSON.stringify(this.objects[index]));
             if (this.selectedObject && this.selectedObject.id === id) {
                 this.deselectAll();
             }
             this.objects.splice(index, 1);
             this.dispatchObjectsChanged();
+            if (!skipHistory && this.canvas.historyManager) {
+                this.canvas.historyManager.pushAction({
+                    type: 'delete_objects',
+                    data: [deleted]
+                });
+            }
         }
     }
 
@@ -1826,6 +1898,12 @@ export class CanvasObjectsManager {
         this.selectObject(textObj);
         this.canvas.needsRender = true;
         this.dispatchObjectsChanged();
+        if (this.canvas.historyManager) {
+            this.canvas.historyManager.pushAction({
+                type: 'add_object',
+                data: JSON.parse(JSON.stringify(textObj))
+            });
+        }
 
         return textObj;
     }

@@ -38,6 +38,18 @@ pub struct Layer {
     pub invert: Option<bool>,
     #[serde(default)]
     pub mirror: Option<bool>,
+    #[serde(default)]
+    pub media_type: Option<String>,
+    #[serde(default)]
+    pub current_time: Option<f64>,
+    #[serde(default)]
+    pub volume: Option<f64>,
+    #[serde(default)]
+    pub muted: Option<bool>,
+    #[serde(default)]
+    pub gif_current_frame: Option<u32>,
+    #[serde(default)]
+    pub gif_playing: Option<bool>,
 }
 
 fn default_visible() -> bool {
@@ -363,6 +375,12 @@ pub fn save_image_file(app: &AppHandle, data: String, name: String) -> Result<St
                 "svg"
             } else if meta.contains("image/bmp") {
                 "bmp"
+            } else if meta.contains("video/mp4") {
+                "mp4"
+            } else if meta.contains("video/quicktime") {
+                "mov"
+            } else if meta.contains("video/webm") {
+                "webm"
             } else {
                 "png"
             };
@@ -391,6 +409,24 @@ pub fn save_image_file(app: &AppHandle, data: String, name: String) -> Result<St
     let file_path = images_dir.join(&filename);
     fs::write(&file_path, bytes).map_err(|e| format!("Failed to write image file: {}", e))?;
 
+    Ok(filename)
+}
+
+pub fn save_media_file_from_path(app: &AppHandle, source_path: String, name: String) -> Result<String, String> {
+    let images_dir = get_images_dir(app);
+    let ext = std::path::Path::new(&source_path)
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("mp4");
+    let sanitized = sanitize_filename(&name);
+    let stem = sanitized
+        .rsplit_once('.')
+        .map(|(s, _)| s)
+        .unwrap_or(&sanitized);
+    let filename = format!("{}_{}.{}", now_millis(), stem, ext);
+    let dest_path = images_dir.join(&filename);
+    fs::copy(&source_path, &dest_path)
+        .map_err(|e| format!("Failed to copy media file: {}", e))?;
     Ok(filename)
 }
 

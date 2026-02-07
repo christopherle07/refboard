@@ -124,6 +124,11 @@ pub fn save_image_file(app: AppHandle, data: String, name: String) -> Result<Str
 }
 
 #[tauri::command]
+pub fn save_media_file_from_path(app: AppHandle, source_path: String, name: String) -> Result<String, String> {
+    database::save_media_file_from_path(&app, source_path, name)
+}
+
+#[tauri::command]
 pub fn get_images_dir(app: AppHandle) -> Result<String, String> {
     let dir = database::get_images_dir(&app);
     Ok(dir.to_string_lossy().to_string())

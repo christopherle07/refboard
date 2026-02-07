@@ -27,11 +27,18 @@
     <link rel="stylesheet" href="css/views.css">
     <link rel="stylesheet" href="css/assets-library.css">
     <link rel="stylesheet" href="css/transitions.css">
+    <link rel="stylesheet" href="css/media-controls.css">
 </head>
 <body>
     <!-- Unified Titlebar/Nav Bar -->
-    <div class="unified-titlebar">
+    <div class="unified-titlebar" data-tauri-drag-region>
         <div class="titlebar-window-controls">
+            <button class="titlebar-button close-btn" id="titlebar-close" title="Close">
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                    <line x1="1" y1="1" x2="11" y2="11" stroke="currentColor" stroke-width="1"/>
+                    <line x1="11" y1="1" x2="1" y2="11" stroke="currentColor" stroke-width="1"/>
+                </svg>
+            </button>
             <button class="titlebar-button minimize-btn" id="titlebar-minimize" title="Minimize">
                 <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
                     <line x1="0" y1="6" x2="12" y2="6" stroke="currentColor" stroke-width="1"/>
@@ -42,16 +49,18 @@
                     <rect x="1" y="1" width="10" height="10" stroke="currentColor" stroke-width="1" fill="none"/>
                 </svg>
             </button>
-            <button class="titlebar-button close-btn" id="titlebar-close" title="Close">
-                <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                    <line x1="1" y1="1" x2="11" y2="11" stroke="currentColor" stroke-width="1"/>
-                    <line x1="11" y1="1" x2="1" y2="11" stroke="currentColor" stroke-width="1"/>
-                </svg>
-            </button>
         </div>
-        <button class="titlebar-sidebar-toggle" id="sidebar-toggle-btn" title="Toggle Sidebar">
+        <button class="titlebar-sidebar-toggle" id="sidebar-toggle-btn">
             <img src="/assets/sidebar-col.svg" alt="Toggle Sidebar" class="sidebar-toggle-icon">
         </button>
+        <div class="titlebar-undo-redo">
+            <button class="undo-redo-btn" id="undo-btn" title="Undo (Ctrl+Z)" disabled>
+                <img src="/assets/undo-svgrepo-com.svg" alt="Undo" class="undo-redo-icon">
+            </button>
+            <button class="undo-redo-btn" id="redo-btn" title="Redo (Ctrl+Y)" disabled>
+                <img src="/assets/undo-svgrepo-com.svg" alt="Redo" class="undo-redo-icon redo-flipped">
+            </button>
+        </div>
         <div class="titlebar-nav-container" data-tauri-drag-region>
             <div class="nav-breadcrumb" id="nav-breadcrumb">
                 <span class="breadcrumb-item active">All Boards</span>
@@ -285,6 +294,13 @@
                             </div>
                         </div>
                     </div>
+
+                    <div class="palette-sidebar-section" id="palette-sidebar-section" style="display: none;">
+                        <div class="panel-section-header">
+                            <span class="panel-section-title">PALETTE COLORS</span>
+                        </div>
+                        <div class="palette-swatches" id="palette-swatches"></div>
+                    </div>
                 </div>
             </aside>
 
@@ -500,11 +516,6 @@
             <div class="layer-context-menu-item" id="layer-context-delete">Delete</div>
         </div>
 
-        <!-- Floating Color Palette Popup -->
-        <div class="color-palette-popup" id="color-palette-popup" style="display: none;">
-            <div class="color-palette-grid" id="color-palette-grid"></div>
-        </div>
-
         <!-- Asset Details Sidebar -->
         <aside class="asset-sidebar" id="asset-sidebar">
             <div class="asset-sidebar-header">
@@ -620,6 +631,7 @@
         </div>
     </div>
 
+    <script src="js/vendor/gifuct-js.js"></script>
     <script type="module">
         import { initApp } from './js/app.js';
         import './js/titlebar.js';

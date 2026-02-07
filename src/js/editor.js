@@ -5,6 +5,7 @@ import { HistoryManager } from './history-manager.js';
 import { showInputModal, showChoiceModal, showToast, showConfirmModal, showColorExtractorModal, extractColorsFromImage } from './modal-utils.js';
 import { updateTitlebarTitle } from './titlebar.js';
 import { FontDropdown } from './font-dropdown.js';
+import { MediaControls } from './media-controls.js';
 
 // Apply theme on page load
 const savedSettings = JSON.parse(localStorage.getItem('canvas_settings') || '{}');
@@ -17,6 +18,7 @@ console.log('Applied theme on load:', theme);
 const editorInstances = new Map(); // Map<container, editorState>
 let activeContainer = null; // Currently active editor container
 let sidebarToggleListenerAttached = false; // Prevent duplicate listeners on titlebar button
+let undoRedoListenerAttached = false; // Prevent duplicate listeners on undo/redo buttons
 
 // Helper to get element from active container
 function getElement(id) {
@@ -25,6 +27,14 @@ function getElement(id) {
         return null;
     }
     return activeContainer.querySelector('#' + id);
+}
+
+// Update undo/redo button disabled state
+function updateUndoRedoButtons() {
+    const undoBtn = document.getElementById('undo-btn');
+    const redoBtn = document.getElementById('redo-btn');
+    if (undoBtn) undoBtn.disabled = !historyManager || !historyManager.canUndo();
+    if (redoBtn) redoBtn.disabled = !historyManager || !historyManager.canRedo();
 }
 
 // Get or create editor instance for a container
@@ -322,8 +332,20 @@ export async function initEditor(boardId, container) {
     canvas = new Canvas(canvasElement);
     canvas.setBackgroundColor(board.bgColor || board.bg_color);
 
+    // Initialize media controls (video/GIF hover bars)
+    const canvasContainer = canvasElement.parentElement;
+    const mediaControls = new MediaControls(canvas, canvasContainer);
+    canvas.mediaControls = mediaControls;
+
+    // 2K video resolution warning
+    canvasElement.addEventListener('videoResolutionWarning', (e) => {
+        const { width, height, name } = e.detail;
+        showToast(`Warning: "${name}" is ${width}x${height}. High-resolution videos may affect performance.`, 'warning');
+    });
+
     historyManager = new HistoryManager(50);
     historyManager.setCanvas(canvas);
+    historyManager.onChanged = updateUndoRedoButtons;
     canvas.setHistoryManager(historyManager);
 
     const colorInput = container.querySelector('#bg-color');
@@ -374,14 +396,16 @@ export async function initEditor(boardId, container) {
     canvasElement.addEventListener('objectSelected', (e) => {
         showPropertiesPanel(e.detail);
         showFloatingToolbar(e.detail);
+        if (e.detail.type === 'colorPalette') {
+            showPaletteSidebar(e.detail);
+        } else {
+            hidePaletteSidebar();
+        }
     });
     canvasElement.addEventListener('objectDeselected', () => {
         hidePropertiesPanel();
         hideFloatingToolbars();
-    });
-    canvasElement.addEventListener('showColorCopyMenu', (e) => {
-        const { hex, rgb } = e.detail;
-        showColorCopyOptions(hex, rgb);
+        hidePaletteSidebar();
     });
     canvasElement.addEventListener('objectDoubleClicked', (e) => {
         const obj = e.detail;
@@ -439,14 +463,11 @@ export async function initEditor(boardId, container) {
     // Make save function globally accessible for app.js
     window.editorSaveNow = saveNow;
 
-    // Final resize trigger after all initialization is complete
-    // This ensures the canvas gets correct dimensions if sidebar was collapsed
-    setTimeout(() => {
-        if (canvas) {
-            canvas.resizeCanvas();
-            canvas.needsRender = true;
-        }
-    }, 50);
+    // Ensure canvas gets correct dimensions after initialization
+    if (canvas) {
+        canvas.resizeCanvas();
+        canvas.needsRender = true;
+    }
 
     console.log('[initEditor] Editor initialization complete!');
 }
@@ -486,61 +507,94 @@ async function loadLayers(layers, viewState = null) {
         let loaded = 0;
         const total = resolvedLayers.length;
 
+        const finishIfDone = () => {
+            loaded++;
+            if (loaded >= total) {
+                canvas.selectImage(null);
+                canvas.invalidateCullCache();
+                canvas.updatePlayingMediaState();
+                canvas.needsRender = true;
+                canvas.render();
+                resolve();
+            }
+        };
+
         resolvedLayers.forEach(({ layer, resolvedSrc, filePath }) => {
-            const img = new Image();
-            img.onload = () => {
-                const visible = layer.visible !== false;
-                const added = canvas.addImageSilent(img, layer.x, layer.y, layer.name, layer.width, layer.height, visible);
-                added.id = layer.id;
-                added.zIndex = layer.zIndex || 0;
-                added.rotation = layer.rotation || 0;
-                if (filePath) added.filePath = filePath;
-                // Restore filter properties (only if they exist and are not null)
-                if (layer.brightness != null) added.brightness = layer.brightness;
-                if (layer.contrast != null) added.contrast = layer.contrast;
-                if (layer.saturation != null) added.saturation = layer.saturation;
-                if (layer.hue != null) added.hue = layer.hue;
-                if (layer.blur != null) added.blur = layer.blur;
-                if (layer.opacity != null) added.opacity = layer.opacity;
-                if (layer.grayscale === true) added.grayscale = true;
-                if (layer.invert === true) added.invert = true;
-                if (layer.mirror === true) added.mirror = true;
+            if (layer.mediaType === 'video') {
+                // Restore video layer
+                const video = document.createElement('video');
+                video.preload = 'auto';
+                video.muted = layer.muted !== false;
+                video.onloadedmetadata = () => {
+                    const added = canvas.addVideoSilent(video, layer.x, layer.y, layer.name, layer.width, layer.height, layer.visible !== false);
+                    added.id = layer.id;
+                    added.zIndex = layer.zIndex || 0;
+                    added.rotation = layer.rotation || 0;
+                    added.currentTime = layer.currentTime || 0;
+                    added.volume = layer.volume != null ? layer.volume : 1;
+                    added.muted = layer.muted !== false;
+                    if (filePath) added.filePath = filePath;
+                    if (layer.opacity != null) added.opacity = layer.opacity;
+                    video.currentTime = added.currentTime;
+                    finishIfDone();
+                };
+                video.onerror = () => finishIfDone();
+                video.src = resolvedSrc;
+            } else if (layer.mediaType === 'gif') {
+                // Restore GIF layer
+                fetch(resolvedSrc)
+                    .then(r => r.arrayBuffer())
+                    .then(buffer => {
+                        const added = canvas.addGifSilent(buffer, layer.x, layer.y, layer.name, resolvedSrc);
+                        if (added) {
+                            added.id = layer.id;
+                            added.zIndex = layer.zIndex || 0;
+                            added.rotation = layer.rotation || 0;
+                            added.gifCurrentFrame = layer.gifCurrentFrame || 0;
+                            added.gifPlaying = layer.gifPlaying !== false;
+                            if (filePath) added.filePath = filePath;
+                            if (layer.opacity != null) added.opacity = layer.opacity;
+                        }
+                        finishIfDone();
+                    })
+                    .catch(() => finishIfDone());
+            } else {
+                // Restore regular image layer
+                const img = new Image();
+                img.onload = () => {
+                    const visible = layer.visible !== false;
+                    const added = canvas.addImageSilent(img, layer.x, layer.y, layer.name, layer.width, layer.height, visible);
+                    added.id = layer.id;
+                    added.zIndex = layer.zIndex || 0;
+                    added.rotation = layer.rotation || 0;
+                    if (filePath) added.filePath = filePath;
+                    if (layer.brightness != null) added.brightness = layer.brightness;
+                    if (layer.contrast != null) added.contrast = layer.contrast;
+                    if (layer.saturation != null) added.saturation = layer.saturation;
+                    if (layer.hue != null) added.hue = layer.hue;
+                    if (layer.blur != null) added.blur = layer.blur;
+                    if (layer.opacity != null) added.opacity = layer.opacity;
+                    if (layer.grayscale === true) added.grayscale = true;
+                    if (layer.invert === true) added.invert = true;
+                    if (layer.mirror === true) added.mirror = true;
 
-                // Restore crop data if it exists
-                if (layer.cropData) {
-                    added.cropData = layer.cropData;
-                    added.originalSrc = layer.originalSrc || layer.src;
-                    added.originalWidth = layer.originalWidth || img.naturalWidth;
-                    added.originalHeight = layer.originalHeight || img.naturalHeight;
-                    added.originalImg = img;
-                }
+                    if (layer.cropData) {
+                        added.cropData = layer.cropData;
+                        added.originalSrc = layer.originalSrc || layer.src;
+                        added.originalWidth = layer.originalWidth || img.naturalWidth;
+                        added.originalHeight = layer.originalHeight || img.naturalHeight;
+                        added.originalImg = img;
+                    }
 
-                // Build filter cache at load time if image has non-default filter values
-                if (canvas.buildFilterString(added)) {
-                    canvas.applyFilters(added);
-                }
+                    if (canvas.buildFilterString(added)) {
+                        canvas.applyFilters(added);
+                    }
 
-                loaded++;
-                if (loaded >= total) {
-                    canvas.selectImage(null);
-                    // Force initial render with restored view
-                    canvas.invalidateCullCache();
-                    canvas.needsRender = true;
-                    canvas.render();
-                    resolve();
-                }
-            };
-            img.onerror = () => {
-                loaded++;
-                if (loaded >= total) {
-                    // Force initial render
-                    canvas.invalidateCullCache();
-                    canvas.needsRender = true;
-                    canvas.render();
-                    resolve();
-                }
-            };
-            img.src = resolvedSrc;
+                    finishIfDone();
+                };
+                img.onerror = () => finishIfDone();
+                img.src = resolvedSrc;
+            }
         });
     });
 }
@@ -559,28 +613,34 @@ function setupEventListeners(container) {
         sidebarToggleListenerAttached = true;
 
         sidebarToggleBtn.addEventListener('click', () => {
-            // Find the current sidebar dynamically (it's inside activeContainer)
             const sidebar = activeContainer?.querySelector('#sidebar');
-            if (!sidebar) {
-                console.warn('[Sidebar] No sidebar found in active container');
-                return;
-            }
-            console.log('[Sidebar] Toggle button clicked!');
+            if (!sidebar) return;
             sidebar.classList.toggle('collapsed');
             sidebarToggleBtn.classList.toggle('active');
             localStorage.setItem('sidebar_collapsed', sidebar.classList.contains('collapsed'));
-            // Trigger canvas resize and force layout recalculation
-            const triggerResize = () => {
-                window.dispatchEvent(new Event('resize'));
-                if (canvas) {
-                    canvas.resizeCanvas();
-                    canvas.needsRender = true;
-                }
-            };
-            // Resize multiple times to handle CSS transition
-            triggerResize();
-            setTimeout(triggerResize, 100);
-            setTimeout(triggerResize, 250);
+        });
+    }
+
+    // Undo/Redo buttons - attach once since they're in the titlebar
+    const undoBtn = document.getElementById('undo-btn');
+    const redoBtn = document.getElementById('redo-btn');
+    if (undoBtn && redoBtn && !undoRedoListenerAttached) {
+        undoRedoListenerAttached = true;
+
+        undoBtn.addEventListener('click', () => {
+            if (historyManager && historyManager.undo()) {
+                renderLayers();
+                scheduleSave();
+                updateUndoRedoButtons();
+            }
+        });
+
+        redoBtn.addEventListener('click', () => {
+            if (historyManager && historyManager.redo()) {
+                renderLayers();
+                scheduleSave();
+                updateUndoRedoButtons();
+            }
         });
     }
 
@@ -842,12 +902,14 @@ function setupEventListeners(container) {
             if (historyManager.undo()) {
                 renderLayers();
                 scheduleSave();
+                updateUndoRedoButtons();
             }
         } else if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
             e.preventDefault();
             if (historyManager.redo()) {
                 renderLayers();
                 scheduleSave();
+                updateUndoRedoButtons();
             }
         } else if ((e.ctrlKey || e.metaKey) && e.key === 'g' && !isTyping) {
             e.preventDefault();
@@ -1210,10 +1272,20 @@ async function saveNow() {
 
     const images = canvas.getImages();
     const layers = images.map(img => {
+        // Determine src: for video use videoSrc/filePath, for gif use gifSrc/filePath
+        let src;
+        if (img.mediaType === 'video') {
+            src = img.filePath || img.videoSrc || img.videoElement?.src || '';
+        } else if (img.mediaType === 'gif') {
+            src = img.filePath || img.gifSrc || '';
+        } else {
+            src = img.filePath || img.img.src;
+        }
+
         const layer = {
             id: img.id,
             name: img.name,
-            src: img.filePath || img.img.src,
+            src,
             x: img.x,
             y: img.y,
             width: img.width,
@@ -1221,6 +1293,24 @@ async function saveNow() {
             visible: img.visible !== false,
             zIndex: img.zIndex || 0
         };
+
+        // Media type
+        if (img.mediaType && img.mediaType !== 'image') {
+            layer.mediaType = img.mediaType;
+        }
+
+        // Video state
+        if (img.mediaType === 'video') {
+            layer.currentTime = img.videoElement?.currentTime || img.currentTime || 0;
+            layer.volume = img.volume;
+            layer.muted = img.muted;
+        }
+
+        // GIF state
+        if (img.mediaType === 'gif') {
+            layer.gifCurrentFrame = img.gifCurrentFrame;
+            layer.gifPlaying = img.gifPlaying;
+        }
 
         // Only include filter properties if they have non-default values
         if (img.rotation !== undefined && img.rotation !== 0) layer.rotation = img.rotation;
@@ -1321,10 +1411,16 @@ function createLayerItem(img, images) {
         renderLayers();
     });
 
-    // Layer icon (image icon)
+    // Layer icon (image/video/gif icon)
     const layerIcon = document.createElement('img');
     layerIcon.className = 'layer-icon';
-    layerIcon.src = '/assets/layericon.svg';
+    if (img.mediaType === 'video') {
+        layerIcon.src = '/assets/VideoIcon.svg';
+    } else if (img.mediaType === 'gif') {
+        layerIcon.src = '/assets/GifIcon.svg';
+    } else {
+        layerIcon.src = '/assets/layericon.svg';
+    }
 
     const layerContent = document.createElement('div');
     layerContent.className = 'layer-content';
@@ -1607,10 +1703,17 @@ function createObjectLayerItem(obj, objects) {
     visibilityBtn.addEventListener('click', (e) => {
         e.stopPropagation();
         e.preventDefault();
+        const oldVisible = obj.visible !== false;
         obj.visible = obj.visible === false ? true : false;
         canvas.needsRender = true;
         renderLayers();
         scheduleSave();
+        if (historyManager) {
+            historyManager.pushAction({
+                type: 'object_visibility',
+                data: { id: obj.id, oldVisible, newVisible: obj.visible }
+            });
+        }
     });
 
     // Layer icon based on type
@@ -1672,7 +1775,11 @@ function createObjectLayerItem(obj, objects) {
     layerItem.addEventListener('click', (e) => {
         if (e.target.tagName === 'INPUT') return;
         if (obj.visible !== false) {
-            canvas.objectsManager.selectObject(obj);
+            if (e.ctrlKey || e.metaKey || e.shiftKey) {
+                canvas.objectsManager.selectObject(obj, true);
+            } else {
+                canvas.objectsManager.selectObject(obj);
+            }
             renderLayers();
         }
     });
@@ -1878,10 +1985,16 @@ function getAllLayersForDragging() {
 function applyLayerOrder() {
     if (allLayersOrder.length === 0) return;
 
+    // Capture old zIndex values for undo
+    const oldZIndexes = allLayersOrder.map(layer => ({
+        type: layer.type,
+        id: layer.data.id,
+        zIndex: layer.data.zIndex || 0
+    }));
+
     // Assign zIndex based on position in array (0 = back, higher = front)
     const zIndexUpdates = [];
     allLayersOrder.forEach((layer, index) => {
-        console.log(`Setting ${layer.type} ${layer.data.id} zIndex from ${layer.data.zIndex} to ${index}`);
         layer.data.zIndex = index;
         zIndexUpdates.push({
             type: layer.type,
@@ -1889,6 +2002,15 @@ function applyLayerOrder() {
             zIndex: index
         });
     });
+
+    // Push to history if order actually changed
+    const orderChanged = oldZIndexes.some((old, i) => old.zIndex !== zIndexUpdates[i].zIndex);
+    if (orderChanged && historyManager) {
+        historyManager.pushAction({
+            type: 'reorder_layers',
+            data: { oldOrder: oldZIndexes, newOrder: zIndexUpdates }
+        });
+    }
 
     // Sync to floating window
     if (syncChannel) {
@@ -3057,15 +3179,6 @@ function setupContextMenu() {
         const worldPos = canvas.screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
         contextMenuMousePos = worldPos;
 
-        // Check if right-clicking on a color palette object
-        const clickedObject = canvas.objectsManager.getObjectAtPoint(worldPos.x, worldPos.y);
-        console.log('Right-clicked object:', clickedObject);
-        if (clickedObject && clickedObject.type === 'colorPalette') {
-            console.log('Opening palette modal for:', clickedObject);
-            showPaletteModal(clickedObject);
-            return;
-        }
-
         // Show/hide multi-select options based on selection state
         const hasSelection = canvas.selectedImages.length > 0;
         const hasImageClick = canvas.contextMenuImage !== null && canvas.contextMenuImage !== undefined;
@@ -3205,6 +3318,12 @@ function setupContextMenu() {
                 canvas.objectsManager.objects.push(paletteObject);
                 canvas.needsRender = true;
                 canvas.objectsManager.dispatchObjectsChanged();
+                if (historyManager) {
+                    historyManager.pushAction({
+                        type: 'add_object',
+                        data: JSON.parse(JSON.stringify(paletteObject))
+                    });
+                }
 
                 showToast(`Color palette created with ${numColors} color${numColors > 1 ? 's' : ''}`, 'success', 3000);
             } catch (err) {
@@ -3744,8 +3863,15 @@ async function appendAssetToLibrary(asset, container, isAllAssets) {
     const assetItem = document.createElement('div');
     assetItem.className = 'assets-library-item';
 
+    const isVideo = asset.metadata?.mediaType === 'video';
+    const isGif = asset.metadata?.mediaType === 'gif';
+
     const img = document.createElement('img');
-    img.src = await boardManager.resolveImageSrc(asset.src);
+    if (isVideo && asset.metadata?.thumbnailSrc) {
+        img.src = asset.metadata.thumbnailSrc;
+    } else {
+        img.src = await boardManager.resolveImageSrc(asset.src);
+    }
     img.draggable = false;
 
     const deleteBtn = document.createElement('button');
@@ -3785,6 +3911,17 @@ async function appendAssetToLibrary(asset, container, isAllAssets) {
     `;
 
     assetItem.appendChild(img);
+    if (isVideo) {
+        const playBadge = document.createElement('div');
+        playBadge.className = 'asset-play-badge';
+        playBadge.innerHTML = '&#9654;';
+        assetItem.appendChild(playBadge);
+    } else if (isGif) {
+        const gifBadge = document.createElement('div');
+        gifBadge.className = 'asset-gif-badge';
+        gifBadge.textContent = 'GIF';
+        assetItem.appendChild(gifBadge);
+    }
     assetItem.appendChild(cardInfo);
     assetItem.appendChild(deleteBtn);
 
@@ -3803,62 +3940,114 @@ async function appendAssetToLibrary(asset, container, isAllAssets) {
 function importAssetsToLibrary() {
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = 'image/*';
+    input.accept = 'image/*,video/mp4,video/quicktime,.mp4,.mov,.gif';
     input.multiple = true;
 
     input.onchange = async (e) => {
         const files = Array.from(e.target.files);
 
+        // Process files sequentially to avoid race conditions with board asset list
         for (const file of files) {
-            const reader = new FileReader();
-            reader.onload = async (event) => {
-                const dataUrl = event.target.result;
+            const isVideo = file.type.startsWith('video/') || /\.(mp4|mov)$/i.test(file.name);
+            const isGif = file.type === 'image/gif' || /\.gif$/i.test(file.name);
+
+            try {
+                // Re-read board each iteration to avoid stale asset lists
                 const board = boardManager.currentBoard;
                 const currentAssets = board.assets || [];
+                if (currentAssets.some(a => a.name === file.name)) continue;
 
-                const existsInBoard = currentAssets.some(a => a.name === file.name);
-                if (!existsInBoard) {
-                    // Save image file to disk if possible
-                    const filePath = await boardManager.saveImageFile(dataUrl, file.name);
-                    const srcForStorage = filePath || dataUrl;
+                // Read file as dataURL
+                const dataUrl = await readFileAsDataURL(file);
+                const filePath = await boardManager.saveImageFile(dataUrl, file.name);
+                const srcForStorage = filePath || dataUrl;
 
-                    const newAsset = {
-                        id: Date.now() + Math.random(),
-                        src: srcForStorage,
-                        name: file.name,
-                        tags: [],
-                        metadata: {
-                            created: Date.now()
-                        }
-                    };
-                    const updatedAssets = [...currentAssets, newAsset];
+                const metadata = { created: Date.now() };
+                if (isVideo) {
+                    metadata.mediaType = 'video';
+                    try {
+                        const blobUrl = URL.createObjectURL(file);
+                        const thumbUrl = await generateVideoThumbnail(blobUrl);
+                        URL.revokeObjectURL(blobUrl);
+                        if (thumbUrl) metadata.thumbnailSrc = thumbUrl;
+                    } catch (err) { console.warn('Failed to generate video thumbnail:', err); }
+                } else if (isGif) {
+                    metadata.mediaType = 'gif';
+                }
 
-                    // Update backend
-                    await boardManager.updateBoard(currentBoardId, { assets: updatedAssets });
+                const newAsset = {
+                    id: Date.now() + Math.random(),
+                    src: srcForStorage,
+                    name: file.name,
+                    tags: [],
+                    metadata
+                };
 
-                    // Add to all assets with tags and metadata
-                    let allAssets = await boardManager.getAllAssets();
-                    const existsInAll = allAssets.some(a => a.name === file.name && a.src === srcForStorage);
-                    if (!existsInAll) {
+                // Re-read fresh board assets before writing to avoid overwrite
+                const freshBoard = boardManager.currentBoard;
+                const freshAssets = freshBoard.assets || [];
+                const updatedAssets = [...freshAssets, newAsset];
+                await boardManager.updateBoard(currentBoardId, { assets: updatedAssets });
+
+                let allAssets = await boardManager.getAllAssets();
+                const existsInAll = allAssets.some(a => a.name === file.name && a.src === srcForStorage);
+                if (!existsInAll) {
+                    if (window.__TAURI__) {
+                        await boardManager.invoke('add_to_all_assets', { name: file.name, src: srcForStorage, tags: [], metadata });
+                    } else {
                         allAssets.push(newAsset);
-                        if (window.__TAURI__) {
-                            await boardManager.invoke('add_to_all_assets', { name: file.name, src: srcForStorage, tags: [], metadata: { created: Date.now() } });
-                        } else {
-                            localStorage.setItem(boardManager.ALL_ASSETS_KEY, JSON.stringify(allAssets));
-                        }
+                        localStorage.setItem(boardManager.ALL_ASSETS_KEY, JSON.stringify(allAssets));
                     }
                 }
-            };
-            reader.readAsDataURL(file);
+            } catch (err) {
+                console.error('Failed to import asset:', file.name, err);
+            }
         }
 
-        // Reload library after import
-        setTimeout(() => {
-            loadAssetsLibrary();
-        }, 500);
+        loadAssetsLibrary();
     };
 
     input.click();
+}
+
+function readFileAsDataURL(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => resolve(e.target.result);
+        reader.onerror = (e) => reject(e);
+        reader.readAsDataURL(file);
+    });
+}
+
+function generateVideoThumbnail(videoSrc) {
+    return new Promise((resolve) => {
+        const video = document.createElement('video');
+        video.preload = 'auto';
+        video.muted = true;
+        let resolved = false;
+        const finish = (result) => {
+            if (resolved) return;
+            resolved = true;
+            video.removeAttribute('src');
+            video.load(); // Release video decoder
+            resolve(result);
+        };
+        video.onloadeddata = () => {
+            video.currentTime = 0.1;
+        };
+        video.onseeked = () => {
+            try {
+                const c = document.createElement('canvas');
+                c.width = Math.min(video.videoWidth, 400);
+                c.height = Math.round(c.width * (video.videoHeight / video.videoWidth));
+                c.getContext('2d').drawImage(video, 0, 0, c.width, c.height);
+                finish(c.toDataURL('image/jpeg', 0.7));
+            } catch (e) { finish(null); }
+        };
+        video.onerror = () => finish(null);
+        setTimeout(() => finish(null), 5000);
+        video.src = videoSrc;
+    });
 }
 
 // Asset Sidebar Functions
@@ -3912,13 +4101,10 @@ function setupAssetSidebar() {
         addToCanvasBtn.addEventListener('click', async () => {
             if (!currentAssetInSidebar) return;
 
-            const imgElement = new Image();
-            imgElement.onload = async () => {
-                // Add image to canvas
-                canvas.addImage(imgElement, 100, 100, currentAssetInSidebar.name);
-                renderLayers();
+            const assetMediaType = currentAssetInSidebar.metadata?.mediaType;
+            const resolvedSrc = await boardManager.resolveImageSrc(currentAssetInSidebar.src);
 
-                // If from "All Assets", add to board assets
+            const addToBoardIfNeeded = async () => {
                 if (currentAssetIsAllAssets) {
                     const board = boardManager.currentBoard;
                     const boardAssets = board.assets || [];
@@ -3934,12 +4120,39 @@ function setupAssetSidebar() {
                         await boardManager.updateBoard(currentBoardId, { assets: updatedAssets });
                     }
                 }
-
-                // Close sidebar (stay in assets view)
                 sidebar.classList.remove('open');
                 currentAssetInSidebar = null;
             };
-            imgElement.src = currentAssetInSidebar.src;
+
+            if (assetMediaType === 'video') {
+                const video = document.createElement('video');
+                video.preload = 'auto';
+                video.muted = true;
+                video.onloadedmetadata = async () => {
+                    canvas.addVideo(video, 100, 100, currentAssetInSidebar.name);
+                    renderLayers();
+                    await addToBoardIfNeeded();
+                };
+                video.src = resolvedSrc;
+            } else if (assetMediaType === 'gif') {
+                try {
+                    const response = await fetch(resolvedSrc);
+                    const arrayBuffer = await response.arrayBuffer();
+                    canvas.addGif(arrayBuffer, 100, 100, currentAssetInSidebar.name, resolvedSrc);
+                    renderLayers();
+                    await addToBoardIfNeeded();
+                } catch (err) {
+                    console.error('Failed to load GIF:', err);
+                }
+            } else {
+                const imgElement = new Image();
+                imgElement.onload = async () => {
+                    canvas.addImage(imgElement, 100, 100, currentAssetInSidebar.name);
+                    renderLayers();
+                    await addToBoardIfNeeded();
+                };
+                imgElement.src = resolvedSrc;
+            }
         });
     }
 
@@ -4040,8 +4253,25 @@ async function showAssetSidebar(asset, isAllAssets) {
     const preview = getElement('asset-sidebar-preview');
     const nameInput = getElement('asset-sidebar-name');
 
-    // Set preview image
-    preview.src = await boardManager.resolveImageSrc(freshAsset.src);
+    // Set preview — use video element for video assets
+    const isVideoAsset = freshAsset.metadata?.mediaType === 'video';
+    const previewParent = preview.parentNode;
+    // Remove any previously inserted video preview
+    const oldVideoPreview = previewParent.querySelector('.asset-sidebar-video-preview');
+    if (oldVideoPreview) oldVideoPreview.remove();
+
+    if (isVideoAsset) {
+        preview.style.display = 'none';
+        const videoPreview = document.createElement('video');
+        videoPreview.className = 'asset-sidebar-preview asset-sidebar-video-preview';
+        videoPreview.controls = true;
+        videoPreview.muted = true;
+        videoPreview.src = await boardManager.resolveImageSrc(freshAsset.src);
+        previewParent.insertBefore(videoPreview, preview);
+    } else {
+        preview.style.display = '';
+        preview.src = await boardManager.resolveImageSrc(freshAsset.src);
+    }
 
     // Set name
     nameInput.value = freshAsset.name || '';
@@ -4829,10 +5059,46 @@ function hidePropertiesPanel() {
     removeShapePropertyListeners();
 }
 
+function showPaletteSidebar(paletteObj) {
+    const section = getElement('palette-sidebar-section');
+    const swatchesContainer = getElement('palette-swatches');
+    if (!section || !swatchesContainer) return;
+
+    section.style.display = 'block';
+    swatchesContainer.innerHTML = '';
+
+    const colors = paletteObj.colors || [];
+    colors.forEach(color => {
+        const hexColor = typeof color === 'string' ? color : color.hex;
+        const swatch = document.createElement('div');
+        swatch.className = 'palette-swatch';
+        swatch.style.backgroundColor = hexColor;
+        swatch.innerHTML = `
+            <span class="palette-swatch-label">${hexColor.toUpperCase()}</span>
+            <span class="palette-swatch-copied">Copied</span>
+        `;
+        swatch.addEventListener('click', async () => {
+            try {
+                await navigator.clipboard.writeText(hexColor.toUpperCase());
+                const copied = swatch.querySelector('.palette-swatch-copied');
+                copied.classList.add('show');
+                setTimeout(() => copied.classList.remove('show'), 800);
+            } catch (err) {
+                console.error('Failed to copy:', err);
+            }
+        });
+        swatchesContainer.appendChild(swatch);
+    });
+}
+
+function hidePaletteSidebar() {
+    const section = getElement('palette-sidebar-section');
+    if (section) section.style.display = 'none';
+}
+
 function showFloatingToolbar(obj) {
     const textToolbar = getElement('floating-text-toolbar');
     const shapeToolbar = getElement('floating-shape-toolbar');
-    const palettePopup = getElement('color-palette-popup');
 
     // Show floating toolbars based on object type
     if (obj.type === 'text') {
@@ -5828,342 +6094,16 @@ function setupColorExtractorTool() {
         canvas.objectsManager.objects.push(paletteObject);
         canvas.needsRender = true;
         canvas.objectsManager.dispatchObjectsChanged();
+        if (historyManager) {
+            historyManager.pushAction({
+                type: 'add_object',
+                data: JSON.parse(JSON.stringify(paletteObject))
+            });
+        }
 
         showToast(`Color palette created with ${numColors} color${numColors > 1 ? 's' : ''}`, 'success', 3000);
     });
 
-}
-
-function populateColorPalette(colors) {
-    const grid = getElement('color-palette-grid');
-    if (!grid) return;
-
-    console.log('Populating palette with colors:', colors);
-
-    // Create swatches in horizontal row
-    grid.innerHTML = colors.map((color, index) => {
-        // Handle both object format {hex, rgb} and string format
-        const hexColor = typeof color === 'string' ? color : color.hex;
-        const rgbColor = typeof color === 'string' ? null : color.rgb;
-
-        return `
-            <div class="color-palette-swatch"
-                 style="background-color: ${hexColor};"
-                 data-hex="${hexColor}"
-                 data-rgb="${rgbColor || ''}"
-                 data-index="${index}"
-                 title="${hexColor.toUpperCase()}">
-            </div>
-        `;
-    }).join('');
-
-    // Add click handler to show copy options
-    grid.querySelectorAll('.color-palette-swatch').forEach(swatch => {
-        swatch.addEventListener('click', (e) => {
-            const hex = swatch.dataset.hex;
-            const rgb = swatch.dataset.rgb;
-            showColorCopyOptions(hex, rgb, e.clientX, e.clientY);
-        });
-    });
-}
-
-function showColorCopyOptions(hexColor, rgbColor, x, y) {
-    // Remove any existing copy menu
-    const existingMenu = getElement('color-copy-menu');
-    if (existingMenu) existingMenu.remove();
-
-    const hexText = hexColor.toUpperCase();
-    const rgbText = rgbColor || (() => {
-        const rgb = hexToRgb(hexColor);
-        return `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`;
-    })();
-
-    // Create copy menu
-    const menu = document.createElement('div');
-    menu.id = 'color-copy-menu';
-    menu.className = 'color-copy-menu';
-    menu.innerHTML = `
-        <div class="color-copy-option" data-value="${hexText}">
-            <span class="copy-label">HEX</span>
-            <span class="copy-value">${hexText}</span>
-        </div>
-        <div class="color-copy-option" data-value="${rgbText}">
-            <span class="copy-label">RGB</span>
-            <span class="copy-value">${rgbText}</span>
-        </div>
-    `;
-
-    // Position at center of screen if no coordinates provided
-    if (x === undefined || y === undefined) {
-        x = window.innerWidth / 2;
-        y = window.innerHeight / 2;
-    }
-
-    menu.style.left = `${x}px`;
-    menu.style.top = `${y}px`;
-    document.body.appendChild(menu);
-
-    // Position menu to not go off screen
-    const rect = menu.getBoundingClientRect();
-    if (rect.right > window.innerWidth) {
-        menu.style.left = `${x - rect.width}px`;
-    }
-    if (rect.bottom > window.innerHeight) {
-        menu.style.top = `${y - rect.height}px`;
-    }
-
-    // Add click handlers
-    menu.querySelectorAll('.color-copy-option').forEach(option => {
-        option.addEventListener('click', async () => {
-            const value = option.dataset.value;
-            try {
-                await navigator.clipboard.writeText(value);
-                showToast(`Copied ${value}`, 'success', 1500);
-                menu.remove();
-            } catch (err) {
-                console.error('Failed to copy:', err);
-                showToast('Failed to copy', 'error', 1500);
-            }
-        });
-    });
-
-    // Close menu on outside click - delay to prevent immediate close
-    setTimeout(() => {
-        const closeHandler = (e) => {
-            if (!menu.contains(e.target)) {
-                menu.remove();
-                document.removeEventListener('click', closeHandler);
-            }
-        };
-        document.addEventListener('click', closeHandler);
-    }, 200);
-}
-
-function showPaletteModal(paletteObj) {
-    const modal = document.createElement('div');
-    modal.className = 'modal-overlay';
-    modal.innerHTML = `
-        <div class="modal" style="max-width: 90vw; width: auto;">
-            <div class="modal-header">
-                <h2>Color Palette</h2>
-            </div>
-            <div class="modal-body">
-                <div id="palette-modal-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); gap: 12px; padding: 8px; max-width: 100%;">
-                    <!-- Colors will be populated here -->
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button class="modal-btn modal-btn-primary" id="palette-modal-regenerate" ${!paletteObj.sourceImage ? 'disabled' : ''}>Regenerate Colors</button>
-                <button class="modal-btn modal-btn-secondary" id="palette-modal-close">Close</button>
-            </div>
-        </div>
-    `;
-
-    document.body.appendChild(modal);
-    modal.style.display = 'flex';
-
-    // Function to populate colors
-    const grid = modal.querySelector('#palette-modal-grid');
-
-    function populateColors(colors) {
-        grid.innerHTML = '';
-        colors.forEach(color => {
-            const hexColor = typeof color === 'string' ? color : color.hex;
-            const rgbColor = typeof color === 'string' ? null : color.rgb;
-
-            const colorItem = document.createElement('div');
-            colorItem.style.cssText = 'display: flex; flex-direction: column; align-items: center; gap: 8px;';
-            colorItem.innerHTML = `
-                <div style="width: 100%; aspect-ratio: 1; background-color: ${hexColor}; border-radius: 8px; border: 2px solid var(--border-color); cursor: pointer;"></div>
-                <div style="display: flex; flex-direction: column; gap: 4px; width: 100%;">
-                    <button class="copy-hex-btn" style="padding: 6px 12px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-secondary); color: var(--text-primary); cursor: pointer; font-size: 12px;">
-                        Copy HEX
-                    </button>
-                    <button class="copy-rgb-btn" style="padding: 6px 12px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-secondary); color: var(--text-primary); cursor: pointer; font-size: 12px;">
-                        Copy RGB
-                    </button>
-                </div>
-            `;
-
-            const hexBtn = colorItem.querySelector('.copy-hex-btn');
-            const rgbBtn = colorItem.querySelector('.copy-rgb-btn');
-
-            hexBtn.addEventListener('click', async () => {
-                try {
-                    await navigator.clipboard.writeText(hexColor.toUpperCase());
-                    const originalText = hexBtn.textContent;
-                    hexBtn.textContent = 'Copied!';
-                    hexBtn.style.background = 'var(--accent-color)';
-                    hexBtn.style.color = 'white';
-                    setTimeout(() => {
-                        hexBtn.textContent = originalText;
-                        hexBtn.style.background = 'var(--bg-secondary)';
-                        hexBtn.style.color = 'var(--text-primary)';
-                    }, 1000);
-                } catch (err) {
-                    console.error('Failed to copy:', err);
-                }
-            });
-
-            rgbBtn.addEventListener('click', async () => {
-                const rgbText = rgbColor || (() => {
-                    const rgb = hexToRgb(hexColor);
-                    return `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`;
-                })();
-                try {
-                    await navigator.clipboard.writeText(rgbText);
-                    const originalText = rgbBtn.textContent;
-                    rgbBtn.textContent = 'Copied!';
-                    rgbBtn.style.background = 'var(--accent-color)';
-                    rgbBtn.style.color = 'white';
-                    setTimeout(() => {
-                        rgbBtn.textContent = originalText;
-                        rgbBtn.style.background = 'var(--bg-secondary)';
-                        rgbBtn.style.color = 'var(--text-primary)';
-                    }, 1000);
-                } catch (err) {
-                    console.error('Failed to copy:', err);
-                }
-            });
-
-            grid.appendChild(colorItem);
-        });
-    }
-
-    // Initial population
-    populateColors(paletteObj.colors);
-
-    // Regenerate button
-    const regenerateBtn = modal.querySelector('#palette-modal-regenerate');
-    if (regenerateBtn && paletteObj.sourceImage) {
-        // Clone button to remove old listeners
-        const newRegenerateBtn = regenerateBtn.cloneNode(true);
-        regenerateBtn.parentNode.replaceChild(newRegenerateBtn, regenerateBtn);
-
-        newRegenerateBtn.addEventListener('click', async () => {
-            // Check if the palette has a sourceImage reference
-            if (!paletteObj.sourceImage) {
-                showToast('Cannot regenerate - source image not found', 'error', 3000);
-                return;
-            }
-
-            try {
-                newRegenerateBtn.disabled = true;
-                newRegenerateBtn.textContent = 'Regenerating...';
-
-                console.log('[Regenerate] Starting color regeneration...');
-                console.log('[Regenerate] Source image URL:', paletteObj.sourceImage);
-
-                // Find the source image in canvas layers
-                const sourceImageLayer = canvas.images.find(img => img.img && img.img.src === paletteObj.sourceImage);
-                console.log('[Regenerate] Found image in canvas layers:', !!sourceImageLayer);
-
-                let colors;
-                if (sourceImageLayer && sourceImageLayer.img) {
-                    // If we found the image in canvas layers, use it directly
-                    console.log('[Regenerate] Using image from canvas layers');
-                    console.log('[Regenerate] Image dimensions:', sourceImageLayer.img.width, 'x', sourceImageLayer.img.height);
-                    colors = await extractColorsFromImage(sourceImageLayer.img);
-                } else {
-                    // Otherwise, load the image from the URL
-                    console.log('[Regenerate] Loading image from URL...');
-                    const img = new Image();
-                    img.crossOrigin = 'anonymous';
-                    await new Promise((resolve, reject) => {
-                        img.onload = () => {
-                            console.log('[Regenerate] Image loaded successfully:', img.width, 'x', img.height);
-                            resolve();
-                        };
-                        img.onerror = (e) => {
-                            console.error('[Regenerate] Image load error:', e);
-                            reject(new Error('Failed to load source image'));
-                        };
-                        img.src = paletteObj.sourceImage;
-                    });
-                    colors = await extractColorsFromImage(img);
-                }
-
-                console.log('[Regenerate] Extracted colors:', colors);
-
-                // Recalculate grid layout based on new number of colors
-                const numColors = colors.length;
-                let gridCols, gridRows, hasWideCell = false;
-
-                if (numColors === 1) {
-                    gridCols = 1; gridRows = 1;
-                } else if (numColors === 2) {
-                    gridCols = 2; gridRows = 1;
-                } else if (numColors === 3) {
-                    gridCols = 2; gridRows = 1; hasWideCell = true;
-                } else if (numColors === 4) {
-                    gridCols = 2; gridRows = 2;
-                } else if (numColors === 5) {
-                    gridCols = 2; gridRows = 2; hasWideCell = true;
-                } else if (numColors === 6) {
-                    gridCols = 3; gridRows = 2;
-                } else if (numColors === 7) {
-                    gridCols = 3; gridRows = 2; hasWideCell = true;
-                } else if (numColors === 8) {
-                    gridCols = 4; gridRows = 2;
-                } else if (numColors === 9) {
-                    gridCols = 3; gridRows = 3;
-                } else { // 10
-                    gridCols = 5; gridRows = 2;
-                }
-
-                // Calculate new dimensions
-                const cellSize = paletteObj.cellSize || 60;
-                const width = gridCols * cellSize;
-                const height = hasWideCell ? (gridRows + 1) * cellSize : gridRows * cellSize;
-
-                // Update the palette with new colors and layout
-                paletteObj.colors = colors;
-                paletteObj.gridCols = gridCols;
-                paletteObj.gridRows = gridRows;
-                paletteObj.hasWideCell = hasWideCell;
-                paletteObj.width = width;
-                paletteObj.height = height;
-
-                // Update the canvas object
-                const canvasPalette = canvas.objectsManager.objects.find(obj => obj.id === paletteObj.id);
-                if (canvasPalette) {
-                    canvasPalette.colors = colors;
-                    canvasPalette.gridCols = gridCols;
-                    canvasPalette.gridRows = gridRows;
-                    canvasPalette.hasWideCell = hasWideCell;
-                    canvasPalette.width = width;
-                    canvasPalette.height = height;
-                    canvas.needsRender = true;
-                    canvas.objectsManager.dispatchObjectsChanged();
-                }
-
-                // Repopulate the modal
-                populateColors(colors);
-
-                showToast(`Colors regenerated (${colors.length} colors)`, 'success', 2000);
-            } catch (error) {
-                console.error('[Regenerate] Error:', error);
-                console.error('[Regenerate] Error stack:', error.stack);
-                showToast(`Failed to regenerate colors: ${error.message}`, 'error', 3000);
-            } finally {
-                newRegenerateBtn.disabled = false;
-                newRegenerateBtn.textContent = 'Regenerate Colors';
-            }
-        });
-    }
-
-    // Close button
-    const closeBtn = modal.querySelector('#palette-modal-close');
-    closeBtn.addEventListener('click', () => {
-        modal.remove();
-    });
-
-    // Close modal on overlay click
-    modal.addEventListener('click', (e) => {
-        if (e.target === modal) {
-            modal.remove();
-        }
-    });
 }
 
 function showImageEditPanel(imageObj) {
@@ -6521,15 +6461,6 @@ function showImageEditPanel(imageObj) {
 
     cancelBtn.addEventListener('click', cancelEdit);
     closeBtn.addEventListener('click', cancelEdit);
-}
-
-function hexToRgb(hex) {
-    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-    return result ? {
-        r: parseInt(result[1], 16),
-        g: parseInt(result[2], 16),
-        b: parseInt(result[3], 16)
-    } : { r: 0, g: 0, b: 0 };
 }
 
 // Keyboard Shortcuts Modal

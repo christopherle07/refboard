@@ -80,6 +80,12 @@ class App {
         // Define the tutorial steps
         const steps = [
             {
+                element: '#sidebar-toggle-btn',
+                title: 'Toggle Sidebar',
+                description: 'Show or hide the layer panel sidebar.',
+                position: 'below'
+            },
+            {
                 element: '#open-floating-btn',
                 title: 'Floating Window',
                 description: 'Open your board in a floating window that stays on top of other apps.',
@@ -173,6 +179,9 @@ class App {
                 leftPos = Math.max(10, Math.min(window.innerWidth - tooltipRect.width - 10, leftPos));
                 tooltip.style.top = (rect.bottom + 12) + 'px';
                 tooltip.style.left = leftPos + 'px';
+                // Position arrow to point at the element center
+                const arrowLeft = rect.left + (rect.width / 2) - leftPos;
+                tooltip.style.setProperty('--arrow-left', arrowLeft + 'px');
                 tooltip.classList.add('tooltip-below');
             } else if (step.position === 'left') {
                 // Center vertically to the left of the element

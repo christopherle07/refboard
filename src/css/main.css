@@ -543,8 +543,8 @@ html[data-theme="purplexing"] .board-delete-btn:hover {
 .editor-container {
     flex: 1;
     display: flex;
+    position: relative;
     overflow: hidden;
-    gap: 0;
 }
 
 .canvas-area {

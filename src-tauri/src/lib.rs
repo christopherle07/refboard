@@ -19,6 +19,7 @@ pub fn run() {
             commands::get_tag_presets,
             commands::save_tag_presets,
             commands::save_image_file,
+            commands::save_media_file_from_path,
             commands::get_images_dir,
             commands::get_image_file_path,
             commands::fetch_page_html,

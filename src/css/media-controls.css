@@ -1,0 +1,181 @@
+/* Media Controls - Floating bars for video/GIF on canvas */
+
+.media-control-bar {
+    display: none;
+    position: absolute;
+    z-index: 50;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    background: rgba(24, 24, 27, 0.92);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 8px;
+    backdrop-filter: blur(8px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    pointer-events: auto;
+    white-space: nowrap;
+    font-size: 11px;
+    color: #e4e4e7;
+}
+
+.mc-btn {
+    background: none;
+    border: none;
+    color: #e4e4e7;
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s;
+}
+
+.mc-btn:hover {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+.mc-time,
+.mc-frame-info {
+    font-size: 10px;
+    color: #a1a1aa;
+    min-width: 60px;
+    text-align: center;
+    user-select: none;
+}
+
+.mc-frame-info {
+    min-width: 45px;
+}
+
+.mc-seek {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 80px;
+    height: 4px;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 2px;
+    outline: none;
+    cursor: pointer;
+}
+
+.mc-seek::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #e4e4e7;
+    cursor: pointer;
+}
+
+.mc-seek::-moz-range-thumb {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #e4e4e7;
+    cursor: pointer;
+    border: none;
+}
+
+/* GIF Filmstrip panel */
+.gif-filmstrip {
+    display: none;
+    position: absolute;
+    z-index: 51;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 4px;
+    background: rgba(24, 24, 27, 0.94);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 8px;
+    backdrop-filter: blur(8px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    pointer-events: auto;
+    white-space: nowrap;
+}
+
+.filmstrip-frames {
+    display: flex;
+    gap: 3px;
+    overflow: hidden;
+}
+
+.filmstrip-frame {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    cursor: pointer;
+    padding: 2px;
+    border-radius: 4px;
+    border: 2px solid transparent;
+    transition: border-color 0.15s, background 0.15s;
+}
+
+.filmstrip-frame:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.filmstrip-frame.active {
+    border-color: #6366f1;
+}
+
+.filmstrip-thumb {
+    border-radius: 2px;
+    display: block;
+}
+
+.filmstrip-frame-num {
+    font-size: 8px;
+    color: #71717a;
+    user-select: none;
+    line-height: 1;
+}
+
+.filmstrip-frame.active .filmstrip-frame-num {
+    color: #a5b4fc;
+}
+
+.filmstrip-nav {
+    flex-shrink: 0;
+}
+
+.mc-filmstrip-btn.active {
+    background: rgba(99, 102, 241, 0.3);
+}
+
+/* Asset library badges */
+.asset-play-badge,
+.asset-gif-badge {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    border-radius: 4px;
+    padding: 2px 6px;
+    font-size: 10px;
+    font-weight: 600;
+    pointer-events: none;
+    z-index: 2;
+}
+
+.asset-play-badge {
+    background: rgba(0, 0, 0, 0.7);
+    color: #fff;
+    font-size: 12px;
+}
+
+.asset-gif-badge {
+    background: rgba(99, 102, 241, 0.85);
+    color: #fff;
+    font-size: 9px;
+    letter-spacing: 0.5px;
+}
+
+/* Video preview in asset sidebar */
+.asset-sidebar-video-preview {
+    width: 100%;
+    max-height: 300px;
+    border-radius: 6px;
+    background: #000;
+}

@@ -10,11 +10,11 @@
 /* Unified Titlebar - combines window controls with navigation */
 .unified-titlebar {
     display: grid;
-    grid-template-columns: auto auto 1fr auto;
+    grid-template-columns: auto auto auto 1fr auto;
     align-items: center;
     height: 48px;
-    padding: 0 16px;
-    background: var(--bg-primary);
+    padding: 0 12px;
+    background: var(--bg-secondary);
     border-bottom: 1px solid var(--border-color);
 }
 
@@ -22,7 +22,39 @@
 .titlebar-window-controls {
     display: flex;
     align-items: center;
-    gap: 0;
+    gap: 8px;
+}
+
+/* Titlebar Tooltips */
+.unified-titlebar [data-tooltip] {
+    position: relative;
+}
+
+.unified-titlebar [data-tooltip]::before {
+    content: attr(data-tooltip);
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    padding: 5px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    white-space: nowrap;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    border: 1px solid var(--border-color);
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.15s ease, visibility 0.15s ease;
+    pointer-events: none;
+    z-index: 1000;
+}
+
+.unified-titlebar [data-tooltip]:hover::before {
+    opacity: 1;
+    visibility: visible;
 }
 
 /* Sidebar Toggle Button */
@@ -30,13 +62,13 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 36px;
-    height: 36px;
+    width: 32px;
+    height: 32px;
     background: transparent;
     border: none;
     border-radius: 6px;
     cursor: pointer;
-    margin-left: 8px;
+    margin-left: 12px;
     transition: background-color 0.15s;
 }
 
@@ -68,31 +100,98 @@ html[data-theme="purplexing"] .sidebar-toggle-icon {
     filter: brightness(0) saturate(100%) invert(71%) sepia(35%) saturate(738%) hue-rotate(207deg) brightness(93%) contrast(91%);
 }
 
+/* Undo/Redo Pill */
+.titlebar-undo-redo {
+    display: flex;
+    align-items: center;
+    margin-left: 8px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.undo-redo-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 28px;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    transition: background-color 0.15s;
+    padding: 0;
+}
+
+.undo-redo-btn:first-child {
+    border-right: 1px solid var(--border-color);
+}
+
+.undo-redo-btn:hover:not(:disabled) {
+    background: var(--bg-hover);
+}
+
+.undo-redo-btn:active:not(:disabled) {
+    background: var(--bg-active);
+}
+
+.undo-redo-btn:disabled {
+    opacity: 0.3;
+    cursor: default;
+}
+
+.undo-redo-icon {
+    width: 14px;
+    height: 14px;
+}
+
+.undo-redo-icon.redo-flipped {
+    transform: scaleX(-1);
+}
+
+/* Light theme: dark undo/redo icons */
+html:not([data-theme="dark"]):not([data-theme="purplexing"]) .undo-redo-icon {
+    filter: brightness(0) invert(0.3);
+}
+
+/* Dark theme: light undo/redo icons */
+html[data-theme="dark"] .undo-redo-icon {
+    filter: invert(1) brightness(0.9);
+}
+
+/* Purplexing theme: purple undo/redo icons */
+html[data-theme="purplexing"] .undo-redo-icon {
+    filter: brightness(0) saturate(100%) invert(71%) sepia(35%) saturate(738%) hue-rotate(207deg) brightness(93%) contrast(91%);
+}
+
 .titlebar-nav-container {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 12px;
+    gap: 8px;
+    padding: 0 12px;
 }
 
 .nav-breadcrumb {
     display: flex;
     align-items: center;
+    justify-content: center;
     gap: 8px;
     padding: 6px 16px;
-    background: var(--bg-tertiary);
-    border-radius: 20px;
-    font-size: 14px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    font-size: 13px;
     color: var(--text-secondary);
-    min-width: 400px;
-    max-width: 600px;
+    width: 100%;
+    max-width: 720px;
     min-height: 32px;
     cursor: pointer;
-    transition: background-color 0.15s;
+    transition: background-color 0.15s, border-color 0.15s;
 }
 
 .nav-breadcrumb:hover {
-    background: var(--bg-hover);
+    border-color: var(--border-color-hover);
 }
 
 .breadcrumb-item {
@@ -237,7 +336,7 @@ html[data-theme="purplexing"] #open-floating-btn img {
     content: '';
     position: absolute;
     top: -8px;
-    left: 50%;
+    left: var(--arrow-left, 50%);
     transform: translateX(-50%);
     border: 8px solid transparent;
     border-bottom-color: var(--accent-primary);
@@ -288,7 +387,7 @@ html[data-theme="purplexing"] #open-floating-btn img {
 .titlebar-actions {
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 2px;
 }
 
 .toolbar-icon-btn {
@@ -299,14 +398,14 @@ html[data-theme="purplexing"] #open-floating-btn img {
     height: 32px;
     background: transparent;
     border: none;
-    border-radius: 50%;
+    border-radius: 6px;
     cursor: pointer;
     transition: background-color 0.15s;
 }
 
 .toolbar-icon {
-    width: 18px;
-    height: 18px;
+    width: 16px;
+    height: 16px;
 }
 
 /* Light mode toolbar icons */
@@ -337,30 +436,54 @@ html[data-theme="purplexing"] .toolbar-icon {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 32px;
-    height: 32px;
-    background: transparent;
+    width: 14px;
+    height: 14px;
+    background: var(--bg-active);
     border: none;
     border-radius: 50%;
-    color: var(--text-secondary);
+    color: transparent;
     cursor: pointer;
     transition: background-color 0.15s;
+    padding: 0;
 }
 
 .titlebar-button svg {
-    stroke: var(--text-secondary);
+    width: 8px;
+    height: 8px;
+    stroke: transparent;
+    transition: stroke 0.1s;
 }
 
-.titlebar-button:hover {
-    background: var(--bg-hover);
+.titlebar-button:hover svg {
+    stroke: var(--text-primary);
+}
+
+.titlebar-button.minimize-btn {
+    background: #f4bf4f;
+}
+
+.titlebar-button.maximize-btn {
+    background: #61c554;
+}
+
+.titlebar-button.close-btn {
+    background: #ed6a5e;
+}
+
+.titlebar-button.minimize-btn:hover {
+    background: #e5a831;
+}
+
+.titlebar-button.maximize-btn:hover {
+    background: #4fae42;
 }
 
 .titlebar-button.close-btn:hover {
-    background: #e81123;
+    background: #df4f43;
 }
 
-.titlebar-button.close-btn:hover svg {
-    stroke: #ffffff;
+.titlebar-button:hover svg {
+    stroke: rgba(0, 0, 0, 0.5);
 }
 
 /* Center Content */
