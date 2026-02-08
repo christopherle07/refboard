@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "EyeDea",
-  "version": "1.0.5",
-  "identifier": "site.anihaven.eye",
+  "version": "1.1.0",
+  "identifier": "net.eyeda.eye",
   "build": {
     "frontendDist": "../src"
   },
@@ -37,6 +37,8 @@
             "core:window:allow-toggle-maximize",
             "core:window:allow-is-maximized",
             "core:window:allow-start-dragging",
+            "core:window:allow-outer-position",
+            "core:window:allow-outer-size",
             "core:webview:allow-create-webview-window",
             "core:webview:allow-create-webview",
             "core:webview:default",
@@ -51,6 +53,16 @@
           "permissions": [
             "core:window:allow-close",
             "core:window:allow-minimize",
+            "core:window:allow-set-always-on-top",
+            "core:window:allow-start-dragging"
+          ]
+        },
+        {
+          "identifier": "sidebar-capability",
+          "description": "Capability for detached sidebar windows",
+          "windows": ["sidebar_*"],
+          "permissions": [
+            "core:window:allow-close",
             "core:window:allow-set-always-on-top",
             "core:window:allow-start-dragging"
           ]

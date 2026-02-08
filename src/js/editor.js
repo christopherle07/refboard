@@ -19,6 +19,9 @@ const editorInstances = new Map(); // Map<container, editorState>
 let activeContainer = null; // Currently active editor container
 let sidebarToggleListenerAttached = false; // Prevent duplicate listeners on titlebar button
 let undoRedoListenerAttached = false; // Prevent duplicate listeners on undo/redo buttons
+let sidebarDetached = false; // Whether sidebar is currently in a floating window
+let sidebarSyncChannel = null; // BroadcastChannel for floating sidebar sync
+let floatingSidebarWindow = null; // Reference to the floating sidebar WebviewWindow
 
 // Helper to get element from active container
 function getElement(id) {
@@ -266,6 +269,12 @@ export async function initEditor(boardId, container) {
         }
     };
 
+    // Setup sidebar sync channel for detached sidebar
+    sidebarSyncChannel = new BroadcastChannel('sidebar_sync_' + currentBoardId);
+    sidebarSyncChannel.onmessage = (event) => {
+        handleFloatingSidebarMessage(event.data);
+    };
+
     // Prevent default drag/drop behavior on document to avoid browser navigation
     const preventDefaultDrag = (e) => {
         e.preventDefault();
@@ -462,6 +471,10 @@ export async function initEditor(boardId, container) {
 
     // Make save function globally accessible for app.js
     window.editorSaveNow = saveNow;
+    window.editorForceSave = async () => {
+        pendingSave = true;
+        await saveNow();
+    };
 
     // Ensure canvas gets correct dimensions after initialization
     if (canvas) {
@@ -615,10 +628,45 @@ function setupEventListeners(container) {
         sidebarToggleBtn.addEventListener('click', () => {
             const sidebar = activeContainer?.querySelector('#sidebar');
             if (!sidebar) return;
+
+            if (sidebarDetached) {
+                // Sidebar is detached as floating window.
+                // Toggle just hides/shows the floating window, not reattach.
+                if (floatingSidebarWindow) {
+                    // We can't easily hide/show the Tauri window, so collapse
+                    // just closes the floating window temporarily and reopens on next click.
+                    // For simplicity: close floating window (it will reopen on next click)
+                    try { floatingSidebarWindow.close(); } catch(e) {}
+                    floatingSidebarWindow = null;
+                    sidebarToggleBtn.classList.add('active');
+                } else {
+                    // Floating window was closed (collapsed state) — reopen it
+                    reopenFloatingSidebar();
+                    sidebarToggleBtn.classList.remove('active');
+                }
+                return;
+            }
+
             sidebar.classList.toggle('collapsed');
             sidebarToggleBtn.classList.toggle('active');
             localStorage.setItem('sidebar_collapsed', sidebar.classList.contains('collapsed'));
         });
+    }
+
+    // Sidebar detach button - toggles between detached and attached
+    // Replace the element's onclick to guarantee fresh handler
+    const sidebarDetachBtn = document.getElementById('sidebar-detach-btn');
+    if (sidebarDetachBtn) {
+        sidebarDetachBtn.onclick = (e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            console.log('[Sidebar] Detach button clicked, sidebarDetached:', sidebarDetached);
+            if (sidebarDetached) {
+                reattachSidebar();
+            } else {
+                detachSidebar();
+            }
+        };
     }
 
     // Undo/Redo buttons - attach once since they're in the titlebar
@@ -730,99 +778,128 @@ function setupEventListeners(container) {
             e.target.classList.add('active');
 
             if (tab === 'layers') {
-                // Show canvas view
-                $('canvas-container').style.display = 'block';
-                $('assets-library-view').style.display = 'none';
-                const drawingToolbar = $('drawing-toolbar');
-                const toolsSidebar = document.querySelector('.tools-sidebar');
-                const sizeSlider = $('draw-size-slider-container');
-                const opacitySlider = $('draw-opacity-slider-container');
-                // Restore display but keep visibility controlled by drawing mode
-                if (drawingToolbar) drawingToolbar.style.display = '';
-                if (toolsSidebar) toolsSidebar.style.display = 'flex';
-                if (sizeSlider) sizeSlider.style.display = '';
-                if (opacitySlider) opacitySlider.style.display = '';
+                showCanvasView();
             } else if (tab === 'assets') {
-                // Show assets library view
-                $('canvas-container').style.display = 'none';
-                $('assets-library-view').style.display = 'flex';
-                const drawingToolbar = $('drawing-toolbar');
-                const toolsSidebar = document.querySelector('.tools-sidebar');
-                const sizeSlider = $('draw-size-slider-container');
-                const opacitySlider = $('draw-opacity-slider-container');
-                const drawingModeBtn = getElement('drawing-mode-btn');
-
-                // Hide all drawing controls
-                if (drawingToolbar) {
-                    drawingToolbar.style.display = 'none';
-                    drawingToolbar.classList.remove('visible');
-                }
-                if (toolsSidebar) toolsSidebar.style.display = 'none';
-                if (sizeSlider) {
-                    sizeSlider.style.display = 'none';
-                    sizeSlider.classList.remove('visible');
-                }
-                if (opacitySlider) {
-                    opacitySlider.style.display = 'none';
-                    opacitySlider.classList.remove('visible');
-                }
-
-                // Disable all tools when switching to assets
-                canvas.setDrawingMode(null);
-                if (canvas.objectsManager) {
-                    canvas.objectsManager.setTool(null);
-                }
-                // Remove active state from all tool buttons
-                const penBtn = document.querySelector('.draw-tool-option[data-tool="pen"]');
-                const highlighterBtn = document.querySelector('.draw-tool-option[data-tool="highlighter"]');
-                const eraserBtn = document.querySelector('.draw-tool-option[data-tool="eraser"]');
-                const textToolBtn = getElement('text-tool-btn');
-                const shapeToolBtn = getElement('shape-tool-btn');
-                penBtn?.classList.remove('active');
-                highlighterBtn?.classList.remove('active');
-                eraserBtn?.classList.remove('active');
-                textToolBtn?.classList.remove('active');
-                shapeToolBtn?.classList.remove('active');
-                drawingModeBtn?.classList.remove('active');
-
-                // Load assets into library view
-                loadAssetsLibrary();
+                showAssetsView();
             }
         });
     });
 
-    // Assets library toggle function
-    window.toggleAssetsLibrary = function() {
-        const canvasContainer = $('canvas-container');
-        const assetsLibraryView = $('assets-library-view');
+    // Shared functions for switching between canvas and assets views
+    function showCanvasView() {
+        // Show canvas view
+        const assetsView = $('assets-library-view');
+        assetsView.classList.remove('fade-in');
+        $('canvas-container').style.display = 'block';
+        assetsView.style.display = 'none';
         const drawingToolbar = $('drawing-toolbar');
         const toolsSidebar = document.querySelector('.tools-sidebar');
+        const sizeSlider = $('draw-size-slider-container');
+        const opacitySlider = $('draw-opacity-slider-container');
+        // Restore display but keep visibility controlled by drawing mode
+        if (drawingToolbar) drawingToolbar.style.display = '';
+        if (toolsSidebar) toolsSidebar.style.display = 'flex';
+        if (sizeSlider) sizeSlider.style.display = '';
+        if (opacitySlider) opacitySlider.style.display = '';
 
+        // Show sidebar again
+        const sidebar = $('sidebar');
+        if (sidebar) sidebar.style.display = '';
+
+        // Switch to Layers tab
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        const layersTab = document.querySelector('[data-tab="layers"]');
+        if (layersTab) layersTab.classList.add('active');
+
+        // Update breadcrumb to remove Assets segment
+        if (window.appInstance && window.appInstance._currentBoardName) {
+            window.appInstance.updateBreadcrumb(`All Boards > ${window.appInstance._currentBoardName}`);
+        }
+    }
+
+    function showAssetsView() {
+        // Show assets view on top while canvas is still visible underneath (crossfade)
+        const canvasContainer = $('canvas-container');
+        const assetsView = $('assets-library-view');
+        assetsView.classList.remove('fade-in');
+        assetsView.style.display = 'flex';
+        // Force reflow so the animation replays
+        void assetsView.offsetWidth;
+        assetsView.classList.add('fade-in');
+
+        // After fade completes: hide canvas, remove absolute positioning
+        const onFadeDone = () => {
+            canvasContainer.style.display = 'none';
+            assetsView.classList.remove('fade-in');
+            assetsView.removeEventListener('animationend', onFadeDone);
+        };
+        assetsView.addEventListener('animationend', onFadeDone);
+
+        const drawingToolbar = $('drawing-toolbar');
+        const toolsSidebar = document.querySelector('.tools-sidebar');
+        const sizeSlider = $('draw-size-slider-container');
+        const opacitySlider = $('draw-opacity-slider-container');
+        const drawingModeBtn = getElement('drawing-mode-btn');
+
+        // Hide all drawing controls
+        if (drawingToolbar) {
+            drawingToolbar.style.display = 'none';
+            drawingToolbar.classList.remove('visible');
+        }
+        if (toolsSidebar) toolsSidebar.style.display = 'none';
+        if (sizeSlider) {
+            sizeSlider.style.display = 'none';
+            sizeSlider.classList.remove('visible');
+        }
+        if (opacitySlider) {
+            opacitySlider.style.display = 'none';
+            opacitySlider.classList.remove('visible');
+        }
+
+        // Disable all tools when switching to assets
+        canvas.setDrawingMode(null);
+        if (canvas.objectsManager) {
+            canvas.objectsManager.setTool(null);
+        }
+        // Remove active state from all tool buttons
+        const penBtn = document.querySelector('.draw-tool-option[data-tool="pen"]');
+        const highlighterBtn = document.querySelector('.draw-tool-option[data-tool="highlighter"]');
+        const eraserBtn = document.querySelector('.draw-tool-option[data-tool="eraser"]');
+        const textToolBtn = getElement('text-tool-btn');
+        const shapeToolBtn = getElement('shape-tool-btn');
+        penBtn?.classList.remove('active');
+        highlighterBtn?.classList.remove('active');
+        eraserBtn?.classList.remove('active');
+        textToolBtn?.classList.remove('active');
+        shapeToolBtn?.classList.remove('active');
+        drawingModeBtn?.classList.remove('active');
+
+        // Hide sidebar completely in assets view
+        const sidebar = $('sidebar');
+        if (sidebar) sidebar.style.display = 'none';
+
+        // Update breadcrumb to show Assets segment
+        if (window.appInstance && window.appInstance._currentBoardName) {
+            window.appInstance.updateBreadcrumb(`All Boards > ${window.appInstance._currentBoardName} > Assets`);
+        }
+
+        // Load assets into library view
+        loadAssetsLibrary();
+    }
+
+    // Expose for use by breadcrumb/back navigation
+    window.showCanvasView = showCanvasView;
+    window.showAssetsView = showAssetsView;
+
+    // Assets library toggle function
+    window.toggleAssetsLibrary = function() {
+        const assetsLibraryView = $('assets-library-view');
         const isLibraryVisible = assetsLibraryView.style.display === 'flex';
 
         if (isLibraryVisible) {
-            // Show canvas, hide assets library
-            canvasContainer.style.display = 'block';
-            assetsLibraryView.style.display = 'none';
-            if (drawingToolbar) drawingToolbar.style.display = 'flex';
-            if (toolsSidebar) toolsSidebar.style.display = 'flex';
-
-            // Switch to Layers tab
-            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-            document.querySelector('[data-tab="layers"]').classList.add('active');
+            showCanvasView();
         } else {
-            // Show assets library, hide canvas
-            canvasContainer.style.display = 'none';
-            assetsLibraryView.style.display = 'flex';
-            if (drawingToolbar) drawingToolbar.style.display = 'none';
-            if (toolsSidebar) toolsSidebar.style.display = 'none';
-
-            // Switch to Assets tab
-            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-            document.querySelector('[data-tab="assets"]').classList.add('active');
-
-            // Load assets into library view
-            loadAssetsLibrary();
+            showAssetsView();
         }
     };
 
@@ -1667,6 +1744,7 @@ function createObjectLayerItem(obj, objects) {
     const layerItem = document.createElement('div');
     layerItem.className = 'layer-item';
     layerItem.dataset.layerId = obj.id;
+    layerItem.dataset.layerType = 'object';
     layerItem.draggable = true;
 
     if (obj.visible === false) {
@@ -3044,6 +3122,10 @@ function renderLayers() {
             }
         });
     });
+
+    // Sync to floating sidebar if detached
+    syncLayersToFloatingSidebar();
+    syncPropertiesToFloatingSidebar();
 }
 
 function highlightLayer(imageId) {
@@ -6576,10 +6658,31 @@ export async function cleanupEditor(container) {
             console.log('[cleanupEditor] No pending changes to save');
         }
 
-        // Close sync channel
+        // Close floating sidebar BEFORE closing channels
+        if (sidebarDetached || floatingSidebarWindow) {
+            console.log('[cleanupEditor] Closing floating sidebar window');
+            // Tell the floating sidebar to close itself via channel
+            if (sidebarSyncChannel) {
+                try { sidebarSyncChannel.postMessage({ type: 'sidebar_close' }); } catch (e) {}
+            }
+            if (floatingSidebarWindow) {
+                try { await floatingSidebarWindow.close(); } catch (e) {
+                    console.log('[cleanupEditor] floatingSidebarWindow.close() fallback error:', e);
+                }
+                floatingSidebarWindow = null;
+            }
+            sidebarDetached = false;
+            localStorage.removeItem('sidebar_detached');
+        }
+
+        // Close sync channels
         if (syncChannel) {
             syncChannel.close();
             syncChannel = null;
+        }
+        if (sidebarSyncChannel) {
+            sidebarSyncChannel.close();
+            sidebarSyncChannel = null;
         }
 
         // Cleanup canvas
@@ -6602,5 +6705,480 @@ export async function cleanupEditor(container) {
         }
 
         // DON'T delete from map - we need it for reinitialization
+    }
+}
+
+// ============================================================
+// Floating Sidebar (Detach / Reattach)
+// ============================================================
+
+/**
+ * Detach the sidebar into a separate always-on-top pill-shaped window.
+ * The main window sidebar gets hidden and state is synced via BroadcastChannel.
+ */
+async function detachSidebar() {
+    console.log('[detachSidebar] called, sidebarDetached:', sidebarDetached, 'currentBoardId:', currentBoardId);
+    if (sidebarDetached || !currentBoardId) return;
+
+    const sidebar = activeContainer?.querySelector('#sidebar');
+    console.log('[detachSidebar] sidebar element:', !!sidebar, 'activeContainer:', !!activeContainer);
+    if (!sidebar) return;
+
+    if (!window.__TAURI__) {
+        console.warn('Tauri not available, cannot detach sidebar');
+        return;
+    }
+
+    try {
+        const { WebviewWindow } = window.__TAURI__.webviewWindow;
+        const { Window } = window.__TAURI__.window;
+        const mainWindow = Window.getCurrent();
+
+        // Get main window position and size to place sidebar inside its bounds
+        const mainPos = await mainWindow.outerPosition();
+        const mainSize = await mainWindow.outerSize();
+
+        const sidebarWidth = 280;
+        const sidebarHeight = Math.min(600, mainSize.height - 80);
+        // Place at left side of main window, below titlebar
+        const sidebarX = mainPos.x + 10;
+        const sidebarY = mainPos.y + 60;
+
+        const windowLabel = 'sidebar_' + currentBoardId + '_' + Date.now();
+        const url = new URL(window.location.href);
+        url.pathname = '/sidebar-floating.html';
+        url.search = `?id=${currentBoardId}`;
+
+        floatingSidebarWindow = new WebviewWindow(windowLabel, {
+            url: url.toString(),
+            title: 'Sidebar',
+            width: sidebarWidth,
+            height: sidebarHeight,
+            alwaysOnTop: true,
+            decorations: false,
+            resizable: true,
+            transparent: true,
+            x: sidebarX,
+            y: sidebarY,
+            dragDropEnabled: false
+        });
+
+        floatingSidebarWindow.once('tauri://created', () => {
+            console.log('[Sidebar] Floating sidebar window created');
+        });
+
+        floatingSidebarWindow.once('tauri://error', (e) => {
+            console.error('[Sidebar] Error creating floating sidebar:', e);
+            sidebarDetached = false;
+            floatingSidebarWindow = null;
+            sidebar.classList.remove('collapsed', 'detached');
+        });
+
+        // Listen for external close (taskbar close, Alt+F4, etc.)
+        floatingSidebarWindow.once('tauri://destroyed', () => {
+            console.log('[Sidebar] Floating sidebar was closed externally');
+            floatingSidebarWindow = null;
+            if (sidebarDetached) {
+                sidebarDetached = false;
+                localStorage.removeItem('sidebar_detached');
+                const s = activeContainer?.querySelector('#sidebar');
+                if (s) {
+                    s.classList.remove('collapsed', 'detached');
+                }
+                const toggleBtn = document.getElementById('sidebar-toggle-btn');
+                if (toggleBtn) toggleBtn.classList.remove('active');
+            }
+        });
+
+        // Hide the in-app sidebar
+        sidebar.classList.add('collapsed');
+        sidebar.classList.add('detached');
+        sidebarDetached = true;
+
+        // Update toggle button state
+        const sidebarToggleBtn = document.getElementById('sidebar-toggle-btn');
+        if (sidebarToggleBtn) sidebarToggleBtn.classList.add('active');
+
+        localStorage.setItem('sidebar_detached', 'true');
+    } catch (err) {
+        console.error('[Sidebar] Failed to detach sidebar:', err);
+    }
+}
+
+/**
+ * Reopen the floating sidebar window (after collapse-button hide).
+ * Keeps sidebarDetached = true, just creates a new window.
+ */
+async function reopenFloatingSidebar() {
+    if (!currentBoardId || !window.__TAURI__) return;
+
+    try {
+        const { WebviewWindow } = window.__TAURI__.webviewWindow;
+        const { Window } = window.__TAURI__.window;
+        const mainWindow = Window.getCurrent();
+
+        const mainPos = await mainWindow.outerPosition();
+        const mainSize = await mainWindow.outerSize();
+
+        const sidebarWidth = 280;
+        const sidebarHeight = Math.min(600, mainSize.height - 80);
+        const sidebarX = mainPos.x + 10;
+        const sidebarY = mainPos.y + 60;
+
+        const windowLabel = 'sidebar_' + currentBoardId + '_' + Date.now();
+        const url = new URL(window.location.href);
+        url.pathname = '/sidebar-floating.html';
+        url.search = `?id=${currentBoardId}`;
+
+        floatingSidebarWindow = new WebviewWindow(windowLabel, {
+            url: url.toString(),
+            title: 'Sidebar',
+            width: sidebarWidth,
+            height: sidebarHeight,
+            alwaysOnTop: true,
+            decorations: false,
+            resizable: true,
+            transparent: true,
+            x: sidebarX,
+            y: sidebarY,
+            dragDropEnabled: false
+        });
+
+        floatingSidebarWindow.once('tauri://error', (e) => {
+            console.error('[Sidebar] Error reopening floating sidebar:', e);
+            floatingSidebarWindow = null;
+        });
+
+        // Listen for external close (taskbar close, Alt+F4, etc.)
+        floatingSidebarWindow.once('tauri://destroyed', () => {
+            console.log('[Sidebar] Reopened floating sidebar was closed externally');
+            floatingSidebarWindow = null;
+            if (sidebarDetached) {
+                sidebarDetached = false;
+                localStorage.removeItem('sidebar_detached');
+                const s = activeContainer?.querySelector('#sidebar');
+                if (s) {
+                    s.classList.remove('collapsed', 'detached');
+                }
+                const toggleBtn = document.getElementById('sidebar-toggle-btn');
+                if (toggleBtn) toggleBtn.classList.remove('active');
+            }
+        });
+    } catch (err) {
+        console.error('[Sidebar] Failed to reopen floating sidebar:', err);
+    }
+}
+
+/**
+ * Reattach the sidebar: close the floating window and show the in-app sidebar.
+ */
+async function reattachSidebar() {
+    if (!sidebarDetached) return;
+
+    const sidebar = activeContainer?.querySelector('#sidebar');
+    if (!sidebar) return;
+
+    // Close floating window
+    if (floatingSidebarWindow) {
+        if (sidebarSyncChannel) {
+            sidebarSyncChannel.postMessage({ type: 'sidebar_close' });
+        }
+        try {
+            await floatingSidebarWindow.close();
+        } catch (e) {}
+        floatingSidebarWindow = null;
+    }
+
+    sidebarDetached = false;
+    localStorage.removeItem('sidebar_detached');
+
+    // Show the sidebar back in
+    sidebar.classList.remove('detached');
+    sidebar.classList.remove('collapsed');
+
+    // Update toggle button state
+    const sidebarToggleBtn = document.getElementById('sidebar-toggle-btn');
+    if (sidebarToggleBtn) sidebarToggleBtn.classList.remove('active');
+
+    localStorage.setItem('sidebar_collapsed', 'false');
+}
+
+/**
+ * Send current layers HTML to floating sidebar for display.
+ */
+function syncLayersToFloatingSidebar() {
+    if (!sidebarDetached || !sidebarSyncChannel) return;
+
+    const layersList = activeContainer?.querySelector('#layers-list');
+    if (!layersList) return;
+
+    sidebarSyncChannel.postMessage({
+        type: 'layers_update',
+        html: layersList.innerHTML
+    });
+}
+
+/**
+ * Send properties panel state to floating sidebar.
+ */
+function syncPropertiesToFloatingSidebar() {
+    if (!sidebarDetached || !sidebarSyncChannel) return;
+
+    const objProps = activeContainer?.querySelector('#object-properties');
+    const propsContent = activeContainer?.querySelector('#properties-content');
+    const title = activeContainer?.querySelector('#object-properties-title');
+
+    if (objProps && objProps.style.display !== 'none') {
+        sidebarSyncChannel.postMessage({
+            type: 'properties_update',
+            visible: true,
+            html: propsContent ? propsContent.innerHTML : '',
+            title: title ? title.textContent : 'Properties'
+        });
+    } else {
+        sidebarSyncChannel.postMessage({
+            type: 'properties_update',
+            visible: false
+        });
+    }
+}
+
+/**
+ * Handle messages from the floating sidebar window.
+ */
+function handleFloatingSidebarMessage(msg) {
+    if (!msg || !msg.type) return;
+    console.log('[FloatingSidebar] Received message:', msg.type, msg);
+
+    switch (msg.type) {
+        case 'sidebar_closed':
+            // Floating sidebar was closed externally (taskbar, Alt+F4, etc.)
+            console.log('[Sidebar] Floating sidebar reported close');
+            floatingSidebarWindow = null;
+            sidebarDetached = false;
+            localStorage.removeItem('sidebar_detached');
+            const closedSidebar = activeContainer?.querySelector('#sidebar');
+            if (closedSidebar) {
+                closedSidebar.classList.remove('collapsed', 'detached');
+            }
+            const closedToggleBtn = document.getElementById('sidebar-toggle-btn');
+            if (closedToggleBtn) closedToggleBtn.classList.remove('active');
+            break;
+
+        case 'sidebar_ready':
+            // Floating sidebar just loaded, send current state
+            syncLayersToFloatingSidebar();
+            syncPropertiesToFloatingSidebar();
+            // Send board name
+            if (sidebarSyncChannel) {
+                const boardNameEl = activeContainer?.querySelector('#board-name');
+                sidebarSyncChannel.postMessage({
+                    type: 'board_name_update',
+                    name: boardNameEl ? boardNameEl.textContent : 'Untitled Board'
+                });
+                // Send bg color
+                const bgInput = activeContainer?.querySelector('#bg-color');
+                if (bgInput) {
+                    sidebarSyncChannel.postMessage({
+                        type: 'bg_color_update',
+                        color: bgInput.value
+                    });
+                }
+            }
+            break;
+
+        case 'layer_select': {
+            // Simulate a layer click in the main window
+            const { layerType, ctrlKey, shiftKey } = msg;
+            const selectId = layerType === 'object' ? msg.layerId : parseFloat(msg.layerId);
+            if (layerType === 'object') {
+                const obj = canvas?.objectsManager?.objects?.find(o => o.id === selectId);
+                if (obj) {
+                    if (ctrlKey) {
+                        // Toggle selection
+                        const idx = canvas.objectsManager.selectedObjects.findIndex(o => o.id === selectId);
+                        if (idx >= 0) {
+                            canvas.objectsManager.selectedObjects.splice(idx, 1);
+                        } else {
+                            canvas.objectsManager.selectedObjects.push(obj);
+                        }
+                    } else {
+                        canvas.objectsManager.selectObject(obj);
+                    }
+                    canvas.objectsManager.dispatchObjectsChanged();
+                    renderLayers();
+                }
+            } else {
+                const img = canvas?.images?.find(i => i.id === selectId);
+                if (img) {
+                    if (ctrlKey) {
+                        if (canvas.selectedImages?.includes(img)) {
+                            canvas.selectedImages = canvas.selectedImages.filter(i => i !== img);
+                        } else {
+                            canvas.selectedImages = [...(canvas.selectedImages || []), img];
+                        }
+                    } else {
+                        canvas.selectedImage = img;
+                        canvas.selectedImages = [img];
+                    }
+                    canvas.needsRender = true;
+                    renderLayers();
+                }
+            }
+            break;
+        }
+
+        case 'layer_toggle_visibility': {
+            const visId = msg.layerType === 'object' ? msg.layerId : parseFloat(msg.layerId);
+            if (msg.layerType === 'object') {
+                const obj = canvas?.objectsManager?.objects?.find(o => o.id === visId);
+                if (obj) {
+                    obj.visible = !obj.visible;
+                    canvas.objectsManager.dispatchObjectsChanged();
+                    canvas.needsRender = true;
+                    renderLayers();
+                    scheduleSave();
+                }
+            } else {
+                const img = canvas?.images?.find(i => i.id === visId);
+                if (img) {
+                    img.visible = !img.visible;
+                    canvas.needsRender = true;
+                    renderLayers();
+                    scheduleSave();
+                }
+            }
+            break;
+        }
+
+        case 'layer_delete': {
+            const delId = msg.layerType === 'object' ? msg.layerId : parseFloat(msg.layerId);
+            if (msg.layerType === 'object') {
+                canvas?.objectsManager?.deleteObject(delId);
+                canvas?.objectsManager?.dispatchObjectsChanged();
+            } else {
+                canvas?.deleteImage(delId);
+            }
+            canvas.invalidateCullCache();
+            canvas.needsRender = true;
+            renderLayers();
+            scheduleSave();
+            break;
+        }
+
+        case 'layer_rename': {
+            // Trigger rename in main window (shows modal)
+            const renameId = msg.layerType === 'object' ? msg.layerId : parseFloat(msg.layerId);
+            if (msg.layerType === 'object') {
+                const obj = canvas?.objectsManager?.objects?.find(o => o.id === renameId);
+                if (obj) {
+                    showInputModal('Rename Layer', obj.name || 'Object', (newName) => {
+                        if (newName && newName.trim()) {
+                            canvas.objectsManager.updateSelectedObject({ name: newName.trim() });
+                            renderLayers();
+                            scheduleSave();
+                        }
+                    });
+                }
+            } else {
+                const img = canvas?.images?.find(i => i.id === renameId);
+                if (img) {
+                    showInputModal('Rename Layer', img.name || 'Image', (newName) => {
+                        if (newName && newName.trim()) {
+                            img.name = newName.trim();
+                            renderLayers();
+                            scheduleSave();
+                        }
+                    });
+                }
+            }
+            break;
+        }
+
+        case 'group_toggle_collapse': {
+            // Toggle group collapse in main window
+            const groupEl = activeContainer?.querySelector(`.group-item[data-group-id="${msg.groupId}"]`);
+            const children = groupEl?.querySelector('.group-children');
+            const toggle = groupEl?.querySelector('.group-collapse-toggle');
+            if (children) children.classList.toggle('collapsed');
+            if (toggle) toggle.classList.toggle('collapsed');
+            syncLayersToFloatingSidebar();
+            break;
+        }
+
+        case 'group_toggle_visibility': {
+            // Toggle group visibility
+            const group = layerGroups?.find(g => g.id === msg.groupId);
+            if (group) {
+                const newVisible = group.visible === false; // Toggle
+                group.visible = newVisible;
+                // Toggle all children
+                group.layerIds?.forEach(id => {
+                    const img = canvas?.images?.find(i => i.id === id);
+                    if (img) img.visible = newVisible;
+                });
+                group.objectIds?.forEach(id => {
+                    const obj = canvas?.objectsManager?.objects?.find(o => o.id === id);
+                    if (obj) obj.visible = newVisible;
+                });
+                canvas.needsRender = true;
+                renderLayers();
+                scheduleSave();
+            }
+            break;
+        }
+
+        case 'bg_color_change': {
+            if (canvas) {
+                canvas.setBackgroundColor(msg.color);
+                const bgInput = activeContainer?.querySelector('#bg-color');
+                if (bgInput) bgInput.value = msg.color;
+                scheduleSave();
+            }
+            break;
+        }
+
+        case 'property_change': {
+            // Forward property changes to the actual input in main window
+            const input = activeContainer?.querySelector('#' + msg.inputId);
+            if (input) {
+                if (input.type === 'checkbox') {
+                    input.checked = msg.value;
+                } else {
+                    input.value = msg.value;
+                }
+                // Dispatch change/input event so handlers fire
+                input.dispatchEvent(new Event('change', { bubbles: true }));
+                input.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+            break;
+        }
+
+        case 'close_properties': {
+            const objProps = activeContainer?.querySelector('#object-properties');
+            const defaultProps = activeContainer?.querySelector('#default-properties');
+            if (objProps) objProps.style.display = 'none';
+            if (defaultProps) defaultProps.style.display = '';
+            canvas?.objectsManager?.deselectAll?.();
+            canvas.selectedImage = null;
+            canvas.selectedImages = [];
+            canvas.needsRender = true;
+            renderLayers();
+            break;
+        }
+
+        case 'tab_switch': {
+            // Click the matching tab button in the main window to trigger its full handler
+            const targetTab = activeContainer?.querySelector(`.tab-btn[data-tab="${msg.tab}"]`);
+            if (targetTab) targetTab.click();
+            break;
+        }
+
+        case 'dropdown_action': {
+            // Click the corresponding dropdown item in main window
+            const item = activeContainer?.querySelector('#' + msg.action);
+            if (item) item.click();
+            break;
+        }
     }
 }

@@ -53,6 +53,9 @@
         <button class="titlebar-sidebar-toggle" id="sidebar-toggle-btn">
             <img src="/assets/sidebar-col.svg" alt="Toggle Sidebar" class="sidebar-toggle-icon">
         </button>
+        <button class="titlebar-sidebar-toggle sidebar-detach-toggle" id="sidebar-detach-btn" title="Detach sidebar into floating window">
+            <img src="/assets/sidebar-overlay-svgrepo-com.svg" alt="Detach Sidebar" class="sidebar-toggle-icon sidebar-detach-icon">
+        </button>
         <div class="titlebar-undo-redo">
             <button class="undo-redo-btn" id="undo-btn" title="Undo (Ctrl+Z)" disabled>
                 <img src="/assets/undo-svgrepo-com.svg" alt="Undo" class="undo-redo-icon">
@@ -62,6 +65,9 @@
             </button>
         </div>
         <div class="titlebar-nav-container" data-tauri-drag-region>
+            <button class="nav-back-btn" id="nav-back-btn" title="Go Back" style="display: none;">
+                <img src="/assets/back.png" alt="Back" class="nav-back-icon">
+            </button>
             <div class="nav-breadcrumb" id="nav-breadcrumb">
                 <span class="breadcrumb-item active">All Boards</span>
             </div>
@@ -180,7 +186,7 @@
                 </div>
 
                 <div class="sidebar-tabs">
-                    <button class="tab-btn active" data-tab="layers">Board</button>
+                    <button class="tab-btn active" data-tab="layers">Layers</button>
                     <button class="tab-btn" data-tab="assets">Assets</button>
                 </div>
 

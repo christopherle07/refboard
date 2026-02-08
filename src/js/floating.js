@@ -528,6 +528,19 @@ async function loadLayers(layers, viewState = null) {
         const total = resolvedLayers.length;
 
         resolvedLayers.forEach(({ layer, resolvedSrc, filePath }) => {
+            // Skip video/GIF layers — they need special handling and can't load as Image
+            if (layer.mediaType === 'video' || layer.mediaType === 'gif') {
+                loaded++;
+                if (loaded >= total) {
+                    canvas.selectImage(null);
+                    canvas.invalidateCullCache();
+                    canvas.needsRender = true;
+                    canvas.render();
+                    resolve();
+                }
+                return;
+            }
+
             const img = new Image();
             img.onload = () => {
                 const visible = layer.visible !== false;
@@ -562,7 +575,8 @@ async function loadLayers(layers, viewState = null) {
                     resolve();
                 }
             };
-            img.onerror = () => {
+            img.onerror = (e) => {
+                console.error('Failed to load image:', layer.name, 'src:', resolvedSrc?.substring(0, 100), e);
                 loaded++;
                 if (loaded >= total) {
                     // Force initial render

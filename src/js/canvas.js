@@ -5,7 +5,7 @@ export class Canvas {
         this.canvas = canvasElement;
         this.ctx = canvasElement.getContext('2d', {
             alpha: false,
-            desynchronized: true,
+            desynchronized: false,
             willReadFrequently: false
         });
         this.images = [];

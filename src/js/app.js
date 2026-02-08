@@ -34,6 +34,7 @@ class App {
      */
     async showHome() {
         this.currentBoardId = null;
+        this._currentBoardName = null;
         await this.viewManager.showHome();
         this.updateBreadcrumb('All Boards');
 
@@ -58,6 +59,7 @@ class App {
      */
     async openBoard(boardId, boardName) {
         this.currentBoardId = boardId;
+        this._currentBoardName = boardName;
         await this.viewManager.showBoard(boardId);
         this.updateBreadcrumb(`All Boards > ${boardName}`);
 
@@ -228,6 +230,7 @@ class App {
      * Get current board name from breadcrumb
      */
     getBoardName() {
+        if (this._currentBoardName) return this._currentBoardName;
         const breadcrumb = document.getElementById('nav-breadcrumb');
         if (breadcrumb) {
             const text = breadcrumb.textContent;
@@ -238,30 +241,93 @@ class App {
     }
 
     /**
-     * Update breadcrumb navigation
+     * Update breadcrumb navigation with clickable segments
+     * Segments are separated by >, e.g. "All Boards > MyBoard > Assets"
      */
     updateBreadcrumb(text) {
         const breadcrumb = document.getElementById('nav-breadcrumb');
-        if (breadcrumb) {
-            // Replace > with /
-            const formattedText = text.replace(/>/g, '/');
-            breadcrumb.innerHTML = `<span class="breadcrumb-item active">${formattedText}</span>`;
+        const backBtn = document.getElementById('nav-back-btn');
+        if (!breadcrumb) return;
+
+        const segments = text.split('>').map(s => s.trim()).filter(Boolean);
+        breadcrumb.innerHTML = '';
+
+        segments.forEach((seg, i) => {
+            if (i > 0) {
+                const sep = document.createElement('span');
+                sep.className = 'breadcrumb-separator';
+                sep.textContent = '/';
+                breadcrumb.appendChild(sep);
+            }
+
+            const span = document.createElement('span');
+            const isLast = i === segments.length - 1;
+
+            // First segment (Home) gets an icon
+            if (i === 0) {
+                const icon = document.createElement('img');
+                icon.src = '/assets/home(1).png';
+                icon.alt = 'Home';
+                icon.className = 'breadcrumb-home-icon';
+                span.appendChild(icon);
+                const label = document.createTextNode('Home');
+                span.appendChild(label);
+            } else {
+                span.textContent = seg;
+            }
+
+            if (isLast) {
+                span.className = 'breadcrumb-item active';
+            } else {
+                span.className = 'breadcrumb-item clickable';
+                span.addEventListener('click', () => this.handleBreadcrumbClick(i));
+            }
+            breadcrumb.appendChild(span);
+        });
+
+        // Show back button when not on home
+        if (backBtn) {
+            backBtn.style.display = segments.length > 1 ? 'flex' : 'none';
         }
     }
 
     /**
-     * Setup breadcrumb click to go home
+     * Handle clicking a breadcrumb segment by index
+     */
+    handleBreadcrumbClick(segIndex) {
+        if (segIndex === 0) {
+            // "All Boards" — go home
+            this.showHome();
+        } else if (segIndex === 1) {
+            // Board name — go back to board canvas (from assets view)
+            if (window.showCanvasView) {
+                window.showCanvasView();
+            }
+        }
+    }
+
+    /**
+     * Handle back button — navigates one level up
+     */
+    handleBackNavigation() {
+        const breadcrumb = document.getElementById('nav-breadcrumb');
+        if (!breadcrumb) return;
+
+        const segments = breadcrumb.querySelectorAll('.breadcrumb-item');
+        if (segments.length <= 1) return;
+
+        // Go to the second-to-last segment
+        const targetIndex = segments.length - 2;
+        this.handleBreadcrumbClick(targetIndex);
+    }
+
+    /**
+     * Setup breadcrumb and back button navigation
      */
     setupBreadcrumbNavigation() {
-        const breadcrumb = document.getElementById('nav-breadcrumb');
-        if (breadcrumb) {
-            breadcrumb.addEventListener('click', async () => {
-                if (this.currentBoardId) {
-                    console.log('[Breadcrumb] Navigating to home...');
-                    await this.showHome();
-                    console.log('[Breadcrumb] Navigation complete');
-                }
-            });
+        const backBtn = document.getElementById('nav-back-btn');
+        if (backBtn) {
+            backBtn.addEventListener('click', () => this.handleBackNavigation());
         }
 
         // Setup floating window button
@@ -290,8 +356,10 @@ class App {
         // Import board manager and editor module to access current board and save function
         const { boardManager } = await import('./board-manager.js');
 
-        // Trigger save via global save function if available
-        if (window.editorSaveNow) {
+        // Force save current state so floating window gets latest data
+        if (window.editorForceSave) {
+            await window.editorForceSave();
+        } else if (window.editorSaveNow) {
             await window.editorSaveNow();
         }
 

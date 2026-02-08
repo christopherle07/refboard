@@ -19,6 +19,14 @@
     pointer-events: none;
 }
 
+/* Detached state - sidebar is in a floating window */
+.sidebar.detached {
+    transform: translateX(-100%);
+    pointer-events: none;
+}
+
+/* Detach icon in titlebar uses .sidebar-toggle-icon theme filters via shared class */
+
 
 /* Hide all scrollbars in sidebar */
 .sidebar *,

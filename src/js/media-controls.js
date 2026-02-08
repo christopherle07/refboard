@@ -163,14 +163,21 @@ export class MediaControls {
     }
 
     toggleFilmstrip() {
+        const img = this.activeImage || this.hoveredImage;
         if (this.filmstripOpen) {
             this.filmstrip.style.display = 'none';
             this.filmstripOpen = false;
-        } else if (this.hoveredImage?.mediaType === 'gif' && this.hoveredImage.gifFrameCanvases) {
+            this.filmstripImage = null;
+            // Kill keyboard repeat when closing filmstrip
+            this._keyDown = null;
+            if (this._keyRepeatInterval) {
+                clearInterval(this._keyRepeatInterval);
+                this._keyRepeatInterval = null;
+            }
+        } else if (img?.mediaType === 'gif' && img.gifFrameCanvases) {
             this.filmstripOpen = true;
-            this.filmstripImage = this.hoveredImage;
-            // Jump offset to show the page containing the current frame
-            this.filmstripOffset = Math.floor(this.hoveredImage.gifCurrentFrame / this.FILMSTRIP_PAGE_SIZE) * this.FILMSTRIP_PAGE_SIZE;
+            this.filmstripImage = img;
+            this.filmstripOffset = Math.floor(img.gifCurrentFrame / this.FILMSTRIP_PAGE_SIZE) * this.FILMSTRIP_PAGE_SIZE;
             this.renderFilmstripThumbnails();
             this.positionFilmstrip();
             this.filmstrip.style.display = 'flex';
@@ -334,7 +341,12 @@ export class MediaControls {
 
     stepFilmstripFrame(direction) {
         const img = this.filmstripImage;
-        if (!img) return;
+        if (!img || !img.gifFrameCanvases) return;
+        // Verify image still exists on canvas
+        if (!this.canvas.images.includes(img)) {
+            this.dismiss();
+            return;
+        }
 
         img.gifPlaying = false;
         this.canvas.stepGifFrame(img, direction);
@@ -475,6 +487,13 @@ export class MediaControls {
         this.gifBar.style.display = 'none';
         this.filmstrip.style.display = 'none';
         this.filmstripOpen = false;
+        this.filmstripImage = null;
+        // Kill any keyboard repeat interval when hiding
+        this._keyDown = null;
+        if (this._keyRepeatInterval) {
+            clearInterval(this._keyRepeatInterval);
+            this._keyRepeatInterval = null;
+        }
     }
 
     dismiss() {
@@ -482,7 +501,6 @@ export class MediaControls {
         this.hideAll();
         this.hoveredImage = null;
         this.activeImage = null;
-        this.filmstripImage = null;
     }
 
     scheduleHide() {

@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sidebar</title>
+    <script>
+        (function() {
+            const savedSettings = JSON.parse(localStorage.getItem('canvas_settings') || '{}');
+            const theme = savedSettings.theme || 'light';
+            document.documentElement.setAttribute('data-theme', theme);
+        })();
+    </script>
+    <link rel="stylesheet" href="css/fonts.css">
+    <link rel="stylesheet" href="css/base.css">
+    <link rel="stylesheet" href="css/sidebar.css">
+    <link rel="stylesheet" href="css/sidebar-floating.css">
+</head>
+<body>
+    <!-- Drag handle (three dots) -->
+    <div class="floating-drag-handle" id="drag-handle">
+        <span class="drag-dot"></span>
+        <span class="drag-dot"></span>
+        <span class="drag-dot"></span>
+    </div>
+
+    <!-- Sidebar content (cloned from main window) -->
+    <aside class="sidebar floating-sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <div class="board-name-wrapper">
+                <h2 class="board-name" id="board-name">Untitled Board</h2>
+                <button class="board-dropdown-btn" id="board-dropdown-btn"></button>
+                <div class="board-dropdown-menu" id="board-dropdown-menu">
+                    <div class="dropdown-item" id="dropdown-rename">Rename Board</div>
+                    <div class="dropdown-separator"></div>
+                    <div class="dropdown-item" id="dropdown-export">Export Board</div>
+                    <div class="dropdown-item" id="dropdown-import">Import to Board</div>
+                    <div class="dropdown-item" id="dropdown-export-lines">Export Lines</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="sidebar-tabs">
+            <button class="tab-btn active" data-tab="layers">Layers</button>
+            <button class="tab-btn" data-tab="assets">Assets</button>
+        </div>
+
+        <div class="sidebar-content">
+            <div class="panel-section layers-section-scrollable">
+                <div class="panel-section-header">
+                    <h3>Layers</h3>
+                    <div class="header-actions">
+                        <button class="collapse-btn" id="collapse-layers-btn">
+                            <img src="/assets/collapse.svg" alt="Collapse" class="collapse-icon" width="14" height="14"/>
+                        </button>
+                    </div>
+                </div>
+                <div class="panel-section-content" id="layers-content">
+                    <div class="layers-list" id="layers-list">
+                        <div class="empty-message">No layers yet</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="properties-section" id="default-properties">
+                <div class="property-row">
+                    <label>Background</label>
+                    <input type="color" id="bg-color" value="#ffffff">
+                </div>
+            </div>
+
+            <div class="object-properties-section" id="object-properties" style="display: none;">
+                <div class="properties-header">
+                    <h3 id="object-properties-title">Properties</h3>
+                    <button class="close-properties-btn" id="close-properties-btn">×</button>
+                </div>
+                <div class="properties-content" id="properties-content">
+                    <div class="shape-properties" id="shape-properties" style="display: none;">
+                        <div class="property-row">
+                            <label>Shape Type</label>
+                            <select id="shape-type" class="property-select">
+                                <option value="square">Square</option>
+                                <option value="circle">Circle</option>
+                                <option value="line">Line</option>
+                                <option value="arrow">Arrow</option>
+                            </select>
+                        </div>
+                        <div class="property-row">
+                            <label>Fill Color</label>
+                            <input type="color" id="shape-fill-color" value="#3b82f6">
+                        </div>
+                        <div class="property-row">
+                            <label>Stroke</label>
+                            <label class="toggle-switch" style="margin-left: auto;">
+                                <input type="checkbox" id="shape-has-stroke" checked>
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                        <div class="property-row" id="shape-stroke-color-row">
+                            <label>Stroke Color</label>
+                            <input type="color" id="shape-stroke-color" value="#000000">
+                        </div>
+                        <div class="property-row" id="shape-stroke-width-row">
+                            <label>Stroke Width</label>
+                            <input type="number" id="shape-stroke-width" min="0" max="20" value="2" class="property-input">
+                        </div>
+                        <div class="property-row" id="shape-corner-radius-row" style="display: none;">
+                            <label>Corner Radius</label>
+                            <input type="number" id="shape-corner-radius" min="0" max="100" value="0" class="property-input">
+                        </div>
+                        <div class="property-row" id="shape-line-color-row" style="display: none;">
+                            <label>Line Color</label>
+                            <input type="color" id="shape-line-color" value="#000000">
+                        </div>
+                        <div class="property-row" id="shape-line-thickness-row" style="display: none;">
+                            <label>Line Thickness</label>
+                            <input type="number" id="shape-line-thickness" min="1" max="50" value="5" class="property-input">
+                        </div>
+                    </div>
+
+                    <div class="text-properties" id="text-properties" style="display: none;">
+                        <div class="property-row">
+                            <label>Text</label>
+                            <textarea id="text-content" class="text-content-input" rows="3" placeholder="Enter text..."></textarea>
+                        </div>
+                        <div class="property-row">
+                            <label>Font Size</label>
+                            <input type="number" id="text-font-size" min="8" max="200" value="32" class="property-input">
+                        </div>
+                        <div class="property-row">
+                            <label>Font Family</label>
+                            <div id="font-dropdown-container" class="font-dropdown-container"></div>
+                        </div>
+                        <div class="property-row">
+                            <label>Text Color</label>
+                            <input type="color" id="text-color" value="#000000">
+                        </div>
+                        <div class="property-row">
+                            <label>Font Weight</label>
+                            <select id="text-font-weight" class="property-select">
+                                <option value="normal">Normal</option>
+                                <option value="bold">Bold</option>
+                            </select>
+                        </div>
+                        <div class="property-row">
+                            <label>Text Align</label>
+                            <select id="text-align" class="property-select">
+                                <option value="left">Left</option>
+                                <option value="center">Center</option>
+                                <option value="right">Right</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="palette-sidebar-section" id="palette-sidebar-section" style="display: none;">
+                <div class="panel-section-header">
+                    <span class="panel-section-title">PALETTE COLORS</span>
+                </div>
+                <div class="palette-swatches" id="palette-swatches"></div>
+            </div>
+        </div>
+    </aside>
+
+    <script type="module" src="js/sidebar-floating.js"></script>
+</body>
+</html>
