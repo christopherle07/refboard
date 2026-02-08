@@ -13,12 +13,118 @@ document.body.setAttribute('data-theme', theme);
 console.log('Applied theme on load:', theme);
 
 let currentPage = 1;
-const BOARDS_PER_PAGE_GRID = 12; // 3 rows × 4 columns
-const BOARDS_PER_PAGE_LIST = 6;
+const BOARDS_PER_PAGE_GRID = 12; // 4 columns × 3 rows
+const BOARDS_PER_PAGE_LIST = 10;
 let currentSort = 'recent';
 let currentView = 'grid'; // 'grid' or 'list'
 let currentCollectionId = null; // null means "All Boards"
 const collectionManager = new CollectionManager();
+const MAX_PINS = 3;
+
+// Pin management
+function getPinnedBoardIds() {
+    try {
+        return JSON.parse(localStorage.getItem('pinned_boards') || '[]');
+    } catch {
+        return [];
+    }
+}
+
+function savePinnedBoardIds(ids) {
+    localStorage.setItem('pinned_boards', JSON.stringify(ids));
+}
+
+function togglePinBoard(boardId) {
+    let pinned = getPinnedBoardIds();
+    if (pinned.includes(boardId)) {
+        pinned = pinned.filter(id => id !== boardId);
+    } else {
+        if (pinned.length >= MAX_PINS) {
+            showToast(`Maximum ${MAX_PINS} pinned boards`, 'error', 2000);
+            return;
+        }
+        pinned.push(boardId);
+    }
+    savePinnedBoardIds(pinned);
+    renderBoards();
+    renderPinnedSidebar();
+}
+
+function unpinBoard(boardId) {
+    let pinned = getPinnedBoardIds();
+    pinned = pinned.filter(id => id !== boardId);
+    savePinnedBoardIds(pinned);
+    renderBoards();
+    renderPinnedSidebar();
+}
+
+function renderPinnedSidebar() {
+    const container = document.getElementById('pinned-boards');
+    if (!container) return;
+
+    const pinnedIds = getPinnedBoardIds();
+    const allBoards = boardManager.getAllBoards();
+    const pinnedBoards = pinnedIds
+        .map(id => allBoards.find(b => b.id === id))
+        .filter(Boolean);
+
+    container.innerHTML = '';
+
+    if (pinnedBoards.length === 0) {
+        container.innerHTML = `
+            <div class="pinned-empty">
+                <img src="/assets/star-svgrepo-com.svg" class="pinned-empty-icon" alt="">
+                <p>Star boards to pin them here</p>
+            </div>
+        `;
+        return;
+    }
+
+    pinnedBoards.forEach(board => {
+        const card = document.createElement('div');
+        card.className = 'pinned-card';
+
+        const timestamp = board.updatedAt || board.updated_at || board.createdAt || board.created_at || Date.now();
+        const lastModified = formatTimeAgo(timestamp);
+
+        card.innerHTML = `
+            <div class="pinned-card-thumbnail"></div>
+            <div class="pinned-card-content">
+                <div class="pinned-card-title">${board.name}</div>
+                <div class="pinned-card-meta">${lastModified}</div>
+            </div>
+        `;
+
+        const thumb = card.querySelector('.pinned-card-thumbnail');
+        if (board.thumbnail) {
+            const img = document.createElement('img');
+            img.src = board.thumbnail;
+            img.alt = board.name;
+            thumb.appendChild(img);
+        } else {
+            thumb.style.backgroundColor = board.bgColor || board.bg_color || '#f0f0f0';
+        }
+
+        // Unpin button (X)
+        const unpinBtn = document.createElement('button');
+        unpinBtn.className = 'pinned-card-unpin';
+        unpinBtn.title = 'Unpin';
+        unpinBtn.innerHTML = `
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+        `;
+        unpinBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            unpinBoard(board.id);
+        });
+        thumb.appendChild(unpinBtn);
+
+        card.addEventListener('click', () => openBoard(board.id));
+        container.appendChild(card);
+    });
+}
 
 // Time formatting utility
 function formatTimeAgo(timestamp) {
@@ -54,6 +160,7 @@ export async function initHomepage() {
         await boardManager.loadBoards();
         console.log('[initHomepage] Rendering boards...');
         renderBoards();
+        renderPinnedSidebar();
         console.log('[initHomepage] Setting up event listeners...');
         setupEventListeners();
         console.log('[initHomepage] Homepage initialization complete!');
@@ -92,7 +199,7 @@ function updatePaginationControls(currentPage, totalPages) {
 
     // Update info text
     if (paginationInfo) {
-        paginationInfo.textContent = `Page ${currentPage} of ${totalPages}`;
+        paginationInfo.textContent = `${currentPage} / ${totalPages}`;
     }
 }
 
@@ -121,26 +228,21 @@ function setupEventListeners() {
         });
     }
 
-    // View mode buttons
-    const viewGridBtn = document.getElementById('view-grid-btn');
-    const viewListBtn = document.getElementById('view-list-btn');
-
-    if (viewGridBtn) {
-        viewGridBtn.addEventListener('click', () => {
-            currentView = 'grid';
-            viewGridBtn.classList.add('active');
-            viewListBtn.classList.remove('active');
-            currentPage = 1; // Reset to first page when changing view
-            renderBoards();
-        });
-    }
-
-    if (viewListBtn) {
-        viewListBtn.addEventListener('click', () => {
-            currentView = 'list';
-            viewListBtn.classList.add('active');
-            viewGridBtn.classList.remove('active');
-            currentPage = 1; // Reset to first page when changing view
+    // View toggle button (single button that switches between grid/list)
+    const viewToggleBtn = document.getElementById('view-toggle-btn');
+    if (viewToggleBtn) {
+        viewToggleBtn.addEventListener('click', () => {
+            currentView = currentView === 'grid' ? 'list' : 'grid';
+            const gridIcon = viewToggleBtn.querySelector('.view-icon-grid');
+            const listIcon = viewToggleBtn.querySelector('.view-icon-list');
+            if (currentView === 'list') {
+                gridIcon.style.display = 'none';
+                listIcon.style.display = '';
+            } else {
+                gridIcon.style.display = '';
+                listIcon.style.display = 'none';
+            }
+            currentPage = 1;
             renderBoards();
         });
     }
@@ -287,15 +389,18 @@ function renderBoards() {
         emptyState.className = 'empty-boards-state';
         emptyState.innerHTML = `
             <h3>No boards found</h3>
-            <p>Click the + button to create your first board</p>
+            <p>Create a new board to get started</p>
         `;
         grid.appendChild(emptyState);
         return;
     }
 
+    const pinnedIds = getPinnedBoardIds();
+
     paginatedBoards.forEach(board => {
         const card = document.createElement('div');
         card.className = 'board-card';
+        const isPinned = pinnedIds.includes(board.id);
 
         const timestamp = board.updatedAt || board.updated_at || board.createdAt || board.created_at || Date.now();
         const lastModified = formatTimeAgo(timestamp);
@@ -321,19 +426,37 @@ function renderBoards() {
             thumbnailDiv.style.backgroundColor = bgColor;
         }
 
-        // Add delete button after thumbnail content
+        // Pin button (star) - top left
+        const pinBtn = document.createElement('button');
+        pinBtn.className = 'board-pin-btn' + (isPinned ? ' pinned' : '');
+        pinBtn.title = isPinned ? 'Unpin board' : 'Pin board';
+        if (isPinned) {
+            // Solid filled yellow star
+            pinBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="#FFD700" stroke="none"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>`;
+        } else {
+            // White outline star
+            pinBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linejoin="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>`;
+        }
+        pinBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            togglePinBoard(board.id);
+        });
+        thumbnailDiv.appendChild(pinBtn);
+
+        // Delete button - top right
         const deleteBtn = document.createElement('button');
         deleteBtn.className = 'board-delete-btn';
         deleteBtn.title = 'Delete board';
         deleteBtn.innerHTML = `
-            <svg width="16" height="16" viewBox="0 0 1024 1024" fill="currentColor">
-                <path d="M170.666667 448H810.666667v448a64 64 0 0 1-64 64h-512a64 64 0 0 1-64-64V448z m-64 480c0 52.992 43.008 96 96 96h576c52.992 0 96-43.008 96-96V384h-768v544z m224-64a32 32 0 0 0 32-32v-256a32 32 0 0 0-64 0v256c0 17.664 14.336 32 32 32z m160 0a32 32 0 0 0 32-32v-256a32 32 0 0 0-64 0v256c0 17.664 14.336 32 32 32zM842.666667 256h-704a32 32 0 0 1 0-64h704a32 32 0 0 1 0 64zM394.666667 64h192a32 32 0 0 1 0 64h-192a32 32 0 0 1 0-64z m480 64H682.666667V64A64 64 0 0 0 618.666667 0h-256A64 64 0 0 0 298.666667 64v64H106.666667a64 64 0 0 0-64 64V256c0 35.328 28.672 64 64 64h768A64 64 0 0 0 938.666667 256v-64a64 64 0 0 0-64-64z m-224 736A32 32 0 0 0 682.666667 832v-256a32 32 0 0 0-64 0v256c0 17.664 14.336 32 32 32z" />
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
             </svg>
         `;
         deleteBtn.addEventListener('click', async (e) => {
             e.preventDefault();
-            e.stopPropagation(); // Prevent opening the board
-
+            e.stopPropagation();
             showDeleteConfirm(`board "${board.name}"`, async () => {
                 await deleteBoard(board.id);
             });
@@ -341,13 +464,9 @@ function renderBoards() {
         thumbnailDiv.appendChild(deleteBtn);
 
         card.addEventListener('click', () => {
-            console.log('[Board Card] Clicked board:', board.id, board.name);
-            console.log('[Board Card] window.appInstance exists:', !!window.appInstance);
-            console.log('[Board Card] Calling openBoard...');
             openBoard(board.id);
         });
 
-        // Add right-click context menu
         card.addEventListener('contextmenu', (e) => {
             e.preventDefault();
             showBoardContextMenu(e, board.id);
@@ -365,12 +484,14 @@ async function createBoard(name, bgColor) {
 
 async function deleteBoard(boardId) {
     console.log('[deleteBoard] Starting delete for board:', boardId);
-    console.log('[deleteBoard] Boards before delete:', boardManager.getAllBoards().length);
     await boardManager.deleteBoard(boardId);
-    console.log('[deleteBoard] Boards after delete:', boardManager.getAllBoards().length);
-    console.log('[deleteBoard] Calling renderBoards...');
+    // Also remove from pins if pinned
+    let pinned = getPinnedBoardIds();
+    if (pinned.includes(boardId)) {
+        savePinnedBoardIds(pinned.filter(id => id !== boardId));
+    }
     renderBoards();
-    console.log('[deleteBoard] renderBoards complete');
+    renderPinnedSidebar();
 }
 
 async function openBoard(boardId) {
