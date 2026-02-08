@@ -7180,5 +7180,248 @@ function handleFloatingSidebarMessage(msg) {
             if (item) item.click();
             break;
         }
+
+        case 'layer_reorder': {
+            // Apply layer order from floating sidebar drag-and-drop
+            if (!msg.order || !Array.isArray(msg.order)) break;
+            const images = canvas.getImages();
+            const objects = canvas.objectsManager.getObjects();
+
+            // Build allLayersOrder from the floating sidebar's reported order
+            const newAllLayersOrder = [];
+            for (const entry of msg.order) {
+                if (entry.type === 'image') {
+                    const img = images.find(i => i.id === parseFloat(entry.id));
+                    if (img) newAllLayersOrder.push({ type: 'image', data: img });
+                } else if (entry.type === 'object') {
+                    const obj = objects.find(o => o.id === entry.id);
+                    if (obj) newAllLayersOrder.push({ type: 'object', data: obj });
+                }
+            }
+
+            if (newAllLayersOrder.length > 0) {
+                // Capture old zIndex values for undo
+                const oldZIndexes = newAllLayersOrder.map(layer => ({
+                    type: layer.type,
+                    id: layer.data.id,
+                    zIndex: layer.data.zIndex || 0
+                }));
+
+                // Assign zIndex based on position
+                const zIndexUpdates = [];
+                newAllLayersOrder.forEach((layer, index) => {
+                    layer.data.zIndex = index;
+                    zIndexUpdates.push({ type: layer.type, id: layer.data.id, zIndex: index });
+                });
+
+                // Push to history if order changed
+                const orderChanged = oldZIndexes.some((old, i) => old.zIndex !== zIndexUpdates[i].zIndex);
+                if (orderChanged && historyManager) {
+                    historyManager.pushAction({
+                        type: 'reorder_layers',
+                        data: { oldOrder: oldZIndexes, newOrder: zIndexUpdates }
+                    });
+                }
+
+                canvas.invalidateCullCache();
+                canvas.needsRender = true;
+                canvas.render();
+                renderLayers();
+                scheduleSave();
+            }
+            break;
+        }
+
+        case 'layer_duplicate': {
+            const dupId = msg.layerType === 'object' ? msg.layerId : parseFloat(msg.layerId);
+            if (msg.layerType === 'object') {
+                const obj = canvas?.objectsManager?.objects?.find(o => o.id === dupId);
+                if (obj) {
+                    const duplicate = JSON.parse(JSON.stringify(obj));
+                    duplicate.id = Date.now() + Math.random();
+                    duplicate.x += 20;
+                    duplicate.y += 20;
+                    duplicate.zIndex = canvas.objectsManager.objects.reduce((max, o) => Math.max(max, o.zIndex || 0), 0) + 1;
+                    canvas.objectsManager.objects.push(duplicate);
+                    canvas.needsRender = true;
+                    canvas.objectsManager.dispatchObjectsChanged();
+                    renderLayers();
+                    scheduleSave();
+                }
+            } else {
+                const img = canvas?.images?.find(i => i.id === dupId);
+                if (img) {
+                    const newImg = new Image();
+                    newImg.onload = () => {
+                        canvas.addImage(newImg, img.x + 20, img.y + 20, img.name + ' Copy', img.width, img.height);
+                        renderLayers();
+                        scheduleSave();
+                    };
+                    newImg.src = img.img.src;
+                }
+            }
+            break;
+        }
+
+        case 'layer_remove_from_group': {
+            const rmId = msg.layerType === 'object' ? msg.layerId : parseFloat(msg.layerId);
+            const rmGroupId = msg.groupId;
+            let removed = false;
+
+            layerGroups.forEach(group => {
+                if (String(group.id) !== String(rmGroupId)) return;
+                if (msg.layerType === 'image' && group.layerIds.includes(rmId)) {
+                    group.layerIds = group.layerIds.filter(id => id !== rmId);
+                    removed = true;
+                } else if (msg.layerType === 'object' && group.objectIds && group.objectIds.includes(rmId)) {
+                    group.objectIds = group.objectIds.filter(id => id !== rmId);
+                    removed = true;
+                }
+            });
+
+            // Clean up empty groups
+            layerGroups = layerGroups.filter(group => {
+                const hasLayers = group.layerIds && group.layerIds.length > 0;
+                const hasObjects = group.objectIds && group.objectIds.length > 0;
+                return hasLayers || hasObjects;
+            });
+
+            if (removed) {
+                renderLayers();
+                scheduleSave();
+            }
+            break;
+        }
+
+        case 'group_select': {
+            const selGroup = layerGroups?.find(g => String(g.id) === String(msg.groupId));
+            if (selGroup) {
+                const currentImages = canvas.getImages();
+                const currentObjects = canvas.objectsManager.getObjects();
+                const groupImageLayers = currentImages.filter(img => selGroup.layerIds.includes(img.id));
+                const groupObjectLayers = currentObjects.filter(obj => selGroup.objectIds && selGroup.objectIds.includes(obj.id));
+
+                canvas.selectedImage = null;
+                canvas.selectedImages = [];
+                canvas.objectsManager.selectedObject = null;
+                canvas.objectsManager.selectedObjects = [];
+
+                if (groupImageLayers.length > 0) {
+                    groupImageLayers.forEach((img, index) => {
+                        canvas.selectImage(img, index > 0);
+                    });
+                }
+                if (groupObjectLayers.length > 0) {
+                    groupObjectLayers.forEach(obj => {
+                        canvas.objectsManager.selectedObjects.push(obj);
+                    });
+                    canvas.objectsManager.selectedObject = groupObjectLayers[groupObjectLayers.length - 1];
+                }
+
+                canvas.selectedGroup = selGroup;
+                canvas.needsRender = true;
+                canvas.render();
+                renderLayers();
+            }
+            break;
+        }
+
+        case 'group_rename': {
+            const renameGroup = layerGroups?.find(g => String(g.id) === String(msg.groupId));
+            if (renameGroup) {
+                showInputModal('Rename Group', 'Group name:', renameGroup.name).then(newName => {
+                    if (newName && newName.trim() !== '') {
+                        renameGroup.name = newName.trim();
+                        renderLayers();
+                        scheduleSave();
+                    }
+                });
+            }
+            break;
+        }
+
+        case 'group_duplicate': {
+            const dupGroup = layerGroups?.find(g => String(g.id) === String(msg.groupId));
+            if (dupGroup) {
+                (async () => {
+                    const newGroup = {
+                        id: Date.now() + Math.random(),
+                        name: dupGroup.name + ' Copy',
+                        layerIds: [],
+                        objectIds: [],
+                        collapsed: false
+                    };
+
+                    // Duplicate image layers
+                    const allImages = canvas.getImages();
+                    for (const imageId of dupGroup.layerIds) {
+                        const originalImage = allImages.find(img => img.id === imageId);
+                        if (originalImage && canvas.duplicateImage) {
+                            const duplicated = await canvas.duplicateImage(originalImage);
+                            if (duplicated) newGroup.layerIds.push(duplicated.id);
+                        }
+                    }
+
+                    // Duplicate object layers
+                    if (dupGroup.objectIds) {
+                        const allObjects = canvas.objectsManager.getObjects();
+                        for (const objectId of dupGroup.objectIds) {
+                            const originalObject = allObjects.find(obj => obj.id === objectId);
+                            if (originalObject && canvas.objectsManager.duplicateObject) {
+                                const duplicated = canvas.objectsManager.duplicateObject(originalObject);
+                                if (duplicated) newGroup.objectIds.push(duplicated.id);
+                            }
+                        }
+                    }
+
+                    layerGroups.push(newGroup);
+                    canvas.invalidateCullCache();
+                    canvas.render();
+                    renderLayers();
+                    scheduleSave();
+                })();
+            }
+            break;
+        }
+
+        case 'group_ungroup': {
+            const ungroupIdx = layerGroups.findIndex(g => String(g.id) === String(msg.groupId));
+            if (ungroupIdx !== -1) {
+                layerGroups.splice(ungroupIdx, 1);
+                renderLayers();
+                scheduleSave();
+            }
+            break;
+        }
+
+        case 'group_delete': {
+            const delGroup = layerGroups?.find(g => String(g.id) === String(msg.groupId));
+            if (delGroup) {
+                showConfirmModal(
+                    'Delete Group',
+                    `Delete group "${delGroup.name}" and all its layers?`,
+                    (confirmed) => {
+                        if (confirmed) {
+                            delGroup.layerIds.forEach(id => canvas.deleteImage(id));
+                            if (delGroup.objectIds) {
+                                delGroup.objectIds.forEach(id => canvas.objectsManager.deleteObject(id));
+                            }
+                            const idx = layerGroups.findIndex(g => g.id === delGroup.id);
+                            if (idx !== -1) layerGroups.splice(idx, 1);
+                            canvas.invalidateCullCache();
+                            canvas.render();
+                            renderLayers();
+                            scheduleSave();
+                        }
+                    }
+                );
+            }
+            break;
+        }
+
+        case 'create_group': {
+            groupSelectedLayers();
+            break;
+        }
     }
 }
