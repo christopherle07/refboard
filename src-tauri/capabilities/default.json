@@ -1,16 +1,25 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Capability for the main window",
+  "description": "Capability for all windows",
   "windows": ["*"],
   "permissions": [
     "core:default",
     "opener:default",
     "core:window:allow-create",
-    "core:webview:allow-create-webview",
-    "core:webview:allow-create-webview-window",
-    "core:window:allow-set-always-on-top",
     "core:window:allow-close",
-    "core:window:allow-minimize"
+    "core:window:allow-minimize",
+    "core:window:allow-maximize",
+    "core:window:allow-unmaximize",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-is-maximized",
+    "core:window:allow-start-dragging",
+    "core:window:allow-outer-position",
+    "core:window:allow-outer-size",
+    "core:window:allow-set-always-on-top",
+    "core:webview:allow-create-webview-window",
+    "core:webview:allow-create-webview",
+    "core:webview:default",
+    "core:app:allow-version"
   ]
 }
