@@ -445,12 +445,76 @@ export async function initEditor(boardId, container) {
 
     renderAssets();
 
-    // Add dragover handler to layers list to allow drops in empty space
+    // Add dragover handler to layers list to allow drops in empty space and at the top
     const layersList = getElement('layers-list');
     if (layersList) {
         layersList.addEventListener('dragover', (e) => {
             e.preventDefault();
             e.dataTransfer.dropEffect = 'move';
+
+            // Handle dragging to the top of the list (above all layers)
+            if (!draggedLayerId || allLayersOrder.length === 0) return;
+
+            const listRect = layersList.getBoundingClientRect();
+            const firstLayerItem = layersList.querySelector('.layer-item, .group-item');
+
+            if (firstLayerItem) {
+                const firstItemRect = firstLayerItem.getBoundingClientRect();
+                const topDropZoneHeight = 30; // Pixels from top of first item to trigger "insert at top"
+
+                // Check if dragging in the drop zone above or at the very top of the first item
+                // This includes space above the list and the top portion of the first item
+                if (e.clientY < firstItemRect.top + topDropZoneHeight) {
+                    if (draggedLayerType === 'group') {
+                        // Move all group layers to the top together
+                        const draggedGroup = layerGroups.find(g => g.id === draggedLayerId);
+                        if (draggedGroup) {
+                            // Find all layers belonging to the dragged group
+                            const draggedGroupLayerIndices = [];
+                            allLayersOrder.forEach((layer, idx) => {
+                                if (layer.type === 'image' && draggedGroup.layerIds.includes(layer.data.id)) {
+                                    draggedGroupLayerIndices.push(idx);
+                                } else if (layer.type === 'object' && draggedGroup.objectIds && draggedGroup.objectIds.includes(layer.data.id)) {
+                                    draggedGroupLayerIndices.push(idx);
+                                }
+                            });
+
+                            if (draggedGroupLayerIndices.length > 0) {
+                                const newOrder = [...allLayersOrder];
+                                const draggedLayers = draggedGroupLayerIndices.sort((a, b) => a - b).map(idx => newOrder[idx]);
+
+                                // Remove from original positions (in reverse to maintain indices)
+                                for (let i = draggedGroupLayerIndices.length - 1; i >= 0; i--) {
+                                    newOrder.splice(draggedGroupLayerIndices[i], 1);
+                                }
+
+                                // Add all group layers to the end (top of visual list)
+                                newOrder.push(...draggedLayers);
+                                allLayersOrder = newOrder;
+                                reorderLayerElementsVisually();
+                            }
+                        }
+                    } else {
+                        // Move individual layer or object to the top (end of array = highest zIndex)
+                        const fromIdx = allLayersOrder.findIndex(l => {
+                            if (draggedLayerType === 'image') {
+                                return l.type === 'image' && l.data.id === draggedLayerId;
+                            } else if (draggedLayerType === 'object') {
+                                return l.type === 'object' && l.data.id === draggedLayerId;
+                            }
+                            return false;
+                        });
+
+                        if (fromIdx !== -1 && fromIdx !== allLayersOrder.length - 1) {
+                            const newOrder = [...allLayersOrder];
+                            const [moved] = newOrder.splice(fromIdx, 1);
+                            newOrder.push(moved); // Add to end = top of visual list
+                            allLayersOrder = newOrder;
+                            reorderLayerElementsVisually();
+                        }
+                    }
+                }
+            }
         });
     }
 

@@ -53,15 +53,15 @@
         <button class="titlebar-sidebar-toggle" id="sidebar-toggle-btn">
             <img src="/assets/sidebar-col.svg" alt="Toggle Sidebar" class="sidebar-toggle-icon">
         </button>
-        <div class="titlebar-undo-redo">
-            <button class="undo-redo-btn" id="undo-btn" title="Undo (Ctrl+Z)" disabled>
-                <img src="/assets/undo-svgrepo-com.svg" alt="Undo" class="undo-redo-icon">
-            </button>
-            <button class="undo-redo-btn" id="redo-btn" title="Redo (Ctrl+Y)" disabled>
-                <img src="/assets/undo-svgrepo-com.svg" alt="Redo" class="undo-redo-icon redo-flipped">
-            </button>
-        </div>
         <div class="titlebar-nav-container" data-tauri-drag-region>
+            <div class="titlebar-undo-redo">
+                <button class="undo-redo-btn" id="undo-btn" title="Undo (Ctrl+Z)" disabled>
+                    <img src="/assets/undo-svgrepo-com.svg" alt="Undo" class="undo-redo-icon">
+                </button>
+                <button class="undo-redo-btn" id="redo-btn" title="Redo (Ctrl+Y)" disabled>
+                    <img src="/assets/undo-svgrepo-com.svg" alt="Redo" class="undo-redo-icon redo-flipped">
+                </button>
+            </div>
             <button class="nav-back-btn" id="nav-back-btn" title="Go Back" style="display: none;">
                 <img src="/assets/back.png" alt="Back" class="nav-back-icon">
             </button>
@@ -71,7 +71,6 @@
             <button class="new-board-btn" id="open-floating-btn" title="Open Canvas Window" style="display: none;">
                 <img src="/assets/new-window-icon.svg" alt="Open Window" style="width: 16px; height: 16px;">
             </button>
-            <button class="floating-help-btn" id="floating-help-btn" title="What's this?" style="display: none;">?</button>
         </div>
         <div class="titlebar-actions">
             <button class="toolbar-icon-btn" id="library-btn" title="Library">
@@ -178,7 +177,9 @@
                 <div class="sidebar-header">
                     <div class="board-name-wrapper">
                         <h2 class="board-name" id="board-name">Untitled Board</h2>
-                        <button class="board-dropdown-btn" id="board-dropdown-btn"></button>
+                        <button class="board-dropdown-btn" id="board-dropdown-btn">
+                            <img src="/assets/menu-list-dropdown-svgrepo-com.svg" alt="Menu" class="dropdown-icon">
+                        </button>
                         <div class="board-dropdown-menu" id="board-dropdown-menu">
                             <div class="dropdown-item" id="dropdown-rename">Rename Board</div>
                             <div class="dropdown-separator"></div>
