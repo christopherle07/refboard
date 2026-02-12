@@ -440,36 +440,48 @@ html[data-theme="purplexing"] .collapse-icon {
 .layer-item {
     display: flex;
     align-items: center;
-    height: 28px;
+    height: 46px;
     background: transparent;
     cursor: grab;
-    transition: transform 0.15s cubic-bezier(0.25, 0.46, 0.45, 0.94), opacity 0.15s ease, background 0.15s ease, box-shadow 0.15s ease, border 0.15s ease;
     user-select: none;
     position: relative;
     padding: 2px 8px;
     margin: 1px 0;
     border-radius: 4px;
-    border: 1px solid var(--border-color);
-    will-change: transform;
 }
 
 .layer-item:active {
     cursor: grabbing;
 }
 
-.layer-item:hover {
-    background: var(--bg-hover);
-    border-color: var(--border-color-hover);
+/* Light theme: darker overlay on hover */
+html:not([data-theme="dark"]):not([data-theme="purplexing"]) .layer-item:hover {
+    background: rgba(0, 0, 0, 0.08);
 }
 
-.layer-item.selected {
-    background: rgba(13, 110, 253, 0.15);
-    border-color: rgba(13, 110, 253, 0.3);
+/* Dark theme: lighter overlay on hover */
+html[data-theme="dark"] .layer-item:hover {
+    background: rgba(255, 255, 255, 0.08);
 }
 
-.layer-item.selected:hover {
-    background: rgba(13, 110, 253, 0.2);
-    border-color: rgba(13, 110, 253, 0.5);
+/* Purplexing theme: purple overlay on hover */
+html[data-theme="purplexing"] .layer-item:hover {
+    background: rgba(183, 148, 246, 0.15);
+}
+
+/* Light theme: darker overlay on selection */
+html:not([data-theme="dark"]):not([data-theme="purplexing"]) .layer-item.selected {
+    background: rgba(0, 0, 0, 0.12);
+}
+
+/* Dark theme: lighter overlay on selection */
+html[data-theme="dark"] .layer-item.selected {
+    background: rgba(255, 255, 255, 0.12);
+}
+
+/* Purplexing theme: purple overlay on selection */
+html[data-theme="purplexing"] .layer-item.selected {
+    background: rgba(183, 148, 246, 0.25);
 }
 
 .layer-item.layer-hidden {
@@ -477,11 +489,12 @@ html[data-theme="purplexing"] .collapse-icon {
 }
 
 .layer-item.dragging {
-    opacity: 0.5;
-    background: var(--bg-hover);
-    border: 1px solid var(--border-color);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-    transform: scale(1.02);
+    opacity: 0.4;
+}
+
+.bottom-drop-zone {
+    position: relative;
+    min-height: 80px;
 }
 
 
@@ -502,7 +515,8 @@ html:not([data-theme="dark"]):not([data-theme="purplexing"]) .layer-icon[src*="S
 /* Dark theme: white layer icons for black-filled SVGs */
 html[data-theme="dark"] .layer-icon[src*="layericon"],
 html[data-theme="dark"] .layer-icon[src*="foldericon"],
-html[data-theme="dark"] .layer-icon[src*="ColorPalette"] {
+html[data-theme="dark"] .layer-icon[src*="ColorPalette"],
+html[data-theme="dark"] .layer-icon[src*="gif-svgrepo-com"] {
     filter: invert(1) !important;
 }
 
@@ -511,7 +525,8 @@ html[data-theme="purplexing"] .layer-icon[src*="layericon"],
 html[data-theme="purplexing"] .layer-icon[src*="foldericon"],
 html[data-theme="purplexing"] .layer-icon[src*="ColorPalette"],
 html[data-theme="purplexing"] .layer-icon[src*="TextIcon"],
-html[data-theme="purplexing"] .layer-icon[src*="ShapeIcon"] {
+html[data-theme="purplexing"] .layer-icon[src*="ShapeIcon"],
+html[data-theme="purplexing"] .layer-icon[src*="gif-svgrepo-com"] {
     filter: brightness(0) saturate(100%) invert(71%) sepia(35%) saturate(738%) hue-rotate(207deg) brightness(93%) contrast(91%) !important;
 }
 
@@ -710,23 +725,18 @@ html[data-theme="purplexing"] .layer-icon[src*="ShapeIcon"] {
 .group-item {
     display: flex;
     flex-direction: column;
-    transition: transform 0.15s cubic-bezier(0.25, 0.46, 0.45, 0.94), opacity 0.15s ease;
-    will-change: transform;
 }
 
 .group-header {
     display: flex;
     align-items: center;
-    height: 28px;
+    height: 46px;
     cursor: grab;
-    transition: background 0.15s ease, transform 0.15s cubic-bezier(0.25, 0.46, 0.45, 0.94), opacity 0.15s ease, box-shadow 0.15s ease, border 0.15s ease;
     user-select: none;
     background: transparent;
     padding: 2px 8px;
     margin: 1px 0;
     border-radius: 4px;
-    border: 1px solid var(--border-color);
-    will-change: transform;
 }
 
 .group-header:active {
@@ -741,9 +751,19 @@ html[data-theme="purplexing"] .layer-icon[src*="ShapeIcon"] {
     cursor: grabbing;
 }
 
-.group-header:hover {
-    background: var(--bg-hover);
-    border-color: var(--border-color-hover);
+/* Light theme: darker overlay on hover */
+html:not([data-theme="dark"]):not([data-theme="purplexing"]) .group-header:hover {
+    background: rgba(0, 0, 0, 0.08);
+}
+
+/* Dark theme: lighter overlay on hover */
+html[data-theme="dark"] .group-header:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+/* Purplexing theme: purple overlay on hover */
+html[data-theme="purplexing"] .group-header:hover {
+    background: rgba(183, 148, 246, 0.15);
 }
 
 .group-header:hover .layer-drag-handle {
@@ -800,16 +820,11 @@ html[data-theme="purplexing"] .layer-icon[src*="ShapeIcon"] {
 }
 
 .group-header.dragging {
-    opacity: 0.5;
-    background: var(--bg-hover);
-    border: 1px solid var(--border-color);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-    transform: scale(1.02);
+    opacity: 0.4;
 }
 
 .group-header.drag-over {
-    background: rgba(33, 150, 243, 0.2);
-    border: 2px solid var(--accent-secondary);
+    background: rgba(13, 110, 253, 0.1);
 }
 
 .group-collapse-btn {
@@ -1868,3 +1883,29 @@ html[data-theme="purplexing"] .tool-icon[src*="ColorPalette"] {
     white-space: nowrap;
     pointer-events: none;
 }
+
+/* Theme-specific sidebar border colors */
+/* Light mode: black borders */
+html:not([data-theme="dark"]):not([data-theme="purplexing"]) .sidebar,
+html:not([data-theme="dark"]):not([data-theme="purplexing"]) .tab-btn,
+html:not([data-theme="dark"]):not([data-theme="purplexing"]) .group-children,
+html:not([data-theme="dark"]):not([data-theme="purplexing"]) .tools-sidebar-content {
+    border-color: rgba(0, 0, 0, 0.2);
+}
+
+/* Dark mode: white borders */
+html[data-theme="dark"] .sidebar,
+html[data-theme="dark"] .tab-btn,
+html[data-theme="dark"] .group-children,
+html[data-theme="dark"] .tools-sidebar-content {
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+/* Purplexing mode: purple borders */
+html[data-theme="purplexing"] .sidebar,
+html[data-theme="purplexing"] .tab-btn,
+html[data-theme="purplexing"] .group-children,
+html[data-theme="purplexing"] .tools-sidebar-content {
+    border-color: rgba(183, 148, 246, 0.3);
+}
+

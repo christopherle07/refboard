@@ -30,6 +30,11 @@ button img,
     pointer-events: none;
 }
 
+html {
+    border-radius: 12px;
+    overflow: hidden;
+}
+
 /* Light theme (default) */
 :root,
 html:not([data-theme="dark"]) {
@@ -144,6 +149,8 @@ body {
     background: var(--bg-primary);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    border-radius: 12px;
+    overflow: hidden;
 }
 
 button {

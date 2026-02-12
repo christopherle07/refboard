@@ -1526,6 +1526,9 @@ function createLayerItem(img, images) {
             } else if (e.shiftKey && canvas.selectedImage) {
                 canvas.selectImagesInRange(canvas.selectedImage, img);
             } else {
+                // Clear object selections when selecting an image
+                canvas.objectsManager.selectedObjects = [];
+                canvas.objectsManager.selectedObject = null;
                 canvas.selectImage(img);
             }
             renderLayers();
@@ -1593,9 +1596,9 @@ function createLayerItem(img, images) {
         draggedFromGroup = null;
         draggedFromGroupBounds = null;
         lastDragY = 0;
+        reorderLayerElementsVisually();
         allLayersOrder = [];
         lastDragOrderHash = null;
-        renderLayers();
         scheduleSave();
     });
 
@@ -1611,23 +1614,11 @@ function createLayerItem(img, images) {
         const targetId = img.id;
         if (targetId === draggedLayerId && draggedLayerType === 'image') return;
 
-        // Clear all drag-over indicators first
-        document.querySelectorAll('.drag-over-above, .drag-over-below').forEach(el => {
-            el.classList.remove('drag-over-above', 'drag-over-below');
-        });
-
         if (allLayersOrder.length > 0) {
             // Edge detection: determine if hovering over top or bottom half
             const rect = layerItem.getBoundingClientRect();
             const midpoint = rect.top + rect.height / 2;
             const insertBefore = e.clientY < midpoint;
-
-            // Add visual indicator
-            if (insertBefore) {
-                layerItem.classList.add('drag-over-above');
-            } else {
-                layerItem.classList.add('drag-over-below');
-            }
 
             if (draggedLayerType === 'group') {
                 // If dragging a group onto a regular layer, move all group layers together
@@ -1667,7 +1658,6 @@ function createLayerItem(img, images) {
                         // Insert all dragged layers at target position
                         newOrder.splice(newToIdx, 0, ...draggedLayers);
                         allLayersOrder = newOrder;
-                        renderLayersThrottled();
                     }
                 }
             } else {
@@ -1695,19 +1685,10 @@ function createLayerItem(img, images) {
                         }
                         newOrder.splice(toIdx, 0, moved);
                         allLayersOrder = newOrder;
-                        renderLayersThrottled();
                     }
                 }
             }
         }
-    });
-
-    layerItem.addEventListener('dragleave', (e) => {
-        layerItem.classList.remove('drag-over-above', 'drag-over-below');
-    });
-
-    layerItem.addEventListener('drop', (e) => {
-        layerItem.classList.remove('drag-over-above', 'drag-over-below');
     });
 
     return layerItem;
@@ -1826,10 +1807,14 @@ function createObjectLayerItem(obj, objects) {
     layerItem.addEventListener('click', (e) => {
         if (e.target.tagName === 'INPUT') return;
         if (obj.visible !== false) {
-            if (e.ctrlKey || e.metaKey || e.shiftKey) {
+            if (e.ctrlKey || e.metaKey) {
                 canvas.objectsManager.selectObject(obj, true);
             } else {
-                canvas.objectsManager.selectObject(obj);
+                // Clear both object and image selections first
+                canvas.objectsManager.selectedObjects = [];
+                canvas.objectsManager.selectedObject = null;
+                canvas.selectImage(null);
+                canvas.objectsManager.selectObject(obj, false);
             }
             renderLayers();
         }
@@ -1897,9 +1882,9 @@ function createObjectLayerItem(obj, objects) {
         draggedFromGroup = null;
         draggedFromGroupBounds = null;
         lastDragY = 0;
+        reorderLayerElementsVisually();
         allLayersOrder = [];
         lastDragOrderHash = null;
-        renderLayers();
         scheduleSave();
     });
 
@@ -1915,23 +1900,11 @@ function createObjectLayerItem(obj, objects) {
         const targetId = obj.id;
         if (targetId === draggedLayerId && draggedLayerType === 'object') return;
 
-        // Clear all drag-over indicators first
-        document.querySelectorAll('.drag-over-above, .drag-over-below').forEach(el => {
-            el.classList.remove('drag-over-above', 'drag-over-below');
-        });
-
         if (allLayersOrder.length > 0) {
             // Edge detection: determine if hovering over top or bottom half
             const rect = layerItem.getBoundingClientRect();
             const midpoint = rect.top + rect.height / 2;
             const insertBefore = e.clientY < midpoint;
-
-            // Add visual indicator
-            if (insertBefore) {
-                layerItem.classList.add('drag-over-above');
-            } else {
-                layerItem.classList.add('drag-over-below');
-            }
 
             if (draggedLayerType === 'group') {
                 // If dragging a group onto an object layer, move all group layers together
@@ -1971,7 +1944,6 @@ function createObjectLayerItem(obj, objects) {
                         // Insert all dragged layers at target position
                         newOrder.splice(newToIdx, 0, ...draggedLayers);
                         allLayersOrder = newOrder;
-                        renderLayersThrottled();
                     }
                 }
             } else {
@@ -1999,19 +1971,10 @@ function createObjectLayerItem(obj, objects) {
                         }
                         newOrder.splice(toIdx, 0, moved);
                         allLayersOrder = newOrder;
-                        renderLayersThrottled();
                     }
                 }
             }
         }
-    });
-
-    layerItem.addEventListener('dragleave', () => {
-        layerItem.classList.remove('drag-over-above', 'drag-over-below');
-    });
-
-    layerItem.addEventListener('drop', () => {
-        layerItem.classList.remove('drag-over-above', 'drag-over-below');
     });
 
     return layerItem;
@@ -2349,24 +2312,13 @@ function createGroupElement(group, allLayers, images, objects) {
 
         if (!draggedLayerId) return;
 
-        // Clear all drag-over indicators first
-        document.querySelectorAll('.drag-over-above, .drag-over-below, .drag-over').forEach(el => {
-            el.classList.remove('drag-over-above', 'drag-over-below', 'drag-over');
-        });
-
         // Edge detection: determine if hovering over top or bottom half
         const rect = groupHeader.getBoundingClientRect();
         const midpoint = rect.top + rect.height / 2;
         const insertBefore = e.clientY < midpoint;
 
-        // If dragging a layer and group is collapsed, allow inserting before/after
+        // If dragging a layer and group is collapsed, allow inserting after
         if (draggedLayerType !== 'group' && group.collapsed) {
-            // Show visual indicator for inserting before or after the group
-            if (insertBefore) {
-                groupHeader.classList.add('drag-over-above');
-            } else {
-                groupHeader.classList.add('drag-over-below');
-            }
 
             // Handle reordering - insert before/after entire group
             if (allLayersOrder.length > 0) {
@@ -2415,14 +2367,12 @@ function createGroupElement(group, allLayers, images, objects) {
 
                             newOrder.splice(newTargetIdx, 0, moved);
                             allLayersOrder = newOrder;
-                            renderLayersThrottled();
                         }
                     }
                 }
             }
         } else if (draggedLayerType !== 'group' && !group.collapsed) {
-            // If group is expanded, show drop zone to add to group
-            groupHeader.classList.add('drag-over');
+            // If group is expanded, allow adding to group (no visual indicator needed)
         } else if (draggedLayerType === 'group' && draggedLayerId !== group.id && allLayersOrder.length > 0) {
             // If dragging a group onto another group, reorder by moving all group layers together
             const draggedGroup = layerGroups.find(g => g.id === draggedLayerId);
@@ -2482,25 +2432,17 @@ function createGroupElement(group, allLayers, images, objects) {
                     // Insert all dragged layers at target position
                     newOrder.splice(newTargetIdx, 0, ...draggedLayers);
                     allLayersOrder = newOrder;
-                    renderLayersThrottled();
                 }
             }
         }
-    });
-
-    groupHeader.addEventListener('dragleave', () => {
-        groupHeader.classList.remove('drag-over', 'drag-over-above', 'drag-over-below');
     });
 
     groupHeader.addEventListener('drop', (e) => {
         e.preventDefault();
         e.stopPropagation();
 
-        // Check if we were hovering to insert before/after (collapsed group)
-        const wasInsertingBeforeAfter = group.collapsed && draggedLayerType !== 'group' &&
-            (groupHeader.classList.contains('drag-over-above') || groupHeader.classList.contains('drag-over-below'));
-
-        groupHeader.classList.remove('drag-over', 'drag-over-above', 'drag-over-below');
+        // Check if we were hovering to insert after (collapsed group)
+        const wasInsertingBeforeAfter = group.collapsed && draggedLayerType !== 'group';
 
         // If group is collapsed and we're dropping before/after (not into), don't add to group
         if (wasInsertingBeforeAfter) {
@@ -2869,45 +2811,20 @@ function reorderLayerElementsVisually() {
             });
         });
 
-        // Only animate if NOT currently dragging (animate on drop only)
-        if (!isDragging) {
-            requestAnimationFrame(() => {
-                elements.forEach((el, id) => {
-                    const oldTop = oldPositions.get(id);
-                    const newTop = el.getBoundingClientRect().top;
-                    const deltaY = oldTop - newTop;
-
-                    if (Math.abs(deltaY) > 0.5) {
-                        // Clear any existing transform/transition
-                        el.style.transition = 'none';
-                        el.style.transform = `translateY(${deltaY}px)`;
-
-                        // Force reflow
-                        el.offsetHeight;
-
-                        // Animate to final position - 100ms is the professional standard
-                        el.style.transition = 'transform 0.1s ease-out';
-                        el.style.transform = 'translateY(0)';
-
-                        // Clean up after animation
-                        const cleanup = () => {
-                            el.style.transition = '';
-                            el.style.transform = '';
-                        };
-                        el.addEventListener('transitionend', cleanup, { once: true });
-                        setTimeout(cleanup, 150); // Fallback cleanup
-                    }
-                });
-            });
-        }
-
         renderThrottle = null;
     });
 }
 
-function renderLayersThrottled() {
-    reorderLayerElementsVisually();
-}
+const renderLayersThrottled = (() => {
+    let timeout = null;
+    return function() {
+        if (timeout) return; // Skip if already scheduled
+        timeout = setTimeout(() => {
+            reorderLayerElementsVisually();
+            timeout = null;
+        }, 100); // 100ms throttle delay
+    };
+})();
 
 function renderLayers() {
     const layersList = getElement('layers-list');
@@ -2946,86 +2863,6 @@ function renderLayers() {
     });
 
     layersList.innerHTML = '';
-
-    // Add drop zone at top for moving layers to front
-    if (allLayersOrder.length > 0 && draggedLayerId) {
-        const dropZone = document.createElement('div');
-        dropZone.className = 'layer-drop-zone-top';
-        dropZone.style.height = '20px';
-        dropZone.style.display = 'flex';
-        dropZone.style.alignItems = 'center';
-        dropZone.style.justifyContent = 'center';
-        dropZone.style.color = 'var(--text-tertiary)';
-        dropZone.style.fontSize = '11px';
-        dropZone.style.transition = 'background 0.15s';
-        dropZone.textContent = 'Move to front';
-
-        dropZone.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            e.dataTransfer.dropEffect = 'move';
-            dropZone.style.background = 'rgba(13, 110, 253, 0.1)';
-        });
-
-        dropZone.addEventListener('dragleave', () => {
-            dropZone.style.background = 'transparent';
-        });
-
-        dropZone.addEventListener('drop', (e) => {
-            e.preventDefault();
-            dropZone.style.background = 'transparent';
-
-            if (!draggedLayerId || !allLayersOrder.length) return;
-
-            if (draggedLayerType === 'group') {
-                // Move all group layers to the end (front)
-                const draggedGroup = layerGroups.find(g => g.id === draggedLayerId);
-                if (!draggedGroup) return;
-
-                const draggedGroupLayerIndices = [];
-                allLayersOrder.forEach((layer, idx) => {
-                    if (layer.type === 'image' && draggedGroup.layerIds.includes(layer.data.id)) {
-                        draggedGroupLayerIndices.push(idx);
-                    } else if (layer.type === 'object' && draggedGroup.objectIds && draggedGroup.objectIds.includes(layer.data.id)) {
-                        draggedGroupLayerIndices.push(idx);
-                    }
-                });
-
-                if (draggedGroupLayerIndices.length > 0) {
-                    const newOrder = [...allLayersOrder];
-                    const draggedLayers = draggedGroupLayerIndices.sort((a, b) => a - b).map(idx => newOrder[idx]);
-
-                    // Remove from original positions
-                    for (let i = draggedGroupLayerIndices.length - 1; i >= 0; i--) {
-                        newOrder.splice(draggedGroupLayerIndices[i], 1);
-                    }
-
-                    // Add to end (front)
-                    newOrder.push(...draggedLayers);
-                    allLayersOrder = newOrder;
-                    renderLayersThrottled();
-                }
-            } else {
-                // Move single layer to end (front)
-                const fromIdx = allLayersOrder.findIndex(l => {
-                    if (draggedLayerType === 'image') {
-                        return l.type === 'image' && l.data.id === draggedLayerId;
-                    } else {
-                        return l.type === 'object' && l.data.id === draggedLayerId;
-                    }
-                });
-
-                if (fromIdx !== -1 && fromIdx !== allLayersOrder.length - 1) {
-                    const newOrder = [...allLayersOrder];
-                    const [moved] = newOrder.splice(fromIdx, 1);
-                    newOrder.push(moved); // Add to end (front)
-                    allLayersOrder = newOrder;
-                    renderLayersThrottled();
-                }
-            }
-        });
-
-        layersList.appendChild(dropZone);
-    }
 
     // Build a set of grouped layer/object IDs for quick lookup
     const groupedIds = new Set();
@@ -3066,6 +2903,30 @@ function renderLayers() {
             }
         }
     });
+
+    // Add a drop zone at the bottom for dropping below the last layer
+    const bottomDropZone = document.createElement('div');
+    bottomDropZone.className = 'bottom-drop-zone';
+    bottomDropZone.style.cssText = 'height: 80px; width: 100%; min-height: 80px;';
+
+    bottomDropZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+
+        if (!draggedLayerId || allLayersOrder.length === 0) return;
+
+        // Move dragged layer to the very beginning (back)
+        const draggedIndex = allLayersOrder.findIndex(l =>
+            (l.type === draggedLayerType && l.data.id === draggedLayerId)
+        );
+
+        if (draggedIndex !== -1) {
+            const [draggedLayer] = allLayersOrder.splice(draggedIndex, 1);
+            allLayersOrder.unshift(draggedLayer); // Add to beginning (back)
+        }
+    });
+
+    layersList.appendChild(bottomDropZone);
 
     // FLIP animation: Last, Invert, Play
     requestAnimationFrame(() => {
