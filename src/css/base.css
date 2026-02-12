@@ -62,6 +62,8 @@ html:not([data-theme="dark"]) {
     --shadow: rgba(0, 0, 0, 0.1);
 
     --modal-overlay: rgba(0, 0, 0, 0.4);
+
+    --sidebar-bg: rgba(248, 249, 250, 0.72);
 }
 
 /* Dark theme - True dark mode */
@@ -95,6 +97,8 @@ html[data-theme="dark"] {
     --shadow: rgba(0, 0, 0, 0.5) !important;
 
     --modal-overlay: rgba(0, 0, 0, 0.8) !important;
+
+    --sidebar-bg: rgba(26, 26, 26, 0.72) !important;
 }
 
 /* Purplexing theme - Dark grey and purple */
@@ -128,6 +132,8 @@ html[data-theme="purplexing"] {
     --shadow: rgba(0, 0, 0, 0.4) !important;
 
     --modal-overlay: rgba(0, 0, 0, 0.7) !important;
+
+    --sidebar-bg: rgba(38, 38, 46, 0.72) !important;
 }
 
 body {

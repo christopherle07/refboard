@@ -15,7 +15,15 @@
     height: 48px;
     padding: 0 12px;
     background: var(--bg-secondary);
-    border-bottom: 1px solid var(--border-color);
+    border-bottom: none;
+    position: relative;
+    /* NO z-index here — avoids creating a stacking context so children can layer freely */
+}
+
+/* All direct children of titlebar are lifted ABOVE the sidebar (z-index: 200) */
+.unified-titlebar > * {
+    position: relative;
+    z-index: 300;
 }
 
 /* Window Controls on Left */
@@ -23,6 +31,7 @@
     display: flex;
     align-items: center;
     gap: 8px;
+    margin-left: 6px;
 }
 
 /* Titlebar Tooltips */
