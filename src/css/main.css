@@ -207,13 +207,7 @@ html[data-theme="purplexing"] .discord-btn .sidebar-icon {
     transform: translateY(-1px);
 }
 
-.homepage-main {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    background: var(--bg-primary);
-}
+/* homepage-main styles moved to browser-homepage.css */
 
 .homepage-header {
     padding: 32px 48px;
@@ -298,138 +292,8 @@ html[data-theme="purplexing"] .sort-dropdown {
     overflow: hidden;
 }
 
-.boards-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-    gap: 16px;
-    padding: 2px;
-    margin-bottom: 32px;
-    flex: 1;
-    align-content: start;
-    overflow-y: auto;
-}
-
-/* Board Card - Figma Style */
-.board-card {
-    display: flex;
-    flex-direction: column;
-    border-radius: 8px;
-    border: 1px solid var(--border-color);
-    cursor: pointer;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-    position: relative;
-    overflow: hidden;
-    background: var(--bg-primary);
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
-}
-
-.board-card:hover {
-    background: var(--bg-hover);
-    border-color: var(--border-color);
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
-}
-
-/* Thumbnail Section */
-.board-card-thumbnail {
-    width: 100%;
-    aspect-ratio: 16 / 10;
-    background: var(--bg-secondary);
-    background-size: cover;
-    background-position: center;
-    position: relative;
-    border-bottom: 1px solid var(--border-color);
-    image-rendering: -webkit-optimize-contrast;
-    image-rendering: crisp-edges;
-}
-
-/* Metadata Section */
-.board-card-metadata {
-    padding: 12px;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    background: var(--bg-primary);
-}
-
-/* Board Name */
-.board-card-name {
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--text-primary);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    line-height: 1.3;
-}
-
-/* Metadata Info Row */
-.board-card-info {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 11px;
-    color: var(--text-tertiary);
-    line-height: 1.3;
-}
-
-.board-card-modified {
-    font-weight: 500;
-}
-
-.board-card-separator {
-    opacity: 0.5;
-    font-weight: 600;
-}
-
-.board-card-layers {
-    font-weight: 500;
-}
-
-/* Delete Button */
-.board-delete-btn {
-    position: absolute;
-    top: 8px;
-    right: 8px;
-    width: 28px;
-    height: 28px;
-    border: none;
-    background: rgba(255, 255, 255, 0.95);
-    color: var(--text-secondary);
-    border-radius: 6px;
-    cursor: pointer;
-    font-size: 18px;
-    line-height: 1;
-    opacity: 0;
-    transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
-    z-index: 2;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.board-card:hover .board-delete-btn {
-    opacity: 1;
-}
-
-.board-delete-btn:hover {
-    background: #ef4444;
-    color: white;
-    transform: scale(1.05);
-}
-
-/* Dark theme adjustments */
-html[data-theme="dark"] .board-delete-btn,
-html[data-theme="purplexing"] .board-delete-btn {
-    background: rgba(0, 0, 0, 0.85);
-    color: var(--text-primary);
-}
-
-html[data-theme="dark"] .board-delete-btn:hover,
-html[data-theme="purplexing"] .board-delete-btn:hover {
-    background: #ef4444;
-    color: white;
-}
+/* boards-grid, board-card, board-card-thumbnail, board-delete-btn styles
+   are in browser-homepage.css */
 
 .new-board-card {
     display: flex;
@@ -502,43 +366,7 @@ html[data-theme="purplexing"] .board-delete-btn:hover {
     font-weight: 600;
 }
 
-.pagination {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    gap: 16px;
-    padding: 24px 0 0;
-}
-
-.pagination-btn {
-    width: 36px;
-    height: 36px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: var(--bg-secondary);
-    border: 1px solid var(--border-color);
-    border-radius: 8px;
-    color: var(--text-primary);
-    cursor: pointer;
-    transition: all 0.2s;
-}
-
-.pagination-btn:hover:not(:disabled) {
-    border-color: #5B8AC5;
-    background: rgba(91, 138, 197, 0.1);
-    color: #5B8AC5;
-}
-
-.pagination-btn:disabled {
-    opacity: 0.3;
-    cursor: not-allowed;
-}
-
-.pagination-info {
-    font-size: 13px;
-    color: var(--text-secondary);
-}
+/* pagination styles are in browser-homepage.css */
 
 .editor-container {
     flex: 1;

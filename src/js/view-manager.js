@@ -27,6 +27,27 @@ export class ViewManager {
 
         // Cleanup board if it was active
         if (this.currentView === 'board' && this.currentBoardId) {
+            // Reset assets/canvas view state so next board open starts on canvas
+            const assetsView = document.getElementById('assets-library-view');
+            const canvasContainer = document.getElementById('canvas-container');
+            if (assetsView) {
+                assetsView.style.display = 'none';
+                assetsView.classList.remove('fade-in');
+            }
+            if (canvasContainer) canvasContainer.style.display = 'block';
+
+            // Reset elements that showAssetsView() hides with inline styles
+            const sidebar = this.boardContainer.querySelector('#sidebar');
+            const toolsSidebar = this.boardContainer.querySelector('.tools-sidebar');
+            const drawingToolbar = this.boardContainer.querySelector('#drawing-toolbar');
+            const sizeSlider = this.boardContainer.querySelector('#draw-size-slider-container');
+            const opacitySlider = this.boardContainer.querySelector('#draw-opacity-slider-container');
+            if (sidebar) sidebar.style.display = '';
+            if (toolsSidebar) toolsSidebar.style.display = '';
+            if (drawingToolbar) drawingToolbar.style.display = '';
+            if (sizeSlider) sizeSlider.style.display = '';
+            if (opacitySlider) opacitySlider.style.display = '';
+
             try {
                 console.log('[ViewManager] Cleaning up board before showing home...');
                 await cleanupEditor(this.boardContainer);

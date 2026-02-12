@@ -315,6 +315,12 @@ export class MediaControls {
             // If already holding this key, skip (interval handles it)
             if (this._keyDown === e.key) return;
 
+            // Clear any existing repeat interval before starting a new one
+            if (this._keyRepeatInterval) {
+                clearInterval(this._keyRepeatInterval);
+                this._keyRepeatInterval = null;
+            }
+
             // First step immediately
             this.stepFilmstripFrame(dir);
             this._keyDown = e.key;

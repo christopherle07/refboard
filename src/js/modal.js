@@ -112,7 +112,50 @@ export function showDeleteConfirm(itemName, onConfirm) {
     return modal;
 }
 
+export function showEditBoardModal(currentName, currentBgColor, onConfirm) {
+    let selectedColor = currentBgColor || '#ffffff';
+
+    const bodyHTML = `
+        <div class="form-group">
+            <label>Board Name</label>
+            <input type="text" id="edit-board-name-input" value="${currentName}" autofocus>
+        </div>
+        <div class="form-group">
+            <label>Background Color</label>
+            <div class="color-swatch-btn" id="edit-board-color-swatch" style="background: ${selectedColor};"></div>
+        </div>
+    `;
+
+    const modal = createModal('Edit Board', bodyHTML, () => {
+        const name = document.getElementById('edit-board-name-input').value.trim() || currentName;
+        if (onConfirm) onConfirm(name, selectedColor);
+    });
+
+    // Select existing text for easy replacement
+    setTimeout(() => {
+        const input = modal.querySelector('#edit-board-name-input');
+        if (input) input.select();
+    }, 50);
+
+    // Wire up color swatch to open custom picker
+    import('./color-picker.js').then(({ openColorPicker }) => {
+        const swatch = modal.querySelector('#edit-board-color-swatch');
+        if (swatch) {
+            swatch.addEventListener('click', () => {
+                openColorPicker(selectedColor, (hex) => {
+                    selectedColor = hex;
+                    swatch.style.background = hex;
+                });
+            });
+        }
+    });
+
+    return modal;
+}
+
 export function showCreateBoardModal(onConfirm) {
+    let selectedColor = '#ffffff';
+
     const bodyHTML = `
         <div class="form-group">
             <label>Board Name</label>
@@ -120,15 +163,27 @@ export function showCreateBoardModal(onConfirm) {
         </div>
         <div class="form-group">
             <label>Background Color</label>
-            <input type="color" id="board-color-input" value="#ffffff">
+            <div class="color-swatch-btn" id="board-color-swatch" style="background: #ffffff;"></div>
         </div>
     `;
-    
+
     const modal = createModal('Create New Board', bodyHTML, () => {
         const name = document.getElementById('board-name-input').value.trim() || 'Untitled Board';
-        const bgColor = document.getElementById('board-color-input').value;
-        if (onConfirm) onConfirm(name, bgColor);
+        if (onConfirm) onConfirm(name, selectedColor);
     });
-    
+
+    // Wire up color swatch to open custom picker
+    import('./color-picker.js').then(({ openColorPicker }) => {
+        const swatch = modal.querySelector('#board-color-swatch');
+        if (swatch) {
+            swatch.addEventListener('click', () => {
+                openColorPicker(selectedColor, (hex) => {
+                    selectedColor = hex;
+                    swatch.style.background = hex;
+                });
+            });
+        }
+    });
+
     return modal;
 }

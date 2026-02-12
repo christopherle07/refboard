@@ -1,5 +1,5 @@
 import { boardManager } from './board-manager.js';
-import { showCreateBoardModal, showDeleteConfirm } from './modal.js';
+import { showCreateBoardModal, showEditBoardModal, showDeleteConfirm } from './modal.js';
 import { showToast } from './modal-utils.js';
 import CollectionManager from './collection-manager.js';
 import { showSettingsModal } from './settingsModal.js';
@@ -462,6 +462,24 @@ function renderBoards() {
             });
         });
         thumbnailDiv.appendChild(deleteBtn);
+
+        // Edit button - next to delete
+        const editBtn = document.createElement('button');
+        editBtn.className = 'board-edit-btn';
+        editBtn.title = 'Edit board';
+        editBtn.innerHTML = `<img src="/assets/edit-button-svgrepo-com.svg" alt="Edit" width="14" height="14">`;
+        editBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const bgColor = board.bgColor || board.bg_color || '#ffffff';
+            showEditBoardModal(board.name, bgColor, async (newName, newBgColor) => {
+                await boardManager.updateBoard(board.id, { name: newName, bgColor: newBgColor });
+                await boardManager.loadBoards();
+                renderBoards();
+                renderPinnedBoards();
+            });
+        });
+        thumbnailDiv.appendChild(editBtn);
 
         card.addEventListener('click', () => {
             openBoard(board.id);

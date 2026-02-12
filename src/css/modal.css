@@ -81,9 +81,7 @@
 }
 
 .modal-header {
-    padding: 24px 28px;
-    background: var(--bg-tertiary);
-    border-bottom: 1px solid var(--border-color);
+    padding: 24px 28px 0;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -146,9 +144,8 @@
 }
 
 .modal-input:focus {
-    border-color: var(--accent-primary-hover);
+    border-color: var(--border-color-hover);
     background: var(--bg-primary);
-    box-shadow: 0 0 0 4px rgba(91, 138, 197, 0.1);
 }
 
 .modal-input::placeholder {
@@ -171,6 +168,7 @@
     width: 100%;
     padding: 10px 12px;
     border: 1px solid var(--border-color);
+    border-radius: 8px;
     background: var(--bg-primary);
     color: var(--text-primary);
     font-size: 14px;
@@ -179,7 +177,7 @@
 }
 
 .form-group input[type="text"]:focus {
-    border-color: var(--accent-secondary);
+    border-color: var(--border-color-hover);
 }
 
 .form-group input[type="color"] {
@@ -213,9 +211,7 @@
     display: flex;
     gap: 12px;
     justify-content: flex-end;
-    padding: 20px 28px;
-    background: var(--bg-secondary);
-    border-top: 1px solid var(--border-color);
+    padding: 0 28px 24px;
 }
 
 .modal-btn {
@@ -242,15 +238,14 @@
 }
 
 .modal-btn-primary {
-    background: linear-gradient(135deg, var(--accent-primary-hover) 0%, var(--accent-primary-active) 100%);
-    color: white;
-    border: 2px solid transparent;
-    box-shadow: 0 2px 8px rgba(91, 138, 197, 0.3);
+    background: var(--bg-active);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
 }
 
 .modal-btn-primary:hover {
-    box-shadow: 0 4px 12px rgba(91, 138, 197, 0.4);
-    transform: translateY(-1px);
+    background: var(--bg-hover);
+    border-color: var(--border-color-hover);
 }
 
 .modal-btn-danger {
@@ -326,29 +321,25 @@
 }
 
 .modal-btn-merge {
-    background: var(--accent-secondary);
-    color: white;
-    border: 2px solid var(--accent-secondary);
+    background: var(--bg-active);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
 }
 
 .modal-btn-merge:hover {
-    background: #1976d2;
-    border-color: #1976d2;
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(33, 150, 243, 0.4);
+    background: var(--bg-hover);
+    border-color: var(--border-color-hover);
 }
 
 .modal-btn-override {
-    background: var(--accent-warning);
-    color: white;
-    border: 2px solid var(--accent-warning);
+    background: var(--bg-active);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
 }
 
 .modal-btn-override:hover {
-    background: #f57c00;
-    border-color: #f57c00;
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(255, 152, 0, 0.4);
+    background: var(--bg-hover);
+    border-color: var(--border-color-hover);
 }
 
 .toast-container {
@@ -505,7 +496,7 @@
     height: 28px;
     border-radius: 6px;
     border: none;
-    background: rgba(91, 138, 197, 0.9);
+    background: var(--bg-active);
     color: white;
     font-size: 20px;
     font-weight: bold;
@@ -670,4 +661,132 @@
     font-size: 13px;
     color: var(--text-primary);
     font-weight: 500;
+}
+
+/* Color Picker Dialog */
+#color-picker-dialog {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: var(--modal-overlay);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 10002;
+}
+
+#color-picker-dialog.visible {
+    display: flex;
+    animation: modalOverlayFadeIn 0.2s ease;
+}
+
+.color-picker-panel {
+    background: var(--bg-primary);
+    border-radius: 12px;
+    border: 1px solid var(--border-color);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    padding: 24px;
+    animation: modalPopIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.color-picker-wheel-area {
+    position: relative;
+    width: 200px;
+    height: 200px;
+    margin: 0 auto;
+}
+
+#color-wheel {
+    position: absolute;
+    top: 0;
+    left: 0;
+    cursor: crosshair;
+}
+
+#color-sv-picker {
+    position: absolute;
+    top: 40px;
+    left: 40px;
+    cursor: crosshair;
+    border-radius: 4px;
+}
+
+#wheel-cursor,
+#sv-cursor {
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    border: 2px solid #fff;
+    border-radius: 50%;
+    box-shadow: 0 0 3px rgba(0, 0, 0, 0.5);
+    pointer-events: none;
+    transform: translate(-50%, -50%);
+}
+
+.color-picker-controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+#hex-preview {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    flex-shrink: 0;
+}
+
+#hex-input {
+    flex: 1;
+    padding: 8px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    font-size: 14px;
+    font-family: monospace;
+    outline: none;
+}
+
+#hex-input:focus {
+    border-color: var(--border-color-hover);
+}
+
+.color-picker-actions {
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+}
+
+/* Color swatch button (replaces native color input) */
+.color-swatch-btn {
+    width: 100%;
+    height: 48px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: border-color 0.2s;
+}
+
+.color-swatch-btn:hover {
+    border-color: var(--border-color-hover);
+}
+
+.color-swatch-inline {
+    display: inline-block;
+    cursor: pointer;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    transition: border-color 0.2s;
+    vertical-align: middle;
+}
+
+.color-swatch-inline:hover {
+    border-color: var(--border-color-hover);
 }

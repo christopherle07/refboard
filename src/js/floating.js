@@ -1,4 +1,5 @@
 import { Canvas } from './canvas.js';
+import { MediaControls } from './media-controls.js';
 import { boardManager } from './board-manager.js';
 
 function extractImageUrlsFromHtml(html) {
@@ -265,7 +266,12 @@ async function initFloatingWindow() {
     
     const canvasElement = document.getElementById('floating-canvas');
     canvas = new Canvas(canvasElement);
-    
+
+    // Initialize media controls for video/GIF hover bars
+    const canvasContainer = canvasElement.parentElement;
+    const mediaControls = new MediaControls(canvas, canvasContainer);
+    canvas.mediaControls = mediaControls;
+
     const bgColor = board.bgColor || board.bg_color;
     canvas.setBackgroundColor(bgColor);
     document.body.style.backgroundColor = bgColor;
@@ -527,66 +533,95 @@ async function loadLayers(layers, viewState = null) {
         let loaded = 0;
         const total = resolvedLayers.length;
 
-        resolvedLayers.forEach(({ layer, resolvedSrc, filePath }) => {
-            // Skip video/GIF layers — they need special handling and can't load as Image
-            if (layer.mediaType === 'video' || layer.mediaType === 'gif') {
-                loaded++;
-                if (loaded >= total) {
-                    canvas.selectImage(null);
-                    canvas.invalidateCullCache();
-                    canvas.needsRender = true;
-                    canvas.render();
-                    resolve();
-                }
-                return;
+        const finishIfDone = () => {
+            loaded++;
+            if (loaded >= total) {
+                canvas.selectImage(null);
+                canvas.invalidateCullCache();
+                canvas.updatePlayingMediaState();
+                canvas.needsRender = true;
+                canvas.render();
+                resolve();
             }
+        };
 
-            const img = new Image();
-            img.onload = () => {
-                const visible = layer.visible !== false;
-                const added = canvas.addImageSilent(img, layer.x, layer.y, layer.name, layer.width, layer.height, visible);
-                added.id = layer.id;
-                added.zIndex = layer.zIndex || 0;
-                added.rotation = layer.rotation || 0;
-                if (filePath) added.filePath = filePath;
-                // Restore filter properties (only if they exist and are not null)
-                if (layer.brightness != null) added.brightness = layer.brightness;
-                if (layer.contrast != null) added.contrast = layer.contrast;
-                if (layer.saturation != null) added.saturation = layer.saturation;
-                if (layer.hue != null) added.hue = layer.hue;
-                if (layer.blur != null) added.blur = layer.blur;
-                if (layer.opacity != null) added.opacity = layer.opacity;
-                if (layer.grayscale === true) added.grayscale = true;
-                if (layer.invert === true) added.invert = true;
-                if (layer.mirror === true) added.mirror = true;
+        resolvedLayers.forEach(({ layer, resolvedSrc, filePath }) => {
+            // Detect media type from metadata or file extension fallback
+            const nameLC = (layer.name || '').toLowerCase();
+            const srcLC = (layer.src || '').toLowerCase();
+            const mediaType = layer.mediaType
+                || (/\.(mp4|mov|webm)$/i.test(nameLC) || /\.(mp4|mov|webm)$/i.test(srcLC) ? 'video' : null)
+                || (/\.gif$/i.test(nameLC) || /\.gif$/i.test(srcLC) ? 'gif' : null);
 
-                // Build filter cache at load time if image has non-default filter values
-                if (canvas.buildFilterString(added)) {
-                    canvas.applyFilters(added);
-                }
+            if (mediaType === 'video') {
+                const video = document.createElement('video');
+                video.preload = 'auto';
+                video.muted = layer.muted !== false;
+                video.onloadedmetadata = () => {
+                    const added = canvas.addVideoSilent(video, layer.x, layer.y, layer.name, layer.width, layer.height, layer.visible !== false);
+                    added.id = layer.id;
+                    added.zIndex = layer.zIndex || 0;
+                    added.rotation = layer.rotation || 0;
+                    added.currentTime = layer.currentTime || 0;
+                    added.volume = layer.volume != null ? layer.volume : 1;
+                    added.muted = layer.muted !== false;
+                    if (filePath) added.filePath = filePath;
+                    if (layer.opacity != null) added.opacity = layer.opacity;
+                    video.currentTime = added.currentTime;
+                    finishIfDone();
+                };
+                video.onerror = () => finishIfDone();
+                video.src = resolvedSrc;
+            } else if (mediaType === 'gif') {
+                fetch(resolvedSrc)
+                    .then(r => r.arrayBuffer())
+                    .then(buffer => {
+                        const added = canvas.addGifSilent(buffer, layer.x, layer.y, layer.name, resolvedSrc);
+                        if (added) {
+                            added.id = layer.id;
+                            added.zIndex = layer.zIndex || 0;
+                            added.rotation = layer.rotation || 0;
+                            if (layer.width != null) added.width = layer.width;
+                            if (layer.height != null) added.height = layer.height;
+                            added.gifCurrentFrame = layer.gifCurrentFrame || 0;
+                            added.gifPlaying = false;
+                            if (filePath) added.filePath = filePath;
+                            if (layer.opacity != null) added.opacity = layer.opacity;
+                        }
+                        finishIfDone();
+                    })
+                    .catch(() => finishIfDone());
+            } else {
+                const img = new Image();
+                img.onload = () => {
+                    const visible = layer.visible !== false;
+                    const added = canvas.addImageSilent(img, layer.x, layer.y, layer.name, layer.width, layer.height, visible);
+                    added.id = layer.id;
+                    added.zIndex = layer.zIndex || 0;
+                    added.rotation = layer.rotation || 0;
+                    if (filePath) added.filePath = filePath;
+                    if (layer.brightness != null) added.brightness = layer.brightness;
+                    if (layer.contrast != null) added.contrast = layer.contrast;
+                    if (layer.saturation != null) added.saturation = layer.saturation;
+                    if (layer.hue != null) added.hue = layer.hue;
+                    if (layer.blur != null) added.blur = layer.blur;
+                    if (layer.opacity != null) added.opacity = layer.opacity;
+                    if (layer.grayscale === true) added.grayscale = true;
+                    if (layer.invert === true) added.invert = true;
+                    if (layer.mirror === true) added.mirror = true;
 
-                loaded++;
-                if (loaded >= total) {
-                    canvas.selectImage(null);
-                    // Force initial render with restored view
-                    canvas.invalidateCullCache();
-                    canvas.needsRender = true;
-                    canvas.render();
-                    resolve();
-                }
-            };
-            img.onerror = (e) => {
-                console.error('Failed to load image:', layer.name, 'src:', resolvedSrc?.substring(0, 100), e);
-                loaded++;
-                if (loaded >= total) {
-                    // Force initial render
-                    canvas.invalidateCullCache();
-                    canvas.needsRender = true;
-                    canvas.render();
-                    resolve();
-                }
-            };
-            img.src = resolvedSrc;
+                    if (canvas.buildFilterString(added)) {
+                        canvas.applyFilters(added);
+                    }
+
+                    finishIfDone();
+                };
+                img.onerror = (e) => {
+                    console.error('Failed to load image:', layer.name, 'src:', resolvedSrc?.substring(0, 100), e);
+                    finishIfDone();
+                };
+                img.src = resolvedSrc;
+            }
         });
     });
 }

@@ -19,15 +19,6 @@
     pointer-events: none;
 }
 
-/* Detached state - sidebar is in a floating window */
-.sidebar.detached {
-    transform: translateX(-100%);
-    pointer-events: none;
-}
-
-/* Detach icon in titlebar uses .sidebar-toggle-icon theme filters via shared class */
-
-
 /* Hide all scrollbars in sidebar */
 .sidebar *,
 .sidebar,
@@ -1051,19 +1042,20 @@ html[data-theme="purplexing"] .group-toggle-icon {
 }
 
 .assets-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 4px;
+    columns: 2;
+    column-gap: 4px;
     padding: 0 12px 12px;
 }
 
 .asset-item {
-    aspect-ratio: 1;
+    break-inside: avoid;
     overflow: hidden;
     cursor: pointer;
     border: 1px solid var(--border-color);
+    border-radius: 6px;
     transition: border-color 0.1s;
     position: relative;
+    margin-bottom: 4px;
 }
 
 .asset-item:hover {
@@ -1076,8 +1068,8 @@ html[data-theme="purplexing"] .group-toggle-icon {
 
 .asset-item img {
     width: 100%;
-    height: 100%;
-    object-fit: cover;
+    height: auto;
+    display: block;
 }
 
 .asset-delete-btn {

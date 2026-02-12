@@ -1602,7 +1602,8 @@ export class Canvas {
     }
 
     addToAssets(img, src, name, mediaType = null) {
-        const board = window.boardManagerInstance?.currentBoard;
+        const bm = window.boardManagerInstance;
+        const board = bm?.currentBoard;
         if (!board) return;
 
         const currentAssets = board.assets || [];
@@ -1621,10 +1622,18 @@ export class Canvas {
 
         const updatedAssets = [...currentAssets, newAsset];
 
-        if (window.boardManagerInstance && window.currentBoardId) {
-            window.boardManagerInstance.updateBoard(window.currentBoardId, { assets: updatedAssets });
+        if (bm && window.currentBoardId) {
+            bm.updateBoard(window.currentBoardId, { assets: updatedAssets });
+
+            // Also add to All Assets
+            bm.addToAllAssets(name, src).then(globalAsset => {
+                if (globalAsset && mediaType) {
+                    // Persist metadata to the global asset too
+                    globalAsset.metadata = newAsset.metadata;
+                }
+            }).catch(err => console.warn('Failed to add to all assets:', err));
         }
-        
+
         if (window.renderAssetsCallback) {
             window.renderAssetsCallback();
         }

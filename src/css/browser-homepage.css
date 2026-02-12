@@ -10,7 +10,7 @@
 /* Unified Titlebar - combines window controls with navigation */
 .unified-titlebar {
     display: grid;
-    grid-template-columns: auto auto auto auto 1fr auto;
+    grid-template-columns: auto auto auto 1fr auto;
     align-items: center;
     height: 48px;
     padding: 0 12px;
@@ -75,11 +75,6 @@
 /* First sidebar button gets more left margin */
 .titlebar-sidebar-toggle:first-of-type {
     margin-left: 12px;
-}
-
-/* Detach button sits snug next to toggle */
-.sidebar-detach-toggle {
-    margin-left: 2px;
 }
 
 .titlebar-sidebar-toggle:hover {
@@ -596,7 +591,7 @@ html[data-theme="purplexing"] .toolbar-icon {
 
 .search-container {
     position: relative;
-    flex: 1;
+    max-width: 400px;
 }
 
 .search-icon {
@@ -644,8 +639,8 @@ html[data-theme="purplexing"] .toolbar-icon {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 40px;
-    height: 40px;
+    width: 30px;
+    height: 30px;
     background: var(--bg-secondary);
     border: 1px solid var(--border-color);
     border-radius: 10px;
@@ -656,6 +651,26 @@ html[data-theme="purplexing"] .toolbar-icon {
 
 .topbar-action-btn svg {
     stroke: currentColor;
+}
+
+.topbar-action-btn img {
+    width: 16px;
+    height: 16px;
+}
+
+/* Light theme: grey icon */
+html:not([data-theme="dark"]):not([data-theme="purplexing"]) .topbar-action-btn img {
+    filter: brightness(0) saturate(100%) invert(42%) sepia(6%) saturate(473%) hue-rotate(169deg) brightness(95%) contrast(87%);
+}
+
+/* Dark theme: white icon */
+html[data-theme="dark"] .topbar-action-btn img {
+    filter: invert(1) brightness(0.9);
+}
+
+/* Purplexing theme: purple icon */
+html[data-theme="purplexing"] .topbar-action-btn img {
+    filter: brightness(0) saturate(100%) invert(71%) sepia(35%) saturate(738%) hue-rotate(207deg) brightness(93%) contrast(91%);
 }
 
 .topbar-action-btn:hover {
@@ -761,6 +776,7 @@ html[data-theme="purplexing"] .toolbar-icon {
 }
 
 .board-card:hover .board-delete-btn,
+.board-card:hover .board-edit-btn,
 .board-card:hover .board-pin-btn:not(.pinned) {
     opacity: 1;
     pointer-events: auto;
@@ -855,6 +871,36 @@ html[data-theme="purplexing"] .toolbar-icon {
 
 .board-delete-btn:hover {
     background: var(--accent-danger);
+}
+
+.board-edit-btn {
+    position: absolute;
+    top: 8px;
+    right: 38px;
+    width: 26px;
+    height: 26px;
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.45);
+    backdrop-filter: blur(6px);
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: all 0.15s ease;
+    z-index: 10;
+}
+
+.board-edit-btn img {
+    width: 13px;
+    height: 13px;
+    filter: brightness(0) invert(1);
+}
+
+.board-edit-btn:hover {
+    background: rgba(0, 0, 0, 0.7);
 }
 
 /* Card content */
@@ -992,6 +1038,34 @@ html[data-theme="purplexing"] .toolbar-icon {
 .boards-grid.list-view .board-delete-btn:hover {
     color: var(--accent-danger);
     background: transparent;
+}
+
+.boards-grid.list-view .board-edit-btn {
+    position: relative;
+    top: auto;
+    right: auto;
+    opacity: 0;
+    width: 24px;
+    height: 24px;
+    margin-right: 4px;
+    background: transparent;
+    backdrop-filter: none;
+}
+
+.boards-grid.list-view .board-edit-btn img {
+    filter: brightness(0) invert(0.5);
+}
+
+.boards-grid.list-view .board-card:hover .board-edit-btn {
+    opacity: 1;
+}
+
+.boards-grid.list-view .board-edit-btn:hover {
+    background: transparent;
+}
+
+.boards-grid.list-view .board-edit-btn:hover img {
+    filter: brightness(0) invert(0.2);
 }
 
 /* ========== Pinned Sidebar (right column) ========== */

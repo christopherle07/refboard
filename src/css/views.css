@@ -3,7 +3,7 @@
 .view-container {
     display: none;
     width: 100%;
-    height: calc(100vh - 36px); /* Full height minus titlebar */
+    height: calc(100vh - 48px); /* Full height minus titlebar */
     flex-direction: column;
     overflow: hidden;
 }

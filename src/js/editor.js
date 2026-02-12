@@ -6,6 +6,7 @@ import { showInputModal, showChoiceModal, showToast, showConfirmModal, showColor
 import { updateTitlebarTitle } from './titlebar.js';
 import { FontDropdown } from './font-dropdown.js';
 import { MediaControls } from './media-controls.js';
+import { hijackColorInput } from './color-picker.js';
 
 // Apply theme on page load
 const savedSettings = JSON.parse(localStorage.getItem('canvas_settings') || '{}');
@@ -19,9 +20,6 @@ const editorInstances = new Map(); // Map<container, editorState>
 let activeContainer = null; // Currently active editor container
 let sidebarToggleListenerAttached = false; // Prevent duplicate listeners on titlebar button
 let undoRedoListenerAttached = false; // Prevent duplicate listeners on undo/redo buttons
-let sidebarDetached = false; // Whether sidebar is currently in a floating window
-let sidebarSyncChannel = null; // BroadcastChannel for floating sidebar sync
-let floatingSidebarWindow = null; // Reference to the floating sidebar WebviewWindow
 
 // Helper to get element from active container
 function getElement(id) {
@@ -269,12 +267,6 @@ export async function initEditor(boardId, container) {
         }
     };
 
-    // Setup sidebar sync channel for detached sidebar
-    sidebarSyncChannel = new BroadcastChannel('sidebar_sync_' + currentBoardId);
-    sidebarSyncChannel.onmessage = (event) => {
-        handleFloatingSidebarMessage(event.data);
-    };
-
     // Prevent default drag/drop behavior on document to avoid browser navigation
     const preventDefaultDrag = (e) => {
         e.preventDefault();
@@ -466,6 +458,12 @@ export async function initEditor(boardId, container) {
     console.log('[initEditor] Setting up event listeners...');
     setupEventListeners(container);
 
+    // Replace native color inputs with custom color picker (once per container)
+    if (!container._colorPickerHijacked) {
+        container.querySelectorAll('input[type="color"]').forEach(hijackColorInput);
+        container._colorPickerHijacked = true;
+    }
+
     // Save the instance state after initialization
     saveActiveInstance();
 
@@ -533,7 +531,14 @@ async function loadLayers(layers, viewState = null) {
         };
 
         resolvedLayers.forEach(({ layer, resolvedSrc, filePath }) => {
-            if (layer.mediaType === 'video') {
+            // Detect media type from metadata or file extension fallback
+            const nameLC = (layer.name || '').toLowerCase();
+            const srcLC = (layer.src || '').toLowerCase();
+            const mediaType = layer.mediaType
+                || (/\.(mp4|mov|webm)$/i.test(nameLC) || /\.(mp4|mov|webm)$/i.test(srcLC) ? 'video' : null)
+                || (/\.gif$/i.test(nameLC) || /\.gif$/i.test(srcLC) ? 'gif' : null);
+
+            if (mediaType === 'video') {
                 // Restore video layer
                 const video = document.createElement('video');
                 video.preload = 'auto';
@@ -553,7 +558,7 @@ async function loadLayers(layers, viewState = null) {
                 };
                 video.onerror = () => finishIfDone();
                 video.src = resolvedSrc;
-            } else if (layer.mediaType === 'gif') {
+            } else if (mediaType === 'gif') {
                 // Restore GIF layer
                 fetch(resolvedSrc)
                     .then(r => r.arrayBuffer())
@@ -563,8 +568,10 @@ async function loadLayers(layers, viewState = null) {
                             added.id = layer.id;
                             added.zIndex = layer.zIndex || 0;
                             added.rotation = layer.rotation || 0;
+                            if (layer.width != null) added.width = layer.width;
+                            if (layer.height != null) added.height = layer.height;
                             added.gifCurrentFrame = layer.gifCurrentFrame || 0;
-                            added.gifPlaying = layer.gifPlaying !== false;
+                            added.gifPlaying = false;
                             if (filePath) added.filePath = filePath;
                             if (layer.opacity != null) added.opacity = layer.opacity;
                         }
@@ -629,44 +636,10 @@ function setupEventListeners(container) {
             const sidebar = activeContainer?.querySelector('#sidebar');
             if (!sidebar) return;
 
-            if (sidebarDetached) {
-                // Sidebar is detached as floating window.
-                // Toggle just hides/shows the floating window, not reattach.
-                if (floatingSidebarWindow) {
-                    // We can't easily hide/show the Tauri window, so collapse
-                    // just closes the floating window temporarily and reopens on next click.
-                    // For simplicity: close floating window (it will reopen on next click)
-                    try { floatingSidebarWindow.close(); } catch(e) {}
-                    floatingSidebarWindow = null;
-                    sidebarToggleBtn.classList.add('active');
-                } else {
-                    // Floating window was closed (collapsed state) — reopen it
-                    reopenFloatingSidebar();
-                    sidebarToggleBtn.classList.remove('active');
-                }
-                return;
-            }
-
             sidebar.classList.toggle('collapsed');
             sidebarToggleBtn.classList.toggle('active');
             localStorage.setItem('sidebar_collapsed', sidebar.classList.contains('collapsed'));
         });
-    }
-
-    // Sidebar detach button - toggles between detached and attached
-    // Replace the element's onclick to guarantee fresh handler
-    const sidebarDetachBtn = document.getElementById('sidebar-detach-btn');
-    if (sidebarDetachBtn) {
-        sidebarDetachBtn.onclick = (e) => {
-            e.stopPropagation();
-            e.preventDefault();
-            console.log('[Sidebar] Detach button clicked, sidebarDetached:', sidebarDetached);
-            if (sidebarDetached) {
-                reattachSidebar();
-            } else {
-                detachSidebar();
-            }
-        };
     }
 
     // Undo/Redo buttons - attach once since they're in the titlebar
@@ -1494,7 +1467,7 @@ function createLayerItem(img, images) {
     if (img.mediaType === 'video') {
         layerIcon.src = '/assets/VideoIcon.svg';
     } else if (img.mediaType === 'gif') {
-        layerIcon.src = '/assets/GifIcon.svg';
+        layerIcon.src = '/assets/gif-svgrepo-com.svg';
     } else {
         layerIcon.src = '/assets/layericon.svg';
     }
@@ -3123,9 +3096,6 @@ function renderLayers() {
         });
     });
 
-    // Sync to floating sidebar if detached
-    syncLayersToFloatingSidebar();
-    syncPropertiesToFloatingSidebar();
 }
 
 function highlightLayer(imageId) {
@@ -3210,14 +3180,13 @@ async function renderAssets() {
         
         assetItem.addEventListener('click', async () => {
             const resolvedAssetSrc = await boardManager.resolveImageSrc(asset.src);
-            const imgElement = new Image();
-            imgElement.onload = async () => {
-                const added = canvas.addImage(imgElement, 100, 100, asset.name);
-                if (asset.src && !asset.src.startsWith('data:')) added.filePath = asset.src;
-                renderLayers();
+            const nameLC = (asset.name || '').toLowerCase();
+            const mediaType = asset.metadata?.mediaType
+                || (/\.(mp4|mov|webm)$/i.test(nameLC) ? 'video' : null)
+                || (/\.gif$/i.test(nameLC) ? 'gif' : null);
 
+            const addToBoardIfNeeded = async () => {
                 if (showAllAssets) {
-                    // Get fresh board reference to avoid stale data
                     const currentBoard = boardManager.currentBoard;
                     const boardAssets = currentBoard.assets || [];
                     const existsInBoard = boardAssets.some(a => a.name === asset.name && a.src === asset.src);
@@ -3231,7 +3200,39 @@ async function renderAssets() {
                     }
                 }
             };
-            imgElement.src = resolvedAssetSrc;
+
+            if (mediaType === 'video') {
+                const video = document.createElement('video');
+                video.preload = 'auto';
+                video.muted = true;
+                video.onloadedmetadata = async () => {
+                    const added = canvas.addVideo(video, 100, 100, asset.name);
+                    if (asset.src && !asset.src.startsWith('data:')) added.filePath = asset.src;
+                    renderLayers();
+                    await addToBoardIfNeeded();
+                };
+                video.src = resolvedAssetSrc;
+            } else if (mediaType === 'gif') {
+                try {
+                    const response = await fetch(resolvedAssetSrc);
+                    const arrayBuffer = await response.arrayBuffer();
+                    const added = canvas.addGif(arrayBuffer, 100, 100, asset.name, resolvedAssetSrc);
+                    if (added && asset.src && !asset.src.startsWith('data:')) added.filePath = asset.src;
+                    renderLayers();
+                    await addToBoardIfNeeded();
+                } catch (err) {
+                    console.error('Failed to load GIF from assets:', err);
+                }
+            } else {
+                const imgElement = new Image();
+                imgElement.onload = async () => {
+                    const added = canvas.addImage(imgElement, 100, 100, asset.name);
+                    if (asset.src && !asset.src.startsWith('data:')) added.filePath = asset.src;
+                    renderLayers();
+                    await addToBoardIfNeeded();
+                };
+                imgElement.src = resolvedAssetSrc;
+            }
         });
         
         assetsGrid.appendChild(assetItem);
@@ -3690,20 +3691,30 @@ async function buildBoardAssetsFromCanvas() {
 
     // Build board assets from canvas images
     const boardAssets = canvas.images.map(img => {
+        // Determine src based on media type
+        let src;
+        if (img.mediaType === 'video') {
+            src = img.filePath || img.videoSrc || img.videoElement?.src || '';
+        } else if (img.mediaType === 'gif') {
+            src = img.filePath || img.gifSrc || '';
+        } else {
+            src = img.filePath || img.img.src;
+        }
+
         // Try to find in all assets first
-        const existing = allAssetsMap.get(img.img.src);
+        const existing = allAssetsMap.get(src);
         if (existing) {
             return {
                 id: existing.id,
                 name: img.name,
-                src: img.img.src
+                src
             };
         }
         // Create new asset entry
         return {
             id: Date.now() + Math.random(),
             name: img.name,
-            src: img.img.src
+            src
         };
     });
 
@@ -3936,23 +3947,103 @@ async function loadAssetsLibrary(searchQuery = '') {
         return;
     }
 
-    assets.forEach(asset => {
-        appendAssetToLibrary(asset, libraryGrid, showAll);
-    });
+    // Create masonry columns
+    const COLUMN_WIDTH = 220;
+    const GAP = 12;
+    const containerWidth = libraryGrid.clientWidth || 800;
+    const numColumns = Math.max(1, Math.floor((containerWidth + GAP) / (COLUMN_WIDTH + GAP)));
+
+    // Show skeleton placeholders while loading
+    const skeletonHeights = [180, 240, 160, 200, 260, 190, 220, 150];
+    const columns = [];
+    for (let i = 0; i < numColumns; i++) {
+        const col = document.createElement('div');
+        col.className = 'masonry-column';
+        libraryGrid.appendChild(col);
+        columns.push({ el: col, height: 0 });
+    }
+
+    // Add skeleton cards
+    const skeletonCount = Math.min(assets.length, numColumns * 3);
+    for (let i = 0; i < skeletonCount; i++) {
+        const skeleton = document.createElement('div');
+        skeleton.className = 'assets-library-item skeleton';
+        const skeletonImg = document.createElement('div');
+        skeletonImg.className = 'skeleton-img';
+        skeletonImg.style.height = skeletonHeights[i % skeletonHeights.length] + 'px';
+        skeleton.appendChild(skeletonImg);
+        const col = columns[i % numColumns];
+        col.el.appendChild(skeleton);
+    }
+
+    // Load actual assets and replace skeletons
+    const columnHeights = new Array(numColumns).fill(0);
+
+    // Remove skeletons once first real item is ready
+    let skeletonsCleared = false;
+    const clearSkeletons = () => {
+        if (skeletonsCleared) return;
+        skeletonsCleared = true;
+        columns.forEach(col => {
+            col.el.querySelectorAll('.skeleton').forEach(s => s.remove());
+        });
+    };
+
+    for (const asset of assets) {
+        // Find shortest column
+        let shortestIdx = 0;
+        for (let i = 1; i < numColumns; i++) {
+            if (columnHeights[i] < columnHeights[shortestIdx]) shortestIdx = i;
+        }
+
+        const item = await appendAssetToLibrary(asset, columns[shortestIdx].el, showAll);
+        if (item) {
+            clearSkeletons();
+            // Estimate height from natural image dimensions or use a default
+            const imgEl = item.querySelector('img');
+            if (imgEl && imgEl.naturalHeight) {
+                const aspectRatio = imgEl.naturalHeight / imgEl.naturalWidth;
+                columnHeights[shortestIdx] += (COLUMN_WIDTH * aspectRatio) + GAP;
+            } else {
+                columnHeights[shortestIdx] += 200 + GAP;
+            }
+        }
+    }
+    clearSkeletons();
 }
 
 async function appendAssetToLibrary(asset, container, isAllAssets) {
     const assetItem = document.createElement('div');
     assetItem.className = 'assets-library-item';
 
-    const isVideo = asset.metadata?.mediaType === 'video';
-    const isGif = asset.metadata?.mediaType === 'gif';
+    // Detect media type from metadata or file extension
+    const nameLC = (asset.name || '').toLowerCase();
+    const isVideo = asset.metadata?.mediaType === 'video' || /\.(mp4|mov|webm)$/i.test(nameLC);
+    const isGif = asset.metadata?.mediaType === 'gif' || /\.gif$/i.test(nameLC);
+
+    const resolvedSrc = await boardManager.resolveImageSrc(asset.src);
 
     const img = document.createElement('img');
     if (isVideo && asset.metadata?.thumbnailSrc) {
         img.src = asset.metadata.thumbnailSrc;
+    } else if (isGif) {
+        // Show static first frame only (playback in asset details sidebar)
+        const tmpImg = new Image();
+        tmpImg.onload = () => {
+            try {
+                const c = document.createElement('canvas');
+                c.width = tmpImg.naturalWidth;
+                c.height = tmpImg.naturalHeight;
+                c.getContext('2d').drawImage(tmpImg, 0, 0);
+                img.src = c.toDataURL();
+            } catch (e) {
+                img.src = resolvedSrc;
+            }
+        };
+        tmpImg.onerror = () => { img.src = resolvedSrc; };
+        tmpImg.src = resolvedSrc;
     } else {
-        img.src = await boardManager.resolveImageSrc(asset.src);
+        img.src = resolvedSrc;
     }
     img.draggable = false;
 
@@ -4017,6 +4108,7 @@ async function appendAssetToLibrary(asset, container, isAllAssets) {
     });
 
     container.appendChild(assetItem);
+    return assetItem;
 }
 
 function importAssetsToLibrary() {
@@ -4183,7 +4275,10 @@ function setupAssetSidebar() {
         addToCanvasBtn.addEventListener('click', async () => {
             if (!currentAssetInSidebar) return;
 
-            const assetMediaType = currentAssetInSidebar.metadata?.mediaType;
+            const nameLC = (currentAssetInSidebar.name || '').toLowerCase();
+            const assetMediaType = currentAssetInSidebar.metadata?.mediaType
+                || (/\.(mp4|mov|webm)$/i.test(nameLC) ? 'video' : null)
+                || (/\.gif$/i.test(nameLC) ? 'gif' : null);
             const resolvedSrc = await boardManager.resolveImageSrc(currentAssetInSidebar.src);
 
             const addToBoardIfNeeded = async () => {
@@ -4292,8 +4387,10 @@ function setupAssetSidebar() {
 
     // Hide dropdown when clicking outside
     document.addEventListener('click', (e) => {
+        if (!activeContainer) return;
         const dropdownContainer = getElement('asset-tag-presets-dropdown');
         const quickPresets = getElement('asset-tag-quick-presets');
+        if (!dropdownContainer || !quickPresets) return;
         if (!tagInput.contains(e.target) &&
             !dropdownContainer.contains(e.target) &&
             !quickPresets.contains(e.target)) {
@@ -6658,31 +6755,10 @@ export async function cleanupEditor(container) {
             console.log('[cleanupEditor] No pending changes to save');
         }
 
-        // Close floating sidebar BEFORE closing channels
-        if (sidebarDetached || floatingSidebarWindow) {
-            console.log('[cleanupEditor] Closing floating sidebar window');
-            // Tell the floating sidebar to close itself via channel
-            if (sidebarSyncChannel) {
-                try { sidebarSyncChannel.postMessage({ type: 'sidebar_close' }); } catch (e) {}
-            }
-            if (floatingSidebarWindow) {
-                try { await floatingSidebarWindow.close(); } catch (e) {
-                    console.log('[cleanupEditor] floatingSidebarWindow.close() fallback error:', e);
-                }
-                floatingSidebarWindow = null;
-            }
-            sidebarDetached = false;
-            localStorage.removeItem('sidebar_detached');
-        }
-
         // Close sync channels
         if (syncChannel) {
             syncChannel.close();
             syncChannel = null;
-        }
-        if (sidebarSyncChannel) {
-            sidebarSyncChannel.close();
-            sidebarSyncChannel = null;
         }
 
         // Cleanup canvas
@@ -6708,720 +6784,3 @@ export async function cleanupEditor(container) {
     }
 }
 
-// ============================================================
-// Floating Sidebar (Detach / Reattach)
-// ============================================================
-
-/**
- * Detach the sidebar into a separate always-on-top pill-shaped window.
- * The main window sidebar gets hidden and state is synced via BroadcastChannel.
- */
-async function detachSidebar() {
-    console.log('[detachSidebar] called, sidebarDetached:', sidebarDetached, 'currentBoardId:', currentBoardId);
-    if (sidebarDetached || !currentBoardId) return;
-
-    const sidebar = activeContainer?.querySelector('#sidebar');
-    console.log('[detachSidebar] sidebar element:', !!sidebar, 'activeContainer:', !!activeContainer);
-    if (!sidebar) return;
-
-    if (!window.__TAURI__) {
-        console.warn('Tauri not available, cannot detach sidebar');
-        return;
-    }
-
-    try {
-        const { WebviewWindow } = window.__TAURI__.webviewWindow;
-        const { Window } = window.__TAURI__.window;
-        const mainWindow = Window.getCurrent();
-
-        // Get main window position and size to place sidebar inside its bounds
-        const mainPos = await mainWindow.outerPosition();
-        const mainSize = await mainWindow.outerSize();
-
-        const sidebarWidth = 280;
-        const sidebarHeight = Math.min(600, mainSize.height - 80);
-        // Place at left side of main window, below titlebar
-        const sidebarX = mainPos.x + 10;
-        const sidebarY = mainPos.y + 60;
-
-        const windowLabel = 'sidebar_' + currentBoardId + '_' + Date.now();
-        const url = new URL(window.location.href);
-        url.pathname = '/sidebar-floating.html';
-        url.search = `?id=${currentBoardId}`;
-
-        floatingSidebarWindow = new WebviewWindow(windowLabel, {
-            url: url.toString(),
-            title: 'Sidebar',
-            width: sidebarWidth,
-            height: sidebarHeight,
-            alwaysOnTop: true,
-            decorations: false,
-            resizable: true,
-            transparent: true,
-            x: sidebarX,
-            y: sidebarY,
-            dragDropEnabled: false
-        });
-
-        floatingSidebarWindow.once('tauri://created', () => {
-            console.log('[Sidebar] Floating sidebar window created');
-        });
-
-        floatingSidebarWindow.once('tauri://error', (e) => {
-            console.error('[Sidebar] Error creating floating sidebar:', e);
-            sidebarDetached = false;
-            floatingSidebarWindow = null;
-            sidebar.classList.remove('collapsed', 'detached');
-        });
-
-        // Listen for external close (taskbar close, Alt+F4, etc.)
-        floatingSidebarWindow.once('tauri://destroyed', () => {
-            console.log('[Sidebar] Floating sidebar was closed externally');
-            floatingSidebarWindow = null;
-            if (sidebarDetached) {
-                sidebarDetached = false;
-                localStorage.removeItem('sidebar_detached');
-                const s = activeContainer?.querySelector('#sidebar');
-                if (s) {
-                    s.classList.remove('collapsed', 'detached');
-                }
-                const toggleBtn = document.getElementById('sidebar-toggle-btn');
-                if (toggleBtn) toggleBtn.classList.remove('active');
-            }
-        });
-
-        // Hide the in-app sidebar
-        sidebar.classList.add('collapsed');
-        sidebar.classList.add('detached');
-        sidebarDetached = true;
-
-        // Update toggle button state
-        const sidebarToggleBtn = document.getElementById('sidebar-toggle-btn');
-        if (sidebarToggleBtn) sidebarToggleBtn.classList.add('active');
-
-        localStorage.setItem('sidebar_detached', 'true');
-    } catch (err) {
-        console.error('[Sidebar] Failed to detach sidebar:', err);
-    }
-}
-
-/**
- * Reopen the floating sidebar window (after collapse-button hide).
- * Keeps sidebarDetached = true, just creates a new window.
- */
-async function reopenFloatingSidebar() {
-    if (!currentBoardId || !window.__TAURI__) return;
-
-    try {
-        const { WebviewWindow } = window.__TAURI__.webviewWindow;
-        const { Window } = window.__TAURI__.window;
-        const mainWindow = Window.getCurrent();
-
-        const mainPos = await mainWindow.outerPosition();
-        const mainSize = await mainWindow.outerSize();
-
-        const sidebarWidth = 280;
-        const sidebarHeight = Math.min(600, mainSize.height - 80);
-        const sidebarX = mainPos.x + 10;
-        const sidebarY = mainPos.y + 60;
-
-        const windowLabel = 'sidebar_' + currentBoardId + '_' + Date.now();
-        const url = new URL(window.location.href);
-        url.pathname = '/sidebar-floating.html';
-        url.search = `?id=${currentBoardId}`;
-
-        floatingSidebarWindow = new WebviewWindow(windowLabel, {
-            url: url.toString(),
-            title: 'Sidebar',
-            width: sidebarWidth,
-            height: sidebarHeight,
-            alwaysOnTop: true,
-            decorations: false,
-            resizable: true,
-            transparent: true,
-            x: sidebarX,
-            y: sidebarY,
-            dragDropEnabled: false
-        });
-
-        floatingSidebarWindow.once('tauri://error', (e) => {
-            console.error('[Sidebar] Error reopening floating sidebar:', e);
-            floatingSidebarWindow = null;
-        });
-
-        // Listen for external close (taskbar close, Alt+F4, etc.)
-        floatingSidebarWindow.once('tauri://destroyed', () => {
-            console.log('[Sidebar] Reopened floating sidebar was closed externally');
-            floatingSidebarWindow = null;
-            if (sidebarDetached) {
-                sidebarDetached = false;
-                localStorage.removeItem('sidebar_detached');
-                const s = activeContainer?.querySelector('#sidebar');
-                if (s) {
-                    s.classList.remove('collapsed', 'detached');
-                }
-                const toggleBtn = document.getElementById('sidebar-toggle-btn');
-                if (toggleBtn) toggleBtn.classList.remove('active');
-            }
-        });
-    } catch (err) {
-        console.error('[Sidebar] Failed to reopen floating sidebar:', err);
-    }
-}
-
-/**
- * Reattach the sidebar: close the floating window and show the in-app sidebar.
- */
-async function reattachSidebar() {
-    if (!sidebarDetached) return;
-
-    const sidebar = activeContainer?.querySelector('#sidebar');
-    if (!sidebar) return;
-
-    // Close floating window
-    if (floatingSidebarWindow) {
-        if (sidebarSyncChannel) {
-            sidebarSyncChannel.postMessage({ type: 'sidebar_close' });
-        }
-        try {
-            await floatingSidebarWindow.close();
-        } catch (e) {}
-        floatingSidebarWindow = null;
-    }
-
-    sidebarDetached = false;
-    localStorage.removeItem('sidebar_detached');
-
-    // Show the sidebar back in
-    sidebar.classList.remove('detached');
-    sidebar.classList.remove('collapsed');
-
-    // Update toggle button state
-    const sidebarToggleBtn = document.getElementById('sidebar-toggle-btn');
-    if (sidebarToggleBtn) sidebarToggleBtn.classList.remove('active');
-
-    localStorage.setItem('sidebar_collapsed', 'false');
-}
-
-/**
- * Send current layers HTML to floating sidebar for display.
- */
-function syncLayersToFloatingSidebar() {
-    if (!sidebarDetached || !sidebarSyncChannel) return;
-
-    const layersList = activeContainer?.querySelector('#layers-list');
-    if (!layersList) return;
-
-    sidebarSyncChannel.postMessage({
-        type: 'layers_update',
-        html: layersList.innerHTML
-    });
-}
-
-/**
- * Send properties panel state to floating sidebar.
- */
-function syncPropertiesToFloatingSidebar() {
-    if (!sidebarDetached || !sidebarSyncChannel) return;
-
-    const objProps = activeContainer?.querySelector('#object-properties');
-    const propsContent = activeContainer?.querySelector('#properties-content');
-    const title = activeContainer?.querySelector('#object-properties-title');
-
-    if (objProps && objProps.style.display !== 'none') {
-        sidebarSyncChannel.postMessage({
-            type: 'properties_update',
-            visible: true,
-            html: propsContent ? propsContent.innerHTML : '',
-            title: title ? title.textContent : 'Properties'
-        });
-    } else {
-        sidebarSyncChannel.postMessage({
-            type: 'properties_update',
-            visible: false
-        });
-    }
-}
-
-/**
- * Handle messages from the floating sidebar window.
- */
-function handleFloatingSidebarMessage(msg) {
-    if (!msg || !msg.type) return;
-    console.log('[FloatingSidebar] Received message:', msg.type, msg);
-
-    switch (msg.type) {
-        case 'sidebar_closed':
-            // Floating sidebar was closed externally (taskbar, Alt+F4, etc.)
-            console.log('[Sidebar] Floating sidebar reported close');
-            floatingSidebarWindow = null;
-            sidebarDetached = false;
-            localStorage.removeItem('sidebar_detached');
-            const closedSidebar = activeContainer?.querySelector('#sidebar');
-            if (closedSidebar) {
-                closedSidebar.classList.remove('collapsed', 'detached');
-            }
-            const closedToggleBtn = document.getElementById('sidebar-toggle-btn');
-            if (closedToggleBtn) closedToggleBtn.classList.remove('active');
-            break;
-
-        case 'sidebar_ready':
-            // Floating sidebar just loaded, send current state
-            syncLayersToFloatingSidebar();
-            syncPropertiesToFloatingSidebar();
-            // Send board name
-            if (sidebarSyncChannel) {
-                const boardNameEl = activeContainer?.querySelector('#board-name');
-                sidebarSyncChannel.postMessage({
-                    type: 'board_name_update',
-                    name: boardNameEl ? boardNameEl.textContent : 'Untitled Board'
-                });
-                // Send bg color
-                const bgInput = activeContainer?.querySelector('#bg-color');
-                if (bgInput) {
-                    sidebarSyncChannel.postMessage({
-                        type: 'bg_color_update',
-                        color: bgInput.value
-                    });
-                }
-            }
-            break;
-
-        case 'layer_select': {
-            // Simulate a layer click in the main window
-            const { layerType, ctrlKey, shiftKey } = msg;
-            const selectId = layerType === 'object' ? msg.layerId : parseFloat(msg.layerId);
-            if (layerType === 'object') {
-                const obj = canvas?.objectsManager?.objects?.find(o => o.id === selectId);
-                if (obj) {
-                    if (ctrlKey) {
-                        // Toggle selection
-                        const idx = canvas.objectsManager.selectedObjects.findIndex(o => o.id === selectId);
-                        if (idx >= 0) {
-                            canvas.objectsManager.selectedObjects.splice(idx, 1);
-                        } else {
-                            canvas.objectsManager.selectedObjects.push(obj);
-                        }
-                    } else {
-                        canvas.objectsManager.selectObject(obj);
-                    }
-                    canvas.objectsManager.dispatchObjectsChanged();
-                    renderLayers();
-                }
-            } else {
-                const img = canvas?.images?.find(i => i.id === selectId);
-                if (img) {
-                    if (ctrlKey) {
-                        if (canvas.selectedImages?.includes(img)) {
-                            canvas.selectedImages = canvas.selectedImages.filter(i => i !== img);
-                        } else {
-                            canvas.selectedImages = [...(canvas.selectedImages || []), img];
-                        }
-                    } else {
-                        canvas.selectedImage = img;
-                        canvas.selectedImages = [img];
-                    }
-                    canvas.needsRender = true;
-                    renderLayers();
-                }
-            }
-            break;
-        }
-
-        case 'layer_toggle_visibility': {
-            const visId = msg.layerType === 'object' ? msg.layerId : parseFloat(msg.layerId);
-            if (msg.layerType === 'object') {
-                const obj = canvas?.objectsManager?.objects?.find(o => o.id === visId);
-                if (obj) {
-                    obj.visible = !obj.visible;
-                    canvas.objectsManager.dispatchObjectsChanged();
-                    canvas.needsRender = true;
-                    renderLayers();
-                    scheduleSave();
-                }
-            } else {
-                const img = canvas?.images?.find(i => i.id === visId);
-                if (img) {
-                    img.visible = !img.visible;
-                    canvas.needsRender = true;
-                    renderLayers();
-                    scheduleSave();
-                }
-            }
-            break;
-        }
-
-        case 'layer_delete': {
-            const delId = msg.layerType === 'object' ? msg.layerId : parseFloat(msg.layerId);
-            if (msg.layerType === 'object') {
-                canvas?.objectsManager?.deleteObject(delId);
-                canvas?.objectsManager?.dispatchObjectsChanged();
-            } else {
-                canvas?.deleteImage(delId);
-            }
-            canvas.invalidateCullCache();
-            canvas.needsRender = true;
-            renderLayers();
-            scheduleSave();
-            break;
-        }
-
-        case 'layer_rename': {
-            // Trigger rename in main window (shows modal)
-            const renameId = msg.layerType === 'object' ? msg.layerId : parseFloat(msg.layerId);
-            if (msg.layerType === 'object') {
-                const obj = canvas?.objectsManager?.objects?.find(o => o.id === renameId);
-                if (obj) {
-                    showInputModal('Rename Layer', obj.name || 'Object', (newName) => {
-                        if (newName && newName.trim()) {
-                            canvas.objectsManager.updateSelectedObject({ name: newName.trim() });
-                            renderLayers();
-                            scheduleSave();
-                        }
-                    });
-                }
-            } else {
-                const img = canvas?.images?.find(i => i.id === renameId);
-                if (img) {
-                    showInputModal('Rename Layer', img.name || 'Image', (newName) => {
-                        if (newName && newName.trim()) {
-                            img.name = newName.trim();
-                            renderLayers();
-                            scheduleSave();
-                        }
-                    });
-                }
-            }
-            break;
-        }
-
-        case 'group_toggle_collapse': {
-            // Toggle group collapse in main window
-            const groupEl = activeContainer?.querySelector(`.group-item[data-group-id="${msg.groupId}"]`);
-            const children = groupEl?.querySelector('.group-children');
-            const toggle = groupEl?.querySelector('.group-collapse-toggle');
-            if (children) children.classList.toggle('collapsed');
-            if (toggle) toggle.classList.toggle('collapsed');
-            syncLayersToFloatingSidebar();
-            break;
-        }
-
-        case 'group_toggle_visibility': {
-            // Toggle group visibility
-            const group = layerGroups?.find(g => g.id === msg.groupId);
-            if (group) {
-                const newVisible = group.visible === false; // Toggle
-                group.visible = newVisible;
-                // Toggle all children
-                group.layerIds?.forEach(id => {
-                    const img = canvas?.images?.find(i => i.id === id);
-                    if (img) img.visible = newVisible;
-                });
-                group.objectIds?.forEach(id => {
-                    const obj = canvas?.objectsManager?.objects?.find(o => o.id === id);
-                    if (obj) obj.visible = newVisible;
-                });
-                canvas.needsRender = true;
-                renderLayers();
-                scheduleSave();
-            }
-            break;
-        }
-
-        case 'bg_color_change': {
-            if (canvas) {
-                canvas.setBackgroundColor(msg.color);
-                const bgInput = activeContainer?.querySelector('#bg-color');
-                if (bgInput) bgInput.value = msg.color;
-                scheduleSave();
-            }
-            break;
-        }
-
-        case 'property_change': {
-            // Forward property changes to the actual input in main window
-            const input = activeContainer?.querySelector('#' + msg.inputId);
-            if (input) {
-                if (input.type === 'checkbox') {
-                    input.checked = msg.value;
-                } else {
-                    input.value = msg.value;
-                }
-                // Dispatch change/input event so handlers fire
-                input.dispatchEvent(new Event('change', { bubbles: true }));
-                input.dispatchEvent(new Event('input', { bubbles: true }));
-            }
-            break;
-        }
-
-        case 'close_properties': {
-            const objProps = activeContainer?.querySelector('#object-properties');
-            const defaultProps = activeContainer?.querySelector('#default-properties');
-            if (objProps) objProps.style.display = 'none';
-            if (defaultProps) defaultProps.style.display = '';
-            canvas?.objectsManager?.deselectAll?.();
-            canvas.selectedImage = null;
-            canvas.selectedImages = [];
-            canvas.needsRender = true;
-            renderLayers();
-            break;
-        }
-
-        case 'tab_switch': {
-            // Click the matching tab button in the main window to trigger its full handler
-            const targetTab = activeContainer?.querySelector(`.tab-btn[data-tab="${msg.tab}"]`);
-            if (targetTab) targetTab.click();
-            break;
-        }
-
-        case 'dropdown_action': {
-            // Click the corresponding dropdown item in main window
-            const item = activeContainer?.querySelector('#' + msg.action);
-            if (item) item.click();
-            break;
-        }
-
-        case 'layer_reorder': {
-            // Apply layer order from floating sidebar drag-and-drop
-            if (!msg.order || !Array.isArray(msg.order)) break;
-            const images = canvas.getImages();
-            const objects = canvas.objectsManager.getObjects();
-
-            // Build allLayersOrder from the floating sidebar's reported order
-            const newAllLayersOrder = [];
-            for (const entry of msg.order) {
-                if (entry.type === 'image') {
-                    const img = images.find(i => i.id === parseFloat(entry.id));
-                    if (img) newAllLayersOrder.push({ type: 'image', data: img });
-                } else if (entry.type === 'object') {
-                    const obj = objects.find(o => o.id === entry.id);
-                    if (obj) newAllLayersOrder.push({ type: 'object', data: obj });
-                }
-            }
-
-            if (newAllLayersOrder.length > 0) {
-                // Capture old zIndex values for undo
-                const oldZIndexes = newAllLayersOrder.map(layer => ({
-                    type: layer.type,
-                    id: layer.data.id,
-                    zIndex: layer.data.zIndex || 0
-                }));
-
-                // Assign zIndex based on position
-                const zIndexUpdates = [];
-                newAllLayersOrder.forEach((layer, index) => {
-                    layer.data.zIndex = index;
-                    zIndexUpdates.push({ type: layer.type, id: layer.data.id, zIndex: index });
-                });
-
-                // Push to history if order changed
-                const orderChanged = oldZIndexes.some((old, i) => old.zIndex !== zIndexUpdates[i].zIndex);
-                if (orderChanged && historyManager) {
-                    historyManager.pushAction({
-                        type: 'reorder_layers',
-                        data: { oldOrder: oldZIndexes, newOrder: zIndexUpdates }
-                    });
-                }
-
-                canvas.invalidateCullCache();
-                canvas.needsRender = true;
-                canvas.render();
-                renderLayers();
-                scheduleSave();
-            }
-            break;
-        }
-
-        case 'layer_duplicate': {
-            const dupId = msg.layerType === 'object' ? msg.layerId : parseFloat(msg.layerId);
-            if (msg.layerType === 'object') {
-                const obj = canvas?.objectsManager?.objects?.find(o => o.id === dupId);
-                if (obj) {
-                    const duplicate = JSON.parse(JSON.stringify(obj));
-                    duplicate.id = Date.now() + Math.random();
-                    duplicate.x += 20;
-                    duplicate.y += 20;
-                    duplicate.zIndex = canvas.objectsManager.objects.reduce((max, o) => Math.max(max, o.zIndex || 0), 0) + 1;
-                    canvas.objectsManager.objects.push(duplicate);
-                    canvas.needsRender = true;
-                    canvas.objectsManager.dispatchObjectsChanged();
-                    renderLayers();
-                    scheduleSave();
-                }
-            } else {
-                const img = canvas?.images?.find(i => i.id === dupId);
-                if (img) {
-                    const newImg = new Image();
-                    newImg.onload = () => {
-                        canvas.addImage(newImg, img.x + 20, img.y + 20, img.name + ' Copy', img.width, img.height);
-                        renderLayers();
-                        scheduleSave();
-                    };
-                    newImg.src = img.img.src;
-                }
-            }
-            break;
-        }
-
-        case 'layer_remove_from_group': {
-            const rmId = msg.layerType === 'object' ? msg.layerId : parseFloat(msg.layerId);
-            const rmGroupId = msg.groupId;
-            let removed = false;
-
-            layerGroups.forEach(group => {
-                if (String(group.id) !== String(rmGroupId)) return;
-                if (msg.layerType === 'image' && group.layerIds.includes(rmId)) {
-                    group.layerIds = group.layerIds.filter(id => id !== rmId);
-                    removed = true;
-                } else if (msg.layerType === 'object' && group.objectIds && group.objectIds.includes(rmId)) {
-                    group.objectIds = group.objectIds.filter(id => id !== rmId);
-                    removed = true;
-                }
-            });
-
-            // Clean up empty groups
-            layerGroups = layerGroups.filter(group => {
-                const hasLayers = group.layerIds && group.layerIds.length > 0;
-                const hasObjects = group.objectIds && group.objectIds.length > 0;
-                return hasLayers || hasObjects;
-            });
-
-            if (removed) {
-                renderLayers();
-                scheduleSave();
-            }
-            break;
-        }
-
-        case 'group_select': {
-            const selGroup = layerGroups?.find(g => String(g.id) === String(msg.groupId));
-            if (selGroup) {
-                const currentImages = canvas.getImages();
-                const currentObjects = canvas.objectsManager.getObjects();
-                const groupImageLayers = currentImages.filter(img => selGroup.layerIds.includes(img.id));
-                const groupObjectLayers = currentObjects.filter(obj => selGroup.objectIds && selGroup.objectIds.includes(obj.id));
-
-                canvas.selectedImage = null;
-                canvas.selectedImages = [];
-                canvas.objectsManager.selectedObject = null;
-                canvas.objectsManager.selectedObjects = [];
-
-                if (groupImageLayers.length > 0) {
-                    groupImageLayers.forEach((img, index) => {
-                        canvas.selectImage(img, index > 0);
-                    });
-                }
-                if (groupObjectLayers.length > 0) {
-                    groupObjectLayers.forEach(obj => {
-                        canvas.objectsManager.selectedObjects.push(obj);
-                    });
-                    canvas.objectsManager.selectedObject = groupObjectLayers[groupObjectLayers.length - 1];
-                }
-
-                canvas.selectedGroup = selGroup;
-                canvas.needsRender = true;
-                canvas.render();
-                renderLayers();
-            }
-            break;
-        }
-
-        case 'group_rename': {
-            const renameGroup = layerGroups?.find(g => String(g.id) === String(msg.groupId));
-            if (renameGroup) {
-                showInputModal('Rename Group', 'Group name:', renameGroup.name).then(newName => {
-                    if (newName && newName.trim() !== '') {
-                        renameGroup.name = newName.trim();
-                        renderLayers();
-                        scheduleSave();
-                    }
-                });
-            }
-            break;
-        }
-
-        case 'group_duplicate': {
-            const dupGroup = layerGroups?.find(g => String(g.id) === String(msg.groupId));
-            if (dupGroup) {
-                (async () => {
-                    const newGroup = {
-                        id: Date.now() + Math.random(),
-                        name: dupGroup.name + ' Copy',
-                        layerIds: [],
-                        objectIds: [],
-                        collapsed: false
-                    };
-
-                    // Duplicate image layers
-                    const allImages = canvas.getImages();
-                    for (const imageId of dupGroup.layerIds) {
-                        const originalImage = allImages.find(img => img.id === imageId);
-                        if (originalImage && canvas.duplicateImage) {
-                            const duplicated = await canvas.duplicateImage(originalImage);
-                            if (duplicated) newGroup.layerIds.push(duplicated.id);
-                        }
-                    }
-
-                    // Duplicate object layers
-                    if (dupGroup.objectIds) {
-                        const allObjects = canvas.objectsManager.getObjects();
-                        for (const objectId of dupGroup.objectIds) {
-                            const originalObject = allObjects.find(obj => obj.id === objectId);
-                            if (originalObject && canvas.objectsManager.duplicateObject) {
-                                const duplicated = canvas.objectsManager.duplicateObject(originalObject);
-                                if (duplicated) newGroup.objectIds.push(duplicated.id);
-                            }
-                        }
-                    }
-
-                    layerGroups.push(newGroup);
-                    canvas.invalidateCullCache();
-                    canvas.render();
-                    renderLayers();
-                    scheduleSave();
-                })();
-            }
-            break;
-        }
-
-        case 'group_ungroup': {
-            const ungroupIdx = layerGroups.findIndex(g => String(g.id) === String(msg.groupId));
-            if (ungroupIdx !== -1) {
-                layerGroups.splice(ungroupIdx, 1);
-                renderLayers();
-                scheduleSave();
-            }
-            break;
-        }
-
-        case 'group_delete': {
-            const delGroup = layerGroups?.find(g => String(g.id) === String(msg.groupId));
-            if (delGroup) {
-                showConfirmModal(
-                    'Delete Group',
-                    `Delete group "${delGroup.name}" and all its layers?`,
-                    (confirmed) => {
-                        if (confirmed) {
-                            delGroup.layerIds.forEach(id => canvas.deleteImage(id));
-                            if (delGroup.objectIds) {
-                                delGroup.objectIds.forEach(id => canvas.objectsManager.deleteObject(id));
-                            }
-                            const idx = layerGroups.findIndex(g => g.id === delGroup.id);
-                            if (idx !== -1) layerGroups.splice(idx, 1);
-                            canvas.invalidateCullCache();
-                            canvas.render();
-                            renderLayers();
-                            scheduleSave();
-                        }
-                    }
-                );
-            }
-            break;
-        }
-
-        case 'create_group': {
-            groupSelectedLayers();
-            break;
-        }
-    }
-}

@@ -209,18 +209,23 @@
 }
 
 .assets-library-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-    gap: 0;
+    display: flex;
+    gap: 12px;
     padding-bottom: 32px;
 }
 
+.masonry-column {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-width: 0;
+}
+
 .assets-library-item {
-    aspect-ratio: 1;
     overflow: hidden;
     cursor: pointer;
-    border: 2px solid var(--border-color);
-    border-radius: 0;
+    border-radius: 12px;
     transition: all 0.2s;
     position: relative;
     background: var(--bg-secondary);
@@ -232,9 +237,9 @@
 
 .assets-library-item img {
     width: 100%;
-    height: 100%;
-    object-fit: cover;
-    border-radius: 0;
+    height: auto;
+    display: block;
+    border-radius: 12px;
     transition: filter 0.2s;
 }
 
@@ -318,11 +323,30 @@
 
 /* Empty state */
 .assets-library-grid .empty-message {
-    grid-column: 1 / -1;
     text-align: center;
     color: var(--text-disabled);
     font-size: 14px;
     padding: 60px 20px;
+    width: 100%;
+}
+
+/* Skeleton loading */
+.assets-library-item.skeleton {
+    background: var(--bg-secondary);
+    border-radius: 12px;
+    overflow: hidden;
+    animation: skeletonPulse 1.5s ease-in-out infinite;
+}
+
+.skeleton-img {
+    width: 100%;
+    background: var(--bg-tertiary, rgba(128,128,128,0.15));
+    border-radius: 12px;
+}
+
+@keyframes skeletonPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
 }
 
 /* Scrollbar styling */
