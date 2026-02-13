@@ -319,6 +319,70 @@ function setupEventListeners() {
             showSettingsModal();
         });
     }
+
+    // Sidebar toggle button
+    const sidebarToggleBtn = document.getElementById('sidebar-toggle-btn');
+    if (sidebarToggleBtn) {
+        sidebarToggleBtn.addEventListener('click', () => {
+            // Check which view is active
+            const homeView = document.querySelector('.home-view.active');
+            const boardView = document.querySelector('.board-view.active');
+
+            let sidebar = null;
+            if (homeView) {
+                // Home view - toggle home sidebar
+                sidebar = document.getElementById('home-sidebar');
+            } else if (boardView) {
+                // Board view - toggle board sidebar
+                sidebar = document.getElementById('sidebar');
+            }
+
+            if (!sidebar) return;
+
+            sidebar.classList.toggle('collapsed');
+            sidebarToggleBtn.classList.toggle('active');
+            const isCollapsed = sidebar.classList.contains('collapsed');
+            localStorage.setItem('sidebar_collapsed', isCollapsed);
+
+            // Show the sidebar toggle pill when sidebar is collapsed (so user can re-expand), hide when expanded
+            sidebarToggleBtn.style.display = isCollapsed ? 'flex' : 'none';
+        });
+    }
+
+    // Home sidebar navigation buttons
+    const workspacesBtn = document.getElementById('workspaces-btn');
+    const notebookBtn = document.getElementById('notebook-btn');
+    const assetsBtn = document.getElementById('assets-btn');
+
+    function switchHomeScreen(screenId, activeBtn) {
+        // Hide all screens
+        document.querySelectorAll('.home-screen').forEach(s => s.classList.remove('active'));
+        // Show target screen
+        const target = document.getElementById(screenId);
+        if (target) target.classList.add('active');
+
+        // Update active button state
+        document.querySelectorAll('.home-nav-btn').forEach(b => b.classList.remove('active'));
+        if (activeBtn) activeBtn.classList.add('active');
+    }
+
+    if (workspacesBtn) {
+        workspacesBtn.addEventListener('click', () => {
+            switchHomeScreen('screen-workspaces', workspacesBtn);
+        });
+    }
+
+    if (notebookBtn) {
+        notebookBtn.addEventListener('click', () => {
+            switchHomeScreen('screen-notebook', notebookBtn);
+        });
+    }
+
+    if (assetsBtn) {
+        assetsBtn.addEventListener('click', () => {
+            switchHomeScreen('screen-assets', assetsBtn);
+        });
+    }
 }
 
 function renderBoards() {

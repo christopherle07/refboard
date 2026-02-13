@@ -80,6 +80,9 @@ class App {
         const backBtn = document.getElementById('nav-back-btn');
         if (!breadcrumb) return;
 
+        // Preserve the floating button before clearing
+        const floatingBtn = breadcrumb.querySelector('.breadcrumb-floating-btn');
+
         const segments = text.split('>').map(s => s.trim()).filter(Boolean);
         breadcrumb.innerHTML = '';
 
@@ -115,6 +118,11 @@ class App {
             }
             breadcrumb.appendChild(span);
         });
+
+        // Re-append the floating button
+        if (floatingBtn) {
+            breadcrumb.appendChild(floatingBtn);
+        }
 
         // Show back button when not on home
         if (backBtn) {

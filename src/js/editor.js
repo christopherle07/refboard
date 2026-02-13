@@ -688,23 +688,7 @@ function setupEventListeners(container) {
     // Helper function to get element scoped to this container
     const $ = (id) => container.querySelector('#' + id);
 
-    // Sidebar collapse toggle - use titlebar button
-    // Note: Collapsed state is applied in initEditor BEFORE canvas creation
-    // Only attach listener once since the button is in the titlebar (persists across boards)
-    const sidebarToggleBtn = document.getElementById('sidebar-toggle-btn');
-    if (sidebarToggleBtn && !sidebarToggleListenerAttached) {
-        console.log('[setupEventListeners] Setting up sidebar toggle (one-time)...');
-        sidebarToggleListenerAttached = true;
-
-        sidebarToggleBtn.addEventListener('click', () => {
-            const sidebar = activeContainer?.querySelector('#sidebar');
-            if (!sidebar) return;
-
-            sidebar.classList.toggle('collapsed');
-            sidebarToggleBtn.classList.toggle('active');
-            localStorage.setItem('sidebar_collapsed', sidebar.classList.contains('collapsed'));
-        });
-    }
+    // Sidebar collapse toggle is now handled in main.js
 
     // Undo/Redo buttons - attach once since they're in the titlebar
     const undoBtn = document.getElementById('undo-btn');

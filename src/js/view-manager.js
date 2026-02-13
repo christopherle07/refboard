@@ -61,6 +61,16 @@ export class ViewManager {
         if (this.homeContainer) this.homeContainer.classList.add('active');
         if (this.boardContainer) this.boardContainer.classList.remove('active');
 
+        // Clear sidebar toggle button state and ensure home sidebar is visible
+        const sidebarToggleBtn = document.getElementById('sidebar-toggle-btn');
+        const homeSidebar = document.getElementById('home-sidebar');
+        if (homeSidebar) {
+            homeSidebar.classList.remove('collapsed');
+        }
+        if (sidebarToggleBtn) {
+            sidebarToggleBtn.classList.remove('active');
+        }
+
         // Initialize home if first time
         if (!this.homeInitialized) {
             await initHomepage();
